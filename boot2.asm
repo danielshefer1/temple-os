@@ -169,7 +169,7 @@ message:
 message_protected:
     db "Hello from Protected Mode!", 0
 
-STACK_ADDR equ 0x7C00
+STACK_ADDR equ 0xF0000
 
 MEMORY_MAP_ADDR equ 0x500
 MEMORY_MAP_COUNT equ 0x504
