@@ -1,4 +1,3 @@
-# Bootloader build targets
 .PHONY: all clean run
 
 all: disk.img
