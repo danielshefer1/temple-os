@@ -3,13 +3,10 @@ global stage3_entry
 extern _kernel_LMA_start
 extern _kernel_VMA_start
 extern _kernel_VMA_end
-extern __kernel_sectors
+extern __total_sectors
 extern kmain      
 
 section .text
-
-    kernel_sectors_count:
-        dd __kernel_sectors
 
 stage3_entry:
     ; 1. Reset Segments (Just to be safe)
@@ -20,6 +17,16 @@ stage3_entry:
     mov gs, ax
     mov ss, ax
     mov esp, 0x90000    ; Set stack safely below 1MB
+    mov ax, 0x00
+
+    mov edx, 0xB8000   ; VGA text mode memory (video memory base)
+    ; Calculate middle of screen: (row * 80 + col) * 2
+    ; Row 14, Column 30 = (14 * 80 + 30)
+    add edx, 2360    ; Move to middle of screen
+    mov [edx], 'L'
+    inc edx
+    mov byte [edx], 0x07 ; Attribute byte (light grey on black
+    inc edx
 
     ; 2. Copy C Kernel to 1MB
     ; We must manually move the code because the BIOS loaded it 
@@ -40,5 +47,3 @@ stage3_entry:
     ; 4. Hang if kernel returns
     cli
     hlt
-
-times 512 - ($ - $$) db 0   ; Pad to ~4 sectors

@@ -24,12 +24,7 @@ start:
     
     mov bx, 0x8600      ; Destination address (ES:BX)
     mov cl, 6           ; Start at Sector 6
-    mov ah, 1          ; Number of sectors to read (Adjust depending on kernel size)
-    call load_file
-
-    mov bx, 0x8800      ; Destination address for next sector
-    mov cl, 7           ; Next sector
-    mov ah, [KERNEL_SIZE] ; Number of sectors to read based on kernel size
+    mov al, 1          ; Number of sectors to read (Adjust depending on kernel size)
     call load_file
     ; ===== ENTER PROTECTED MODE =====
     
@@ -144,10 +139,12 @@ remap_pic:
 ; OUTPUT
 ; Reads sectors into ES:BX
 load_file:
-    push ax
     push bx
-    push cx
+    push es
     push dx
+    push ax
+    push cx
+
 
     mov dh, 0           ; Head 0
     mov dl, [BOOT_DRIVE]; Drive number (saved from DL at boot)
@@ -162,14 +159,19 @@ load_file:
     ; Print error message and halt
     mov si, disk_error_msg
     call print_string
+    mov al, ah
+    mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
+    int 0x10
     hlt
 
 .file_loaded:
-    pop dx
     pop cx
-    pop bx
     pop ax
-
+    pop dx
+    pop es
+    pop bx
     ret
 ; ----- Protected Mode Entry Point -----
 
@@ -190,7 +192,7 @@ protected_mode_entry:
     mov si, message_protected
     call print_string_protected
     
-    jmp 0x08:0x8602; jump to stage3_entry in boot3.asm
+    jmp 0x08:0x8600; jump to start_code in boot3.asm
 
 print_string_protected:
     lodsb

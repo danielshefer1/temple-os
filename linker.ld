@@ -44,5 +44,5 @@ SECTIONS
     __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start;
 
     __sector_size = 512;
-    __kernel_sectors = (__kernel_size_bytes + __sector_size - 1) / __sector_size;
+    __total_sectors = (__kernel_size_bytes + __sector_size - 1) / __sector_size;
 }

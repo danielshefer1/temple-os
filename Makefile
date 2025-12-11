@@ -74,7 +74,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	
 	# 4. Append the raw payload (Stage 3/Kernel) starting at Sector 6 (seek=5)
 	# This is the data that Stage 2 reads starting at disk sector 6 into memory 0x8600.
-	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 conv=notrunc
+	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 conv=notrunc iflag=fullblock
 	
 	@rm -f $(PAYLOAD_BIN) 
 	@echo "✅ Disk image created successfully!" 
