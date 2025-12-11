@@ -4,6 +4,9 @@
 ; ----- Stage 2 Bootloader -----
 
 start:
+    ; Store boot drive number
+    mov [BOOT_DRIVE], dl
+
     mov si, message
     call print_string
 
@@ -19,6 +22,15 @@ start:
     ; Remap PIC (Programmable Interrupt Controller)
     call remap_pic
     
+    mov bx, 0x8600      ; Destination address (ES:BX)
+    mov cl, 6           ; Start at Sector 6
+    mov ah, 1          ; Number of sectors to read (Adjust depending on kernel size)
+    call load_file
+
+    mov bx, 0x8800      ; Destination address for next sector
+    mov cl, 7           ; Next sector
+    mov ah, [KERNEL_SIZE] ; Number of sectors to read based on kernel size
+    call load_file
     ; ===== ENTER PROTECTED MODE =====
     
     ; Disable interrupts
@@ -125,6 +137,40 @@ remap_pic:
     
     ret
 
+; INPUT
+; bx - destination address (ES:BX)
+; cl - sector
+; ah - number of sectors to read
+; OUTPUT
+; Reads sectors into ES:BX
+load_file:
+    push ax
+    push bx
+    push cx
+    push dx
+
+    mov dh, 0           ; Head 0
+    mov dl, [BOOT_DRIVE]; Drive number (saved from DL at boot)
+    mov ch, 0           ; Cylinder 0
+    mov ah, 0x02        ; BIOS Read Sector function
+    int 0x13
+    
+    jc .disk_error       ; Handle error if carry flag set
+    jmp .file_loaded
+
+.disk_error:
+    ; Print error message and halt
+    mov si, disk_error_msg
+    call print_string
+    hlt
+
+.file_loaded:
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+
+    ret
 ; ----- Protected Mode Entry Point -----
 
 protected_mode_entry:
@@ -137,17 +183,14 @@ protected_mode_entry:
     mov gs, eax
     mov ss, eax
 
-    ; Set up a basic stack
-    mov esp, STACK_ADDR
-    mov ebp, esp  
-
     mov edx, 0xB8000   ; VGA text mode memory (video memory base)
     ; Calculate middle of screen: (row * 80 + col) * 2
     ; Row 12, Column 40 = (12 * 80 + 40) * 2 = 2000 bytes offset
     add edx, 2000    ; Move to middle of screen
     mov si, message_protected
     call print_string_protected
-    hlt
+    
+    jmp 0x08:0x8602; jump to stage3_entry in boot3.asm
 
 print_string_protected:
     lodsb
@@ -168,6 +211,12 @@ message:
 
 message_protected:
     db "Hello from Protected Mode!", 0
+
+disk_error_msg:
+    db "Disk Read Error!", 0
+
+BOOT_DRIVE db 0
+KERNEL_SIZE dd 0
 
 STACK_ADDR equ 0xF0000
 
