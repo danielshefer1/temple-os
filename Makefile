@@ -64,8 +64,9 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	
 	# 1. Extract the raw binary payload (Stage 3 + Kernel data sections)
 	# This strips the ELF metadata, giving us the contiguous data block.
-	$(OBJCOPY) -O binary -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage3 -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
 	
+	dd if=/dev/zero of=$@ bs=512 count=55
 	# 2. Write Stage 1 (1 sector) to the disk start (Sector 1, seek=0)
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc
 	
@@ -74,7 +75,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	
 	# 4. Append the raw payload (Stage 3/Kernel) starting at Sector 6 (seek=5)
 	# This is the data that Stage 2 reads starting at disk sector 6 into memory 0x8600.
-	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 conv=notrunc iflag=fullblock
+	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 iflag=fullblock count=50
 	
 	@rm -f $(PAYLOAD_BIN) 
 	@echo "✅ Disk image created successfully!" 

@@ -2,48 +2,45 @@
 global stage3_entry
 extern _kernel_LMA_start
 extern _kernel_VMA_start
-extern _kernel_VMA_end
+extern _binary_size_text_data ; New symbol
+extern _bss_start             ; New symbol
+extern _bss_end               ; New symbol
 extern __total_sectors
 extern kmain      
 
 section .text
 
-stage3_entry:
-    ; 1. Reset Segments (Just to be safe)
-    mov ax, 0x10        ; Data selector from your GDT
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
+stage3_entry:  ; Total sectors read so far (from stage 2)
+    ; 1. Setup Segments & Stack...
+    mov ax, 0x10
     mov ss, ax
-    mov esp, 0x90000    ; Set stack safely below 1MB
-    mov ax, 0x00
+    mov esp, 0x90000
 
-    mov edx, 0xB8000   ; VGA text mode memory (video memory base)
+    mov ebx, 0x0B8000  ; VGA text mode memory (video memory base)
     ; Calculate middle of screen: (row * 80 + col) * 2
     ; Row 14, Column 30 = (14 * 80 + 30)
-    add edx, 2360    ; Move to middle of screen
-    mov [edx], 'L'
-    inc edx
-    mov byte [edx], 0x07 ; Attribute byte (light grey on black
-    inc edx
+    add ebx, 2000      ; Move to middle of screen
+    mov byte [ebx], 'L'
+    inc ebx
+    mov byte [ebx], 0x07 ; Attribute byte (light grey on black
+    inc ebx
+    ; 2. Copy Code & Data (Exclude BSS)
+    mov esi, _kernel_LMA_start 
+    mov edi, _kernel_VMA_start
+    mov ecx, _binary_size_text_data ; Only copy what exists in the file
+    cld
+    rep movsb
 
-    ; 2. Copy C Kernel to 1MB
-    ; We must manually move the code because the BIOS loaded it 
-    ; linearly after 0x8600, but the C code was linked to run at 0x100000.
-    
-    mov esi, _kernel_LMA_start  ; Source: Where BIOS loaded it (Linear address)
-    mov edi, _kernel_VMA_start  ; Dest:   1MB (0x100000)
-    
-    mov ecx, _kernel_VMA_end    ; Calculate size...
-    sub ecx, _kernel_VMA_start
-    
-    cld                         ; Clear direction flag (forward copy)
-    rep movsb                   ; Copy ECX bytes from ESI to EDI
+    ; 3. Zero out the BSS (Initialize variables to 0)
+    mov edi, _bss_start
+    mov ecx, _bss_end
+    sub ecx, _bss_start ; Calculate BSS size
+    xor eax, eax        ; Value to write (0)
+    rep stosb           ; Store AL (0) into [EDI] ECX times
 
-    ; 3. Jump to C Kernel
-    call kmain
+    ; 4. Jump to Kernel
+    mov eax, kmain
+    call eax
 
-    ; 4. Hang if kernel returns
     cli
     hlt

@@ -4,6 +4,11 @@
 ; ----- Stage 2 Bootloader -----
 
 start:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, STACK_ADDR         ; Set up stack
     ; Store boot drive number
     mov [BOOT_DRIVE], dl
 
@@ -28,6 +33,12 @@ start:
     call load_file
     ; ===== ENTER PROTECTED MODE =====
     
+    mov al, byte [0x8600]
+    mov ah, 0x0E
+    mov bh, 0
+    mov bl, 0x07
+    int 0x10
+
     ; Disable interrupts
     cli
     
@@ -177,6 +188,8 @@ load_file:
 
 protected_mode_entry:
     [BITS 32]
+
+    cli
     ; Set up segment registers
     mov eax, 0x10          ; Data segment selector
     mov ds, eax
@@ -184,13 +197,20 @@ protected_mode_entry:
     mov fs, eax
     mov gs, eax
     mov ss, eax
+    mov esp, 0x7C00
+
 
     mov edx, 0xB8000   ; VGA text mode memory (video memory base)
     ; Calculate middle of screen: (row * 80 + col) * 2
     ; Row 12, Column 40 = (12 * 80 + 40) * 2 = 2000 bytes offset
     add edx, 2000    ; Move to middle of screen
+    mov esi, 0
     mov si, message_protected
     call print_string_protected
+
+    mov byte [edx], '?' ; Carriage Return
+    inc edx
+    mov byte [edx], 0x07 ; Line Feed
     
     jmp 0x08:0x8600; jump to start_code in boot3.asm
 
@@ -220,7 +240,7 @@ disk_error_msg:
 BOOT_DRIVE db 0
 KERNEL_SIZE dd 0
 
-STACK_ADDR equ 0xF0000
+STACK_ADDR equ 0x7C00
 
 MEMORY_MAP_ADDR equ 0x500
 MEMORY_MAP_COUNT equ 0x504
