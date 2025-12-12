@@ -45,3 +45,5 @@ stage3_entry:
 
     cli
     hlt
+
+times 512-($-$$) db 0
