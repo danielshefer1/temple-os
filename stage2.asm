@@ -27,17 +27,25 @@ start:
     ; Remap PIC (Programmable Interrupt Controller)
     call remap_pic
     
-    mov bx, 0x8600      ; Destination address (ES:BX)
+    mov bx, STAGE3_ADDR      ; Destination address (ES:BX)
     mov cl, 6           ; Start at Sector 6
-    mov al, 1          ; Number of sectors to read (Adjust depending on kernel size)
+    mov al, 1          
     call load_file
-    ; ===== ENTER PROTECTED MODE =====
+
     
-    mov al, byte [0x8600]
-    mov ah, 0x0E
-    mov bh, 0
-    mov bl, 0x07
-    int 0x10
+    mov al, byte [STAGE3_ADDR]
+    dec al
+    test al, al
+    jz no_additional_sectors
+
+    mov bx, STAGE3_ADDR + 0x200     ; Destination address (ES:BX)
+    mov cl, 7           ; Start at Sector 6
+    call load_file
+
+no_additional_sectors:
+
+
+    ; ===== ENTER PROTECTED MODE =====
 
     ; Disable interrupts
     cli
@@ -212,7 +220,7 @@ protected_mode_entry:
     inc edx
     mov byte [edx], 0x07 ; Line Feed
     
-    jmp 0x08:0x8600; jump to start_code in boot3.asm
+    jmp 0x08:STAGE3_ENTRY; jump to start_code in boot3.asm
 
 print_string_protected:
     lodsb
@@ -245,6 +253,9 @@ STACK_ADDR equ 0x7C00
 MEMORY_MAP_ADDR equ 0x500
 MEMORY_MAP_COUNT equ 0x504
 MEMORY_MAP_ENTRIES equ 0x520
+
+STAGE3_ADDR equ 0x8600
+STAGE3_ENTRY equ 0x8604
 ; ----- GDT Setup -----
 
 ; Global Descriptor Table (GDT) - 3 entries: Null, Code, Data (Kernel Only)

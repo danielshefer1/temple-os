@@ -10,7 +10,8 @@ extern kmain
 
 section .text
 
-stage3_entry:  ; Total sectors read so far (from stage 2)
+stage3_entry:
+    dd __total_sectors  ; Total sectors read so far (from stage 2)
     ; 1. Setup Segments & Stack...
     mov ax, 0x10
     mov ss, ax

@@ -77,7 +77,6 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	# This is the data that Stage 2 reads starting at disk sector 6 into memory 0x8600.
 	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 iflag=fullblock count=50
 	
-	@rm -f $(PAYLOAD_BIN) 
 	@echo "✅ Disk image created successfully!" 
 
 # --- RUN QEMU ---
