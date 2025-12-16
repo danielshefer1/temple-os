@@ -24,19 +24,17 @@ void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
     uint32_t tmp_value, count = 0;
 
     if (value == 0) {
-        while (count++ < min_width) {
-            *ptr++ = '0';
-        }
-        *ptr = '\0';
-        return;
-    }
-
+        *ptr++ = '0';
+        count++;
+    } 
+    else {
     do {
         tmp_value = value;
         value /= base;
         *ptr++ = "0123456789ABCDEF"[tmp_value - value * base];
         count++;
     } while (value);
+    }
 
     while (count < min_width) {
         *ptr++ = '0';
@@ -99,15 +97,23 @@ void clear_screen() {
 }
 
 void newline() {
-    // Move cursor to the beginning of the next line
-    // This is a simplified version and does not handle scrolling
-
     if (cursor_y < MAX_ROWS - 1) {
         cursor_y++;
         cursor_x = 0;
     } else {
-        clear_screen();
-        cursor_y = 0;
+        for (uint32_t row = 1; row < MAX_ROWS; row++) {
+            for (uint32_t col = 0; col < MAX_COLS; col++) {
+                VGA_BUFFER[((row - 1) * MAX_COLS + col) * 2] = 
+                    VGA_BUFFER[(row * MAX_COLS + col) * 2];
+                VGA_BUFFER[((row - 1) * MAX_COLS + col) * 2 + 1] = 
+                    VGA_BUFFER[(row * MAX_COLS + col) * 2 + 1];
+            }
+        }
+        // Clear the last line
+        for (uint32_t col = 0; col < MAX_COLS; col++) {
+            VGA_BUFFER[((MAX_ROWS - 1) * MAX_COLS + col) * 2] = ' ';
+            VGA_BUFFER[((MAX_ROWS - 1) * MAX_COLS + col) * 2 + 1] = 0x07;
+        }
         cursor_x = 0;
     }
 }
