@@ -1,23 +1,25 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-static int cursor_x = 0; // Column (0-79)
-static int cursor_y = 0; // Row (0-24)
-const int MAX_COLS = 80;
-const int MAX_ROWS = 25;
-volatile char* VGA_BUFFER = (volatile char*)0xB8000;
+static uint32_t cursor_x = 0; // Column (0-79)
+static uint32_t cursor_y = 0; // Row (0-24)
+const uint32_t MAX_COLS = 80;
+const uint32_t MAX_ROWS = 25;
+#define VGA_BUFFER ((volatile char*)0xB8000)
 
+void flip_str(char* str);
+void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width);
 void newline();
 void insert_tab();
 void clear_screen();
 void putchar(char c);
-void print_str(const char* str);
+void pruint32_t_str(const char* str);
 void kprintf(const char* format, ...);
 
 
-void itoa(int value, char* str, int base) {
-    char* ptr = str, *ptr1 = str, tmp_char;
-    int tmp_value;
+void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
+    char* ptr = str;
+    uint32_t tmp_value, count = 0;
 
     if (value == 0) {
         *ptr++ = '0';
@@ -25,30 +27,41 @@ void itoa(int value, char* str, int base) {
         return;
     }
 
-    if (value < 0 && base == 10) {
-        *ptr++ = '-';
-        value = -value;
-    }
-
     do {
         tmp_value = value;
         value /= base;
         *ptr++ = "0123456789ABCDEF"[tmp_value - value * base];
+        count++;
     } while (value);
+
+    while (count++ < min_width) {
+        *ptr++ = '0';
+    }
 
     *ptr-- = '\0';
 
-    while (ptr1 < ptr) {
-        tmp_char = *ptr;
-        *ptr-- = *ptr1;
-        *ptr1++ = tmp_char;
+    flip_str(str);
+}
+
+void flip_str(char* str) {
+    char* start = str;
+    char* end = str;
+
+    while (*end != '\0') {
+        end++;
+    }
+    end--;
+
+    while (start < end) {
+        char temp = *start;
+        *start = *end;
+        *end = temp;
+        start++;
+        end--;
     }
 }
 
 void putchar(char c) {
-    // 0xB8000 is the standard VGA text buffer address
-    volatile char* VGA_BUFFER = (volatile char*)0xB8000;
-
     if (c == '\n') {
         newline();
         return;
@@ -66,14 +79,14 @@ void putchar(char c) {
     }
 }
 
-void print_str(const char* str) {
+void pruint32_t_str(const char* str) {
     while (*str || *str != '\0') {
         putchar(*str++);
     }
 }
 
 void clear_screen() {
-    for (int i = 0; i < 80 * 25 * 2; i++) {
+    for (uint32_t i = 0; i < 80 * 25 * 2; i++) {
         VGA_BUFFER[i] = 0;
     }
     cursor_x = 0;
@@ -95,7 +108,7 @@ void newline() {
 }
 
 void insert_tab() {
-    for (int i = 0; i < 4; i++) {
+    for (uint32_t i = 0; i < 4; i++) {
         putchar(' ');
     }
 }
@@ -108,22 +121,41 @@ void kprintf(const char* format, ...) {
         if (*format == '%') {
             format++;
             if (*format == 'c') {
-                char c = (char)va_arg(args, int);
+                char c = (char)va_arg(args, uint32_t);
                 putchar(c);
             } else if (*format == 's') {
                 char* str = va_arg(args, char*);
-                print_str(str);
+                pruint32_t_str(str);
             } else if (*format == 'd') {
-                int num = va_arg(args, int);
+                uint32_t num = va_arg(args, uint32_t);
                 char str[20];
-                itoa(num, str, 10);
-                print_str(str);
+                itoa(num, str, 10, 0);
+                pruint32_t_str(str);
             } else if (*format == 'x') {
-                int num = va_arg(args, int);
+                uint32_t num = va_arg(args, uint32_t);
                 char str[20];
-                itoa(num, str, 16);
-                print_str("0x");
-                print_str(str);
+                itoa(num, str, 16, 0);
+                kprintf("0x%s", str);
+            } else if (*format == '%') {
+                putchar('%');
+            }
+            else if (*format <= '9' && *format >= '0') {
+                uint32_t min_width = 0;
+                while (*format <= '9' && *format >= '0') {
+                    min_width = min_width * 10 + (*format - '0');
+                    format++;
+                }
+                if (*format == 'd') {
+                    uint32_t num = va_arg(args, uint32_t);
+                    char str[20];
+                    itoa(num, str, 10, min_width);
+                    pruint32_t_str(str);
+                } else if (*format == 'x') {
+                    uint32_t num = va_arg(args, uint32_t);
+                    char str[20];
+                    itoa(num, str, 16, min_width);
+                    kprintf("0x%s", str);
+                }
             }
         } else {
             putchar(*format);
@@ -134,10 +166,15 @@ void kprintf(const char* format, ...) {
     va_end(args);
 }
 
-void kmain(void) {
+void kmain() {
     clear_screen();
 
     kprintf("Hello, Kernel World!\n");
     kprintf("Decimal: %d\t", 12345);
     kprintf("Hexadecimal: %x\n", 0xABCD);
+    kprintf("Character: %c\t", 'A');
+    kprintf("String: %s\n", "Test String");
+    kprintf("Percent Sign: %%\n");
+    kprintf("Padded Number: %05d\t", 42);
+    kprintf("Padded Hex: %08x\n", 0x1A3);
 }
