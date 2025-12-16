@@ -24,7 +24,9 @@ void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
     uint32_t tmp_value, count = 0;
 
     if (value == 0) {
-        *ptr++ = '0';
+        while (count++ < min_width) {
+            *ptr++ = '0';
+        }
         *ptr = '\0';
         return;
     }
@@ -36,11 +38,12 @@ void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
         count++;
     } while (value);
 
-    while (count++ < min_width) {
+    while (count < min_width) {
         *ptr++ = '0';
+        count++;
     }
 
-    *ptr-- = '\0';
+    *ptr = '\0';
 
     flip_str(str);
 }
@@ -82,7 +85,7 @@ void putchar(char c) {
 }
 
 void print_str(const char* str) {
-    while (*str || *str != '\0') {
+    while (*str && *str != '\0') {
         putchar(*str++);
     }
 }
@@ -119,65 +122,46 @@ void kprintf(const char* format, ...) {
     va_list args;
     va_start(args, format);
     
-    while (*format || *format != '\0') {
+    while (*format != '\0') {
         if (*format == '%') {
             format++;
-            switch (*format)
-            {
+            
+            // Check for width specifier FIRST
+            uint32_t min_width = 0;
+            while (*format >= '0' && *format <= '9') {
+                min_width = min_width * 10 + (*format - '0');
+                format++;
+            }
+            
+            char str[20];
+            uint32_t num;
+            
+            switch (*format) {
             case 'c':
-                char c = (char)va_arg(args, uint32_t);
-                putchar(c);
+                putchar((char)va_arg(args, uint32_t));
                 break;
             case 's':
-                char* str_str = va_arg(args, char*);
-                print_str(str_str);
+                print_str(va_arg(args, char*));
                 break;
             case 'd':
-                uint32_t num = va_arg(args, uint32_t);
-                char str[20];
-                itoa(num, str, 10, 0);
+                num = va_arg(args, uint32_t);
+                itoa(num, str, 10, min_width);
                 print_str(str);
                 break;
             case 'x':
                 num = va_arg(args, uint32_t);
-                itoa(num, str, 16, 0);
-                kprintf("0x%s", str);
+                itoa(num, str, 16, min_width);
+                print_str(str);
                 break;
             case '%':
                 putchar('%');
                 break;
             default:
                 break;
-            } 
-
-            if (*format <= '9' && *format >= '0') {
-                uint32_t min_width = 0;
-                while (*format <= '9' && *format >= '0') {
-                    min_width = min_width * 10 + (*format - '0');
-                    format++;
-                }
-                uint32_t num = va_arg(args, uint32_t);
-                char str[20];
-
-                switch (*format) {
-                case 'd':
-                    itoa(num, str, 10, min_width);
-                    print_str(str);
-                    break;
-                case 'x':
-                    itoa(num, str, 16, min_width);
-                    kprintf("0x%s", str);
-                    break;
-                
-                default:
-                    break;
-                }
             }
-
         } else {
             putchar(*format);
         }
-
         format++;
     }
     

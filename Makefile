@@ -1,6 +1,6 @@
 # --- Makefile for x86 Bare-Metal OS using i686-elf- toolchain ---
 
-.PHONY: all clean run build_kernel
+.PHONY: all clean run debug kill-qemu
 
 # Define cross-compiler variables
 CC = i686-elf-gcc
@@ -13,13 +13,16 @@ CFLAGS = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I.
 # Assembler Flags for Stage 1/2 (flat binary)
 ASFLAGS_BIN = -f bin
 # Assembler Flags for Stage 3 (ELF object file)
-ASFLAGS_ELF = -f elf
+ASFLAGS_ELF = -f elf32 -g
 # Linker Flags (using the custom linker script)
 LDFLAGS = -m elf_i386 -T linker.ld
+# QEMU Flags
+QEMU_FLAGS = -m 4096 -serial stdio -drive format=raw,file=os.img
 
 # Output files
 STAGE1_BIN = boot.bin
 STAGE2_BIN = boot2.bin
+STAGE2_ELF = stage2.elf
 STAGE3_OBJ = stage3.o
 KERNEL_OBJ = kernel.o
 KERNEL_ELF = kernel.elf
@@ -36,7 +39,7 @@ $(KERNEL_ELF): $(STAGE3_OBJ) $(KERNEL_OBJ) linker.ld
 	$(LD) $(LDFLAGS) -o $@ $(filter %.o,$^)
 
 # --- 2. COMPILE C KERNEL ---
-$(KERNEL_OBJ): kernel.c
+$(KERNEL_OBJ): kernel.c E820.h print_text.h
 	@echo "⚙️ Compiling C kernel..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -52,6 +55,9 @@ $(STAGE2_BIN): stage2.asm
 	@echo "💾 Assembling Stage 2 (BIN)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
+$(STAGE2_ELF): stage2.asm
+	@echo "💻 Assembling Stage 2 (ELF)..."
+	$(AS) $(ASFLAGS_ELF) $< -o $@
 # --- 5. COMPILE STAGE 1 ASM ---
 # Stage 1 (boot.asm) is assumed to be 1 sector (MBR).
 $(STAGE1_BIN): boot.asm
@@ -82,7 +88,21 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 # --- RUN QEMU ---
 run: $(DISK_IMG)
 	@echo "▶️ Starting QEMU (i386)..."
-	qemu-system-i386 -drive format=raw,file=$(DISK_IMG) -serial stdio
+	qemu-system-i386 $(QEMU_FLAGS)
+
+# --- DEBUG WITH GDB ---
+debug: os.img kernel.elf
+	qemu-system-i386 $(QEMU_FLAGS) -s -S &
+	gdb kernel.elf \
+        -tui \
+        -ex "target remote localhost:1234" \
+        -ex "set architecture i386" \
+        -ex "break kmain" \
+        -ex "layout src" \
+        -ex "continue"
+# --- KILL QEMU ---
+kill-qemu:
+	pkill -9 qemu-system-i386
 
 # --- CLEAN UP ---
 clean:

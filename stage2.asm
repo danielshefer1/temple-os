@@ -1,5 +1,8 @@
+%ifidn __OUTPUT_FORMAT__, bin
+    [ORG 0x7E00]
+%endif
+
 [BITS 16]
-[ORG 0x7E00]
 
 ; ----- Stage 2 Bootloader -----
 
@@ -96,13 +99,14 @@ get_e820_memory_map:
     xor cx, cx                       ; Entry counter
     
 .e820_loop:
+    push cx
     mov eax, 0xE820                  ; E820 function
     mov ecx, 20                      ; Entry size
     mov edx, 0x534D4150              ; 'SMAP' signature
     int 0x15                         ; Call BIOS
-    
     jc .e820_done                    ; If carry flag set, we're done
-    
+    pop cx
+
     add di, 20                       ; Move to next entry slot
     inc cx                           ; Increment entry counter
     cmp cx, 32                       ; Safety limit: max 32 entries
@@ -112,6 +116,7 @@ get_e820_memory_map:
     jnz .e820_loop
     
 .e820_done:
+    and ecx, 0x0000FFFF             ; Limit entry count to 4095
     mov [0x504], ecx                 ; Store entry count at 0x504
     mov dword [0x508], 0x520         ; Store entry address at 0x508
     ret

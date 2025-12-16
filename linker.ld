@@ -53,6 +53,7 @@ SECTIONS
     /* We calculate physical file end address minus start address */
     __end_of_file_phys = _kernel_LMA_start + _binary_size_text_data;
     __file_size_bytes = __end_of_file_phys - _start_of_kernel_file;
+    __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start;
 
     __sector_size = 512;
     __total_sectors = (__file_size_bytes + __sector_size - 1) / __sector_size;
