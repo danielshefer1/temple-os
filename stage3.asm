@@ -6,6 +6,7 @@ extern _binary_size_text_data ; New symbol
 extern _bss_start             ; New symbol
 extern _bss_end               ; New symbol
 extern __total_sectors
+extern __kernel_size_bytes
 extern kmain      
 
 section .text
@@ -38,6 +39,12 @@ stage3_entry:
     sub ecx, _bss_start ; Calculate BSS size
     xor eax, eax        ; Value to write (0)
     rep stosb           ; Store AL (0) into [EDI] ECX times
+
+    ; clean up the kernel at 0x8800 based on kernel size
+    mov edi, 0x8800
+    mov ecx, __kernel_size_bytes
+    xor eax, eax
+    rep stosb
 
     ; 4. Jump to Kernel
     mov eax, kmain
