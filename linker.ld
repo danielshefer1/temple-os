@@ -60,4 +60,4 @@ SECTIONS
     __page_size = 1024 * 4;
 
     __total_sectors = (__file_size_bytes + __sector_size - 1) / __sector_size;
-    __total_pages = (__file_size_bytes + __page_size - 1) / __page_size;
+    __total_pages = (__file_size_bytes + __page_size - 1 - __sector_size) / __page_size;
