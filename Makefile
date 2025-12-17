@@ -39,7 +39,7 @@ $(KERNEL_ELF): $(STAGE3_OBJ) $(KERNEL_OBJ) linker.ld
 	$(LD) $(LDFLAGS) -o $@ $(filter %.o,$^)
 
 # --- 2. COMPILE C KERNEL ---
-$(KERNEL_OBJ): kernel.c E820.h print_text.h paging.h
+$(KERNEL_OBJ): kernel.c E820.h print_text.h paging.h data_structs.h
 	@echo "⚙️ Compiling C kernel..."
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -35,7 +35,6 @@ start:
     mov al, 1          
     call load_file
 
-    
     mov al, byte [STAGE3_ADDR]
     dec al
     test al, al
@@ -63,6 +62,42 @@ no_additional_sectors:
     
     ; Far jump to flush the prefetch queue and enter protected mode
     jmp 0x08:protected_mode_entry
+
+print_hex_byte:
+    push ax
+    push bx
+    
+    ; Print high nibble
+    mov ah, al
+    shr ah, 4           ; Get upper 4 bits
+    call print_hex_digit
+    
+    ; Print low nibble
+    mov ah, al
+    and ah, 0x0F        ; Get lower 4 bits
+    call print_hex_digit
+    
+    pop bx
+    pop ax
+    ret
+
+print_hex_digit:
+    ; AH contains a value 0-15
+    cmp ah, 9
+    jg .letter
+    add ah, '0'         ; Convert 0-9 to ASCII
+    jmp .print
+.letter:
+    add ah, 'A' - 10    ; Convert 10-15 to A-F
+.print:
+    push ax
+    mov al, ah
+    mov ah, 0x0E
+    mov bh, 0   
+    mov bl, 0x07        
+    int 0x10
+    pop ax
+    ret
 
 print_string:
     lodsb

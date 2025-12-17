@@ -1,8 +1,10 @@
 #include <stdint.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include "print_text.h"
 #include "E820.h"
 #include "paging.h"
+#include "data_structs.h"
 
 void kmain() {
     clear_screen();
@@ -19,4 +21,14 @@ void kmain() {
     for (size_t i = 0; i < num_usable_entries(e820_info); i++) {
         print_memory_entry(&usable_memory[i], i);
     }
+
+    uint32_t total_pages = (uint32_t)&__total_pages;
+
+    uint32_t pd_addr = page_dir_addr();
+    kprintf("Page Directory Address: 0x%x\n", pd_addr);
+
+    PageTableEntry* page_directory = (PageTableEntry*)pd_addr;
+    fill_page_directory(page_directory, e820_info, usable_memory, total_pages);
+    kprintf("Page directory initialized.\n");
+    print_present_pages(page_directory);
 }

@@ -43,8 +43,9 @@ SECTIONS
     }
     
     _kernel_VMA_end = .;
+}
 
-    /* --- Calculation Fixes --- */
+/* --- Calculation Fixes --- */
     
     /* 1. Size to copy from disk (Text + Data only, NO BSS) */
     _binary_size_text_data = _kernel_VMA_data_end - _kernel_VMA_start;
@@ -56,5 +57,7 @@ SECTIONS
     __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start;
 
     __sector_size = 512;
+    __page_size = 1024 * 4;
+
     __total_sectors = (__file_size_bytes + __sector_size - 1) / __sector_size;
-}
+    __total_pages = (__file_size_bytes + __page_size - 1) / __page_size;
