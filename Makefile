@@ -117,7 +117,7 @@ kill-qemu:
 
 clean:
 	@echo "🧹 Cleaning up..."
-	rm -f $(C_OBJECTS) $(ASM_OBJECTS) *.bin *.elf $(DISK_IMG) $(PAYLOAD_BIN)
+	rm -f $(C_OBJECTS) $(ASM_OBJECTS) *.bin *.elf *.d $(DISK_IMG) $(PAYLOAD_BIN)
 	@echo "✅ Clean complete."
 
 # ============================================================================

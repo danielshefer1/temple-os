@@ -42,7 +42,8 @@ uint32_t page_dir_addr(void) {
     return KERNEL_BASE + (total_pages * PAGE_SIZE);
 }
 
-void fill_page_table(pte_t* page_table, const E820Entry* usable_memory, const uint32_t kernel_pages) {
+uint32_t fill_page_table(pte_t* page_table, const E820Entry* usable_memory,
+     const uint32_t kernel_pages, const uint16_t idx) {
     Tuple range;
     range.first = usable_memory->base_low;
     range.second = usable_memory->base_low + usable_memory->length_low;
