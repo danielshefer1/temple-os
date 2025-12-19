@@ -22,13 +22,14 @@ void kmain() {
         print_memory_entry(&usable_memory[i], i);
     }
 
-    uint32_t total_pages = (uint32_t)&__total_pages;
+    const uint32_t kernel_pages = (uint32_t)&__total_pages;
 
-    uint32_t pd_addr = page_dir_addr();
+    kprintf("total kernel pages: %d\n", kernel_pages);
+
+    const uint32_t pd_addr = page_dir_addr();
     kprintf("Page Directory Address: 0x%x\n", pd_addr);
 
-    PageTableEntry* page_directory = (PageTableEntry*)pd_addr;
-    fill_page_directory(page_directory, e820_info, usable_memory, total_pages);
-    kprintf("Page directory initialized.\n");
-    print_present_pages(page_directory);
+    /* pte_t* page_directory = (pte_t*)pd_addr;
+    fill_page_directory(page_directory, usable_memory, kernel_pages);
+    kprintf("Page directory initialized.\n"); */
 }

@@ -1,56 +1,70 @@
 # --- Makefile for x86 Bare-Metal OS using i686-elf- toolchain ---
-
 .PHONY: all clean run debug kill-qemu
 
-# Define cross-compiler variables
-CC = i686-elf-gcc
-AS = nasm
-LD = i686-elf-ld
+# ============================================================================
+# TOOLCHAIN CONFIGURATION
+# ============================================================================
+CC      = i686-elf-gcc
+AS      = nasm
+LD      = i686-elf-ld
 OBJCOPY = i686-elf-objcopy
 
-# Compiler Flags for C kernel (32-bit, bare-metal environment)
-CFLAGS = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I.
-# Assembler Flags for Stage 1/2 (flat binary)
-ASFLAGS_BIN = -f bin
-# Assembler Flags for Stage 3 (ELF object file)
-ASFLAGS_ELF = -f elf32 -g
-# Linker Flags (using the custom linker script)
-LDFLAGS = -m elf_i386 -T linker.ld
-# QEMU Flags
-QEMU_FLAGS = -m 4096 -serial stdio -drive format=raw,file=os.img
+# ============================================================================
+# FLAGS
+# ============================================================================
+CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I.
+ASFLAGS_BIN  = -f bin
+ASFLAGS_ELF  = -f elf32 -g
+LDFLAGS      = -m elf_i386 -T linker.ld
+QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=os.img
 
-# Output files
-STAGE1_BIN = boot.bin
-STAGE2_BIN = boot2.bin
-STAGE2_ELF = stage2.elf
-STAGE3_OBJ = stage3.o
-KERNEL_OBJ = kernel.o
-KERNEL_ELF = kernel.elf
-DISK_IMG = os.img
-PAYLOAD_BIN = payload.bin
+# ============================================================================
+# SOURCE FILES
+# ============================================================================
+# C source files (add new .c files here)
+C_SOURCES = kernel.c paging.c E820.c print_text.c
+# Generated object files from C sources
+C_OBJECTS = $(C_SOURCES:.c=.o)
 
-# --- Main Target ---
+# Assembly sources
+ASM_SOURCES = stage3.asm
+ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
+
+# All object files needed for kernel
+KERNEL_OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
+
+# ============================================================================
+# OUTPUT FILES
+# ============================================================================
+STAGE1_BIN   = boot.bin
+STAGE2_BIN   = boot2.bin
+STAGE2_ELF   = stage2.elf
+KERNEL_ELF   = kernel.elf
+DISK_IMG     = os.img
+PAYLOAD_BIN  = payload.bin
+
+# ============================================================================
+# BUILD RULES
+# ============================================================================
+
 all: $(DISK_IMG)
 
-# --- 1. KERNEL ELF LINKING ---
-# Links stage3.o and kernel.o, resolving symbols and applying the memory map from linker.ld.
-$(KERNEL_ELF): $(STAGE3_OBJ) $(KERNEL_OBJ) linker.ld
+# --- Link kernel ELF ---
+$(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld
 	@echo "🔗 Linking $(KERNEL_ELF)..."
-	$(LD) $(LDFLAGS) -o $@ $(filter %.o,$^)
+	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
-# --- 2. COMPILE C KERNEL ---
-$(KERNEL_OBJ): kernel.c E820.h print_text.h paging.h data_structs.h
-	@echo "⚙️ Compiling C kernel..."
+# --- Compile C sources ---
+%.o: %.c
+	@echo "⚙️  Compiling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# --- 3. COMPILE STAGE 3 ASM ---
-# Stage 3 is compiled to an ELF object for linker use.
-$(STAGE3_OBJ): stage3.asm
-	@echo "💻 Assembling Stage 3 (ELF)..."
+# --- Assemble stage 3 (ELF) ---
+%.o: %.asm
+	@echo "💻 Assembling $< (ELF)..."
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
-# --- 4. COMPILE STAGE 2 ASM ---
-# Stage 2 is a flat binary (4 sectors).
+# --- Assemble stage 2 (binary) ---
 $(STAGE2_BIN): stage2.asm
 	@echo "💾 Assembling Stage 2 (BIN)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
@@ -58,54 +72,62 @@ $(STAGE2_BIN): stage2.asm
 $(STAGE2_ELF): stage2.asm
 	@echo "💻 Assembling Stage 2 (ELF)..."
 	$(AS) $(ASFLAGS_ELF) $< -o $@
-# --- 5. COMPILE STAGE 1 ASM ---
-# Stage 1 (boot.asm) is assumed to be 1 sector (MBR).
+
+# --- Assemble stage 1 (MBR) ---
 $(STAGE1_BIN): boot.asm
 	@echo "💾 Assembling Stage 1 (MBR)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
-# --- 6. CREATE DISK IMAGE ---
+# --- Create disk image ---
 $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	
-	# 1. Extract the raw binary payload (Stage 3 + Kernel data sections)
-	# This strips the ELF metadata, giving us the contiguous data block.
 	$(OBJCOPY) -O binary -j .stage3 -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
-	
-	dd if=/dev/zero of=$@ bs=512 count=55
-	# 2. Write Stage 1 (1 sector) to the disk start (Sector 1, seek=0)
-	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc
-	
-	# 3. Append Stage 2 (4 sectors) immediately after. (Sectors 2-5, seek=1)
-	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc
-	
-	# 4. Append the raw payload (Stage 3/Kernel) starting at Sector 6 (seek=5)
-	# This is the data that Stage 2 reads starting at disk sector 6 into memory 0x8600.
-	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 iflag=fullblock count=50
-	
-	@echo "✅ Disk image created successfully!" 
+	dd if=/dev/zero of=$@ bs=512 count=55 2>/dev/null
+	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
+	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
+	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 iflag=fullblock count=50 2>/dev/null
+	@echo "✅ Disk image created successfully!"
 
-# --- RUN QEMU ---
+# ============================================================================
+# RUN & DEBUG TARGETS
+# ============================================================================
+
 run: $(DISK_IMG)
-	@echo "▶️ Starting QEMU (i386)..."
+	@echo "▶️  Starting QEMU (i386)..."
 	qemu-system-i386 $(QEMU_FLAGS)
 
-# --- DEBUG WITH GDB ---
-debug: os.img kernel.elf
+debug: $(DISK_IMG) $(KERNEL_ELF)
+	@echo "🐛 Starting QEMU with GDB server..."
 	qemu-system-i386 $(QEMU_FLAGS) -s -S &
-	gdb kernel.elf \
-        -tui \
-        -ex "target remote localhost:1234" \
-        -ex "set architecture i386" \
-        -ex "break kmain" \
-        -ex "layout src" \
-        -ex "continue"
-# --- KILL QEMU ---
-kill-qemu:
-	pkill -9 qemu-system-i386
+	gdb $(KERNEL_ELF) \
+		-tui \
+		-ex "target remote localhost:1234" \
+		-ex "set architecture i386" \
+		-ex "break kmain" \
+		-ex "layout src" \
+		-ex "continue"
 
-# --- CLEAN UP ---
+kill-qemu:
+	@echo "🔪 Killing QEMU..."
+	@pkill -9 qemu-system-i386 || true
+
+# ============================================================================
+# CLEAN
+# ============================================================================
+
 clean:
 	@echo "🧹 Cleaning up..."
-	rm -f *.bin *.o *.elf $(DISK_IMG)
-	@echo "✅ Clean complete." 
+	rm -f $(C_OBJECTS) $(ASM_OBJECTS) *.bin *.elf $(DISK_IMG) $(PAYLOAD_BIN)
+	@echo "✅ Clean complete."
+
+# ============================================================================
+# DEPENDENCIES (auto-generated header dependencies)
+# ============================================================================
+
+# Include auto-generated dependency files if they exist
+-include $(C_SOURCES:.c=.d)
+
+# Generate dependency files alongside object files
+%.o: %.c
+	@echo "⚙️  Compiling $<..."
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@

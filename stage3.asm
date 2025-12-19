@@ -7,7 +7,7 @@ extern _bss_start             ; New symbol
 extern _bss_end               ; New symbol
 extern __total_sectors
 extern __kernel_size_bytes
-extern kmain      
+extern kmain
 
 section .text
 
