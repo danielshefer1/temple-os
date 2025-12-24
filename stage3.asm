@@ -1,13 +1,13 @@
 [BITS 32]
 global stage3_entry
 extern _kernel_LMA_start
-extern _kernel_VMA_start
+extern _kernel_physical_start
 extern _binary_size_text_data ; New symbol
 extern _bss_start             ; New symbol
 extern _bss_end               ; New symbol
 extern __total_sectors
 extern __kernel_size_bytes
-extern kmain
+extern bootstrap_kmain
 
 section .text
 
@@ -28,7 +28,7 @@ stage3_entry:
     inc ebx
     ; 2. Copy Code & Data (Exclude BSS)
     mov esi, _kernel_LMA_start 
-    mov edi, _kernel_VMA_start
+    mov edi, _kernel_physical_start
     mov ecx, _binary_size_text_data ; Only copy what exists in the file
     cld
     rep movsb
@@ -47,7 +47,7 @@ stage3_entry:
     rep stosb
 
     ; 4. Jump to Kernel
-    mov eax, kmain
+    mov eax, bootstrap_kmain
     call eax
 
     cli

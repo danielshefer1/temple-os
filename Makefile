@@ -12,7 +12,7 @@ OBJCOPY = i686-elf-objcopy
 # ============================================================================
 # FLAGS
 # ============================================================================
-CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I.
+CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -fno-pic -fno-pie
 ASFLAGS_BIN  = -f bin
 ASFLAGS_ELF  = -f elf32 -g
 LDFLAGS      = -m elf_i386 -T linker.ld
@@ -22,7 +22,7 @@ QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=os.img
 # SOURCE FILES
 # ============================================================================
 # C source files (add new .c files here)
-C_SOURCES = kernel.c paging.c E820.c print_text.c
+C_SOURCES = bootstrapper.c paging.c E820.c print_text.c
 # Generated object files from C sources
 C_OBJECTS = $(C_SOURCES:.c=.o)
 
@@ -81,7 +81,7 @@ $(STAGE1_BIN): boot.asm
 # --- Create disk image ---
 $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage3 -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
 	dd if=/dev/zero of=$@ bs=512 count=55 2>/dev/null
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
@@ -104,6 +104,17 @@ debug: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "target remote localhost:1234" \
 		-ex "set architecture i386" \
 		-ex "break kmain" \
+		-ex "layout src" \
+		-ex "continue"
+
+debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
+	@echo "🐛 Starting QEMU with GDB server..."
+	qemu-system-i386 $(QEMU_FLAGS) -s -S &
+	gdb $(KERNEL_ELF) \
+		-tui \
+		-ex "target remote localhost:1234" \
+		-ex "set architecture i386" \
+		-ex "break bootstrap_kmain" \
 		-ex "layout src" \
 		-ex "continue"
 

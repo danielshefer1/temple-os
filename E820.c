@@ -75,3 +75,49 @@ void print_memory_map(E820Info* info) {
         print_memory_entry(entry, i);
     }
 }
+
+uint32_t num_usable_entries(E820Info* info) {
+    uint32_t count = 0;
+    for (size_t i = 0; i < info->num_entries; ++i) {
+        if (info->entries[i].type != 1) {
+            continue;
+        }
+        if (info->entries[i].length_low < PAGE_SIZE && info->entries[i].length_high != 0) {
+            continue;
+        }
+        if (info->entries[i].base_high != 0 || info->entries[i].base_low == 0) {
+            continue;
+        }
+        count++;
+    }
+    return count;
+}
+
+bool isUsableEntry(const E820Entry* entry) {
+    if (entry->type != 1) {
+        return false;
+    }
+    if (entry->length_low < PAGE_SIZE && entry->length_high != 0) {
+        return false;
+    }
+    if (entry->base_high != 0 || entry->base_low == 0) {
+        return false;
+    }
+    return true;
+}
+
+void fetch_usable_memory(E820Info* info, E820Entry* usable_entries) {
+    uint32_t index = 0;
+    for (size_t i = 0; i < info->num_entries; ++i) {
+        if (isUsableEntry(&info->entries[i])) 
+            usable_entries[index++] = info->entries[i];
+    }
+}
+
+void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries) {
+    uint32_t index = 0;
+    for (size_t i = 0; i < info->num_entries; ++i) {
+        if (!isUsableEntry(&info->entries[i])) 
+            unusable_entries[index++] = info->entries[i];
+    }
+}
