@@ -17,7 +17,7 @@ void bootstrap_kmain() {
     uint32_t init_count = InitPageDirectory(page_directory, pd_addr, kernel_pages);
     pte_t init_table[init_count];
 
-    pte_t* table = (pte_t*) 0x102000;
+    pte_t* table = (pte_t*)((uint32_t)pd_addr + PAGE_SIZE);
 
     for (uint32_t i = 0, idx = 0; i < 1024; i++) {
         if (table[i].present) {
