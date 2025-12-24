@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "print_text.h"
 
 #define E820_SIGNATURE 0x534D4150
 #define E820_ADDRESS 0x500

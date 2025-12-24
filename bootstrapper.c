@@ -1,64 +1,29 @@
 #include <stdint.h>
-
-#define VGA_BUFFER ((volatile char*)0xB8000)
-
-__attribute__((section(".bootstrap")))
-void print_str_bootstrap(uint32_t idx, char msg[]) {
-    while (msg[idx] != '\0') {
-        VGA_BUFFER[idx * 2] = msg[idx];
-        VGA_BUFFER[idx * 2 + 1] = 0x07;
-        idx++;
-    }   
-}
-
-
-__attribute__((section(".bootstrap")))
-void clear_screen_bootstrap() {
-    for (uint32_t i = 0; i < 80 * 25 * 2; i++) {
-        VGA_BUFFER[i] = 0;
-    }
-}
-
-__attribute__((section(".bootstrap")))
-void itoa_bootstrap(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
-    char* ptr = str;
-    uint32_t tmp_value, count = 0;
-
-    if (value == 0) {
-        *ptr++ = '0';
-        count++;
-    } 
-    else {
-    do {
-        tmp_value = value;
-        value /= base;
-        *ptr++ = "0123456789ABCDEF"[tmp_value - value * base];
-        count++;
-    } while (value);
-    }
-
-    while (count < min_width) {
-        *ptr++ = '0';
-        count++;
-    }
-
-    *ptr = '\0';
-}
+#include "E820.h"
+#include "paging.h"
+#include "data_structs.h"
 
 __attribute__((section(".bootstrap")))
 void bootstrap_kmain() {
-    clear_screen_bootstrap();
+    E820Info* memory_map = init_E820(E820_ADDRESS);
+    uint32_t usable_entries = num_usable_entries(memory_map);
+    E820Entry unusable_entries[memory_map->num_entries - usable_entries - 1];
+    fetch_unusable_memory(memory_map, unusable_entries);
 
-    char msg[] = "I hate paging";
+    uint32_t pd_addr = page_dir_addr();
+    pde_t* page_directory = (pde_t*) pd_addr;
+    uint32_t kernel_pages = (uint32_t)&__total_pages;
 
-    print_str_bootstrap(0, msg);
-    uint32_t pd_addr = 0x10000;
+    uint32_t init_count = InitPageDirectory(page_directory, pd_addr, kernel_pages);
+    pte_t init_table[init_count];
 
-    char pd_addr_str[20];
+    pte_t* table = (pte_t*) 0x102000;
 
-    clear_screen_bootstrap();
-
-    
-
+    for (uint32_t i = 0, idx = 0; i < 1024; i++) {
+        if (table[i].present) {
+            init_table[idx] = table[i];
+            idx++;
+        }
+    }
 
 }

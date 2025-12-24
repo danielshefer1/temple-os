@@ -49,8 +49,5 @@ typedef struct pde_t {
 // Function declarations
 uint32_t page_dir_addr(void);
 
-uint32_t num_page_tables(E820Info* memory_map, const uint32_t kernel_pages);
-uint32_t fill_page_table(pte_t* page_table, const E820Entry* usable_memory,
-     const uint32_t kernel_pages, const uint16_t idx);
-bool InitPageTableBasedMP(uint32_t idx, E820Entry* unusable, uint8_t unusable_length);
-bool isOverlapping(uint32_t startA, uint32_t endA, uint32_t startB, uint32_t endB);
+uint32_t InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages);
+uint32_t InitPageTable(pte_t* page_table, uint32_t kernel_pages);
