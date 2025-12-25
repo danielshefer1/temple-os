@@ -2,8 +2,10 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#define VGA_BUFFER ((volatile char*)0xB8000)
+#define KERNEL_VIRTUAL 0x80000000
+#define VGA_BUFFER ((volatile char*) 0xB8000)
 
+void print_str(const char* str);
 void flip_str(char* str);
 void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width);
 void newline();

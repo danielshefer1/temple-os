@@ -60,10 +60,16 @@ enable_paging:
     or eax, 0x80000000    ; Set PG bit
     mov cr0, eax
     
+    mov eax, [esp+4]
+    mov esp, 0x80000000
+    add esp, eax
+    add esp, 0x5000
 
     mov eax, kmain
     call eax
-    ret
+
+    cli
+    hlt
     
 
 times 512-($-$$) db 0
