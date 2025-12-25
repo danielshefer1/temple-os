@@ -49,5 +49,5 @@ typedef struct pde_t {
 // Function declarations
 uint32_t page_dir_addr(void);
 
-uint32_t InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages);
-uint32_t InitPageTable(pte_t* page_table, uint32_t kernel_pages);
+void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages);
+void InitPageTable(pte_t* page_table, uint32_t kernel_pages);

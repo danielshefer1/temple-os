@@ -8,11 +8,11 @@ uint32_t page_dir_addr(void) {
 }
 
 __attribute__((section(".bootstrap")))
-uint32_t InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages) {
+void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages) {
     
-    uint32_t count, pt_addr;
+    uint32_t count, pt_addr = pd_addr;
 
-    pt_addr = pd_addr + PAGE_SIZE;
+    pt_addr += PAGE_SIZE;
     page_directory[0].present = 1;
     page_directory[0].rw = 1;
     page_directory[0].user = 0;
@@ -24,20 +24,35 @@ uint32_t InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t ker
     page_directory[0].global = 1;
     page_directory[0].frame = pt_addr >> 12;
 
+    pte_t* page_table = (pte_t*) pt_addr;
+    InitPageTable(page_table, kernel_pages);
+
+    pt_addr += PAGE_SIZE;
+    page_directory[513].present = 1;
+    page_directory[513].rw = 1;
+    page_directory[513].user = 0;
+    page_directory[513].write_thru = 0;
+    page_directory[513].cache_dis = 0;
+    page_directory[513].accessed = 0;
+    page_directory[513].dirty = 0;
+    page_directory[513].pat = 0;
+    page_directory[513].global = 1;
+    page_directory[513].frame = pt_addr >> 12;
+
+    page_table = (pte_t*) pt_addr;
+    InitPageTable(page_table, kernel_pages);
+
     for (uint32_t i = 1; i < 1024; i++) {
+        if (i == 513) continue;
         page_directory[i].present = 0;
     }
-    pte_t* page_table = (pte_t*) pt_addr;
-    count = InitPageTable(page_table, kernel_pages);
-
-    return count;
 }
 
 __attribute__((section(".bootstrap")))
-uint32_t InitPageTable(pte_t* page_table, uint32_t kernel_pages) {
+void InitPageTable(pte_t* page_table, uint32_t kernel_pages) {
     uint32_t low_mem_end = 0x100000;  // 1MB
     uint32_t kernel_size = kernel_pages * PAGE_SIZE;
-    uint32_t page_tables_size = 2 * PAGE_SIZE;
+    uint32_t page_tables_size = 3 * PAGE_SIZE;
     uint32_t stack_size = 0x4000;  // 16KB stack
 
     uint32_t total_end = low_mem_end + kernel_size + page_tables_size + stack_size;
@@ -58,6 +73,4 @@ uint32_t InitPageTable(pte_t* page_table, uint32_t kernel_pages) {
     for (uint32_t i = entries_needed; i < 1024; i++) {
         page_table[i].present = 0;
     }
-
-    return entries_needed;
 }

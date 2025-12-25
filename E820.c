@@ -1,6 +1,5 @@
 #include "E820.h"
 
-__attribute__((section(".bootstrap")))
 E820Info* init_E820(uintptr_t address) {
     E820Info* info = (E820Info*)address;
     info->signature = *(uint32_t*)address;
@@ -15,7 +14,6 @@ E820Info* init_E820(uintptr_t address) {
     return info;
 }
 
-__attribute__((section(".bootstrap")))
 E820Entry* get_E820_entries(uint32_t count, uint32_t address) {
     E820Entry* entries = (E820Entry*)address;
     for (size_t i = 0; i < count; ++i) {
@@ -28,7 +26,6 @@ E820Entry* get_E820_entries(uint32_t count, uint32_t address) {
     return entries;
 }
 
-__attribute__((section(".bootstrap")))
 uint32_t num_usable_entries(E820Info* info) {
     uint32_t count = 0;
     for (size_t i = 0; i < info->num_entries; ++i) {
@@ -46,7 +43,6 @@ uint32_t num_usable_entries(E820Info* info) {
     return count;
 }
 
-__attribute__((section(".bootstrap")))
 bool isUsableEntry(const E820Entry* entry) {
     if (entry->type != 1) {
         return false;
@@ -60,7 +56,6 @@ bool isUsableEntry(const E820Entry* entry) {
     return true;
 }
 
-__attribute__((section(".bootstrap")))
 void fetch_usable_memory(E820Info* info, E820Entry* usable_entries) {
     uint32_t index = 0;
     for (size_t i = 0; i < info->num_entries; ++i) {
@@ -69,7 +64,6 @@ void fetch_usable_memory(E820Info* info, E820Entry* usable_entries) {
     }
 }
 
-__attribute__((section(".bootstrap")))
 void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries) {
     uint32_t index = 0;
     for (size_t i = 0; i < info->num_entries; ++i) {
