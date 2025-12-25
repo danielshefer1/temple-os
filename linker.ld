@@ -27,7 +27,7 @@ SECTIONS
     _bootstrap_size = SIZEOF(.bootstrap);
 
     /* --- C Kernel VMA: Starts at 2GB + 1MB --- */
-    . = 0x80100000;
+    . = 0x80100000 + SIZEOF(.bootstrap);
     _kernel_VMA_start = .;
 
     .text : AT(_kernel_LMA_start + SIZEOF(.bootstrap))

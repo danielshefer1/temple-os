@@ -1,4 +1,3 @@
-
 #include "print_text.h"
 
 static uint32_t cursor_x = 0; // Column (0-79)
@@ -69,13 +68,13 @@ void putchar(char c) {
     }
 }
 
-static inline void print_str(const char* str) {
+void print_str(const char* str) {
     while (*str && *str != '\0') {
         putchar(*str++);
     }
 }
 
-inline void clear_screen() {
+void clear_screen() {
     for (uint32_t i = 0; i < 80 * 25 * 2; i++) {
         VGA_BUFFER[i] = 0;
     }
@@ -83,7 +82,7 @@ inline void clear_screen() {
     cursor_y = 0;
 }
 
-inline void newline() {
+void newline() {
     if (cursor_y < MAX_ROWS - 1) {
         cursor_y++;
         cursor_x = 0;
@@ -105,13 +104,13 @@ inline void newline() {
     }
 }
 
-inline void insert_tab() {
+void insert_tab() {
     for (uint32_t i = 0; i < 4; i++) {
         putchar(' ');
     }
 }
 
-inline void kprintf(const char* format, ...) {
+void kprintf(const char* format, ...) {
     va_list args;
     va_start(args, format);
     

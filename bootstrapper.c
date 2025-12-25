@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include "paging.h"
 #include "data_structs.h"
+#include "kernel.h"
+
+extern void enable_paging(uint32_t *page_directory);
 
 __attribute__((section(".bootstrap")))
 void bootstrap_kmain() {
@@ -9,5 +12,6 @@ void bootstrap_kmain() {
     uint32_t kernel_pages = (uint32_t)&__total_pages;
 
     InitPageDirectory(page_directory, pd_addr, kernel_pages);
-    pte_t* pt_513 = (pte_t*)(uint32_t)(page_directory[513].frame << 12);
+
+    enable_paging((uint32_t*) page_directory);
 }

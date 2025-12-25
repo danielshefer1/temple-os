@@ -10,7 +10,7 @@ uint32_t page_dir_addr(void) {
 __attribute__((section(".bootstrap")))
 void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages) {
     
-    uint32_t count, pt_addr = pd_addr;
+    uint32_t pt_addr = pd_addr;
 
     pt_addr += PAGE_SIZE;
     page_directory[0].present = 1;
@@ -28,22 +28,22 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     InitPageTable(page_table, kernel_pages);
 
     pt_addr += PAGE_SIZE;
-    page_directory[513].present = 1;
-    page_directory[513].rw = 1;
-    page_directory[513].user = 0;
-    page_directory[513].write_thru = 0;
-    page_directory[513].cache_dis = 0;
-    page_directory[513].accessed = 0;
-    page_directory[513].dirty = 0;
-    page_directory[513].pat = 0;
-    page_directory[513].global = 1;
-    page_directory[513].frame = pt_addr >> 12;
+    page_directory[HIGHER_HALF_IDX].present = 1;
+    page_directory[HIGHER_HALF_IDX].rw = 1;
+    page_directory[HIGHER_HALF_IDX].user = 0;
+    page_directory[HIGHER_HALF_IDX].write_thru = 0;
+    page_directory[HIGHER_HALF_IDX].cache_dis = 0;
+    page_directory[HIGHER_HALF_IDX].accessed = 0;
+    page_directory[HIGHER_HALF_IDX].dirty = 0;
+    page_directory[HIGHER_HALF_IDX].pat = 0;
+    page_directory[HIGHER_HALF_IDX].global = 1;
+    page_directory[HIGHER_HALF_IDX].frame = pt_addr >> 12;
 
     page_table = (pte_t*) pt_addr;
     InitPageTable(page_table, kernel_pages);
 
     for (uint32_t i = 1; i < 1024; i++) {
-        if (i == 513) continue;
+        if (i == HIGHER_HALF_IDX) continue;
         page_directory[i].present = 0;
     }
 }

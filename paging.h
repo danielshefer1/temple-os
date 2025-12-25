@@ -11,6 +11,7 @@
 #define KERNEL_VIRTUAL 0x80000000
 #define KERNEL_BASE 0x100000
 #define TABLE_SIZE PAGE_SIZE * 1024
+#define HIGHER_HALF_IDX 512
 
 // External symbols from linker
 extern uint32_t __total_pages;

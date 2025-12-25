@@ -8,6 +8,7 @@ extern _bss_end               ; New symbol
 extern __total_sectors
 extern __kernel_size_bytes
 extern bootstrap_kmain
+extern kmain
 
 section .text
 
@@ -50,7 +51,19 @@ stage3_entry:
     mov eax, bootstrap_kmain
     call eax
 
-    cli
-    hlt
+global enable_paging
+enable_paging:
+    mov eax, [esp+4]      ; Get page_directory parameter
+    mov cr3, eax          ; Load into CR3
+    
+    mov eax, cr0
+    or eax, 0x80000000    ; Set PG bit
+    mov cr0, eax
+    
+
+    mov eax, kmain
+    call eax
+    ret
+    
 
 times 512-($-$$) db 0
