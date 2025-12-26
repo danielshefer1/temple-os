@@ -19,7 +19,7 @@ SECTIONS
     _kernel_physical_start = .;
     .bootstrap : AT(_kernel_LMA_start)
     {
-        *(.bootstrap)
+        *(.bootstrap) 
         *(.bootstrap.text)
         *(.rodata.bootstrap*)
         *(.data.bootstrap*)
@@ -30,13 +30,14 @@ SECTIONS
     . = 0x80100000 + SIZEOF(.bootstrap);
     _kernel_VMA_start = .;
 
-    .text : AT(_kernel_LMA_start + SIZEOF(.bootstrap))
+    .text : AT(_kernel_LMA_start + SIZEOF(.bootstrap)) 
     {
         *(.text)
         *(.rodata*)
     }
 
-    .data : AT(_kernel_LMA_start + SIZEOF(.bootstrap) + SIZEOF(.text))
+
+    .data : AT(_kernel_LMA_start + SIZEOF(.bootstrap) + SIZEOF(.text)) 
     {
         *(.data)
     }
@@ -44,7 +45,7 @@ SECTIONS
     /* Mark the end of the DATA (Stuff we must copy from disk) */
     _kernel_VMA_data_end = .;
 
-    .bss : AT(_kernel_LMA_start + SIZEOF(.bootstrap) + SIZEOF(.text) + SIZEOF(.data))
+    .bss : AT(_kernel_LMA_start + SIZEOF(.bootstrap) + SIZEOF(.text) + SIZEOF(.data)) 
     {
         _bss_start = .;
         *(.bss)
@@ -58,7 +59,7 @@ SECTIONS
 /* --- Calculation Fixes --- */
     
     /* 1. Size to copy from disk (Text + Data only, NO BSS) */
-    _binary_size_text_data = SIZEOF(.bootstrap) + SIZEOF(.text) + SIZEOF(.data); ;
+    _binary_size_text_data = _kernel_VMA_data_end - _kernel_VMA_start + _bootstrap_size;
 
     /* 2. Total sectors to load (Stage3 + C Kernel Text/Data) */
     /* We calculate physical file end address minus start address */

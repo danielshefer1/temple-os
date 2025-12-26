@@ -66,7 +66,7 @@ enable_paging:
     add esp, 0x5000
 
     mov eax, kmain
-    call eax
+    jmp eax
 
     cli
     hlt
