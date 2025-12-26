@@ -1,9 +1,9 @@
 #pragma once
 #include <stdint.h>
 #include <stdarg.h>
+#include "paging.h"
 
-#define KERNEL_VIRTUAL 0x80000000
-#define VGA_BUFFER ((volatile char*) 0xB8000)
+#define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
 
 void print_str(const char* str);
 void flip_str(char* str);

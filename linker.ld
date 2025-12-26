@@ -27,17 +27,23 @@ SECTIONS
     _bootstrap_size = SIZEOF(.bootstrap);
 
     /* --- C Kernel VMA: Starts at 2GB + 1MB --- */
-    . = 0x80100000 + SIZEOF(.bootstrap);
+    . = 0x80100000 + _bootstrap_size;
     _kernel_VMA_start = .;
 
-    .text : AT(_kernel_LMA_start + SIZEOF(.bootstrap)) 
+    _text_start = _kernel_LMA_start + _bootstrap_size;
+    _text_start_reminder = _text_start % 4;
+    _text_start = _text_start + 4 - _text_start_reminder;
+    .text : AT(_text_start) 
     {
         *(.text)
+        . = ALIGN(4);
         *(.rodata*)
     }
 
-
-    .data : AT(_kernel_LMA_start + SIZEOF(.bootstrap) + SIZEOF(.text)) 
+    _data_start = _text_start + SIZEOF(.text);
+    _data_start_reminder = _data_start % 4;
+    _data_start = _data_start + 4 - _data_start_reminder;
+    .data : AT(_data_start) 
     {
         *(.data)
     }
