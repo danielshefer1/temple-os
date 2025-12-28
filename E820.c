@@ -4,7 +4,7 @@ E820Info* init_E820(uintptr_t address) {
     E820Info* info = (E820Info*)address;
     info->signature = *(uint32_t*)address;
     if (info->signature != E820_SIGNATURE) {
-        //kprintf("Invalid E820 Signature: 0x%x\n", info->signature);
+        kprintf("Invalid E820 Signature: 0x%x\n", info->signature);
         return NULL;
     }
 
@@ -73,4 +73,12 @@ void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries) {
         if (!isUsableEntry(&info->entries[i])) 
             unusable_entries[index++] = info->entries[i];
     }
+}
+
+void print_E820_entrys(E820Entry* entries, uint32_t length) {
+
+}
+
+void print_E820_entry(E820Entry* entry) {
+    
 }

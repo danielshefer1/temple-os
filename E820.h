@@ -2,9 +2,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "paging.h"
+#include "print_text.h"
 
 #define E820_SIGNATURE 0x534D4150
-#define E820_ADDRESS 0x500
+#define E820_ADDRESS KERNEL_VIRTUAL + 0x500
 #define PAGE_SIZE 4096
 
 typedef struct E820Entry {

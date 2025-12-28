@@ -5,6 +5,11 @@ uint32_t page_dir_addr_v() {
     return KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE;
 }
 
+void end() {
+    __asm__ volatile("cli");
+    __asm__ volatile("hlt");
+}
+
 void kmain() {
     clear_screen();
 
@@ -18,6 +23,8 @@ void kmain() {
     page_directory[0].present = 0;
     kprintf("Is the first page table present: %d\n", page_directory[0].present);
 
-    __asm__ volatile("cli");
-    __asm__ volatile("hlt");
+    E820Info* memory_map = init_E820(E820_ADDRESS);
+
+
+    end();
 }
