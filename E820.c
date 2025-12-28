@@ -59,6 +59,9 @@ bool isUsableEntry(const E820Entry* entry) {
 void fetch_usable_memory(E820Info* info, E820Entry* usable_entries) {
     uint32_t index = 0;
     for (size_t i = 0; i < info->num_entries; ++i) {
+        if (info->entries[i].base_high != 0 || info->entries[i].length_high != 0)
+            continue;
+            
         if (isUsableEntry(&info->entries[i])) 
             usable_entries[index++] = info->entries[i];
     }
@@ -67,7 +70,7 @@ void fetch_usable_memory(E820Info* info, E820Entry* usable_entries) {
 void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries) {
     uint32_t index = 0;
     for (size_t i = 0; i < info->num_entries; ++i) {
-        if (info->entries[i].base_high != 0) 
+        if (info->entries[i].base_high != 0 || info->entries[i].length_high != 0)
             continue;
 
         if (!isUsableEntry(&info->entries[i])) 
@@ -76,9 +79,12 @@ void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries) {
 }
 
 void print_E820_entrys(E820Entry* entries, uint32_t length) {
-
+    for (uint32_t i = 0; i < length; i++) {
+        print_E820_entry(entries[i], i);
+    }
 }
 
-void print_E820_entry(E820Entry* entry) {
-    
+void print_E820_entry(E820Entry entry, uint32_t idx) {
+    kprintf("Entry %d:\nBase: 0x%8x\tLength: 0x%8x\tType: %d",
+         idx, entry.base_low, entry.length_low, entry.type);
 }

@@ -21,11 +21,11 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     page_directory[0].accessed = 0;
     page_directory[0].dirty = 0;
     page_directory[0].pat = 0;
-    page_directory[0].global = 1;
+    page_directory[0].global = 0;
     page_directory[0].frame = pt_addr >> 12;
 
     pte_t* page_table = (pte_t*) pt_addr;
-    InitPageTable(page_table, kernel_pages);
+    InitPageTable(page_table, kernel_pages, false);
 
     pt_addr += PAGE_SIZE;
     page_directory[HIGHER_HALF_IDX].present = 1;
@@ -40,7 +40,7 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     page_directory[HIGHER_HALF_IDX].frame = pt_addr >> 12;
 
     page_table = (pte_t*) pt_addr;
-    InitPageTable(page_table, kernel_pages);
+    InitPageTable(page_table, kernel_pages, true);
 
     for (uint32_t i = 1; i < 1024; i++) {
         if (i == HIGHER_HALF_IDX) continue;
@@ -49,7 +49,7 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
 }
 
 __attribute__((section(".bootstrap")))
-void InitPageTable(pte_t* page_table, uint32_t kernel_pages) {
+void InitPageTable(pte_t* page_table, uint32_t kernel_pages, bool is_global) {
     uint32_t low_mem_end = 0x100000;  // 1MB
     uint32_t kernel_size = kernel_pages * PAGE_SIZE;
     uint32_t page_tables_size = 3 * PAGE_SIZE;
@@ -67,7 +67,9 @@ void InitPageTable(pte_t* page_table, uint32_t kernel_pages) {
         page_table[i].accessed = 0;
         page_table[i].dirty = 0;
         page_table[i].pat = 0;
-        page_table[i].global = 1;
+        if (is_global)  page_table[i].global = 1;
+        else page_table[i].global = 0;
+
         page_table[i].frame = (i * PAGE_SIZE) >> 12;
     }
     for (uint32_t i = entries_needed; i < 1024; i++) {
