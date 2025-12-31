@@ -32,3 +32,4 @@ uint32_t num_usable_entries(E820Info* info);
 void fetch_usable_memory(E820Info* info, E820Entry* usable_entries);
 void fetch_unusable_memory(E820Info* info, E820Entry* unusable_entries);
 void print_E820_entrys(E820Entry* entries, uint32_t length);
+void print_E820_entry(E820Entry entry, uint32_t idx);

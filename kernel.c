@@ -16,18 +16,21 @@ void flush_tlb() {
 }
 
 void kmain() {
-    clear_screen();
+    //clear_screen();
 
-    kprintf("If this worked I'm gonna scream\n");
-    kprintf("Number example: 0x%x\n", 0x8765);
+    //kprintf("If this worked I'm gonna scream\n");
+    //kprintf("Number example: 0x%x\n", 0x8765);
+    //E820Info* memory_map = init_E820(E820_ADDRESS);
+
 
     uint32_t pd_addr = page_dir_addr_v();
-    kprintf("Page Directory Virtual Address: 0x%x\n", pd_addr);
+    //kprintf("Page Directory Virtual Address: 0x%x\n", pd_addr);
     pde_t* page_directory = (pde_t*) pd_addr;
-    kprintf("PDE[0] global bit: %d\n", page_directory[0].global);
-    kprintf("Is the first page table present: %d\n", page_directory[0].present);
+    //kprintf("PDE[0] global bit: %d\n", page_directory[0].global);
+    //kprintf("Is the first page table present: %d\n", page_directory[0].present);
     page_directory[0].present = 0;
     flush_tlb();
+    clear_screen();
     kprintf("Is the first page table present: %d\n", page_directory[0].present);
     uint32_t kernel_table_addr = page_directory[512].frame << 12;
     kernel_table_addr += KERNEL_VIRTUAL;
@@ -42,7 +45,8 @@ void kmain() {
 
     kprintf("Higher-half table[0] - present:%d frame:0x%x\n", 
         higher_half_table[0].present, higher_half_table[0].frame);
-    //E820Info* memory_map = init_E820(E820_ADDRESS);
+    
+    //uint32_t num_usable = num_usable_entries(memory_map);
     /*
     E820Entry usable_entries[num_usable], unusable_entries[memory_map->num_entries - 1 - num_usable];
 
