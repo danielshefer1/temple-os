@@ -8,14 +8,13 @@ E820Info* init_E820(uintptr_t address) {
         return NULL;
     }
 
-    info->num_entries = *(uint32_t*)(address + 4);
-    info->address = *(uint32_t*)(address + 8);
+    info->address += KERNEL_VIRTUAL;
     info->entries = get_E820_entries(info->num_entries, info->address);
     return info;
 }
 
 E820Entry* get_E820_entries(uint32_t count, uint32_t address) {
-    E820Entry* entries = (E820Entry*)address;
+    E820Entry* entries = (E820Entry*) address;
     for (size_t i = 0; i < count; ++i) {
         entries[i].base_low = *(uint32_t*)(address + i * sizeof(E820Entry));
         entries[i].base_high = *(uint32_t*)(address + i * sizeof(E820Entry) + 4);
@@ -85,6 +84,6 @@ void print_E820_entrys(E820Entry* entries, uint32_t length) {
 }
 
 void print_E820_entry(E820Entry entry, uint32_t idx) {
-    kprintf("Entry %d:\nBase: 0x%8x\tLength: 0x%8x\tType: %d",
+    kprintf("Entry %d:\nBase: 0x%8x\tLength: 0x%8x\tType: %d\n",
          idx, entry.base_low, entry.length_low, entry.type);
 }
