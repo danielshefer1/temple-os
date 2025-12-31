@@ -7,7 +7,7 @@ E820Info* init_E820(uintptr_t address) {
         kprintf("Invalid E820 Signature: 0x%x\n", info->signature);
         return NULL;
     }
-
+    info->address = (uint32_t) info->entries;
     info->address += KERNEL_VIRTUAL;
     info->entries = get_E820_entries(info->num_entries, info->address);
     return info;
