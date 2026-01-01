@@ -7,7 +7,7 @@ static uint32_t curr_addr = 0;
 BuddyList* InitBuddyList(uint32_t stack_size, E820Entry* entry) {
     uint32_t kernel_pages = (uint32_t)&__total_pages;
     uint32_t heap_addr = KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE +
-        3 * PAGE_SIZE + stack_size + PAGE_SIZE;
+        3 * PAGE_SIZE + stack_size * PAGE_SIZE;
     start_page = (heap_addr - KERNEL_VIRTUAL) / PAGE_SIZE + 1;
     
     BuddyList* list = (BuddyList*) heap_addr;
@@ -34,7 +34,9 @@ BuddyList* InitBuddyList(uint32_t stack_size, E820Entry* entry) {
     if (entry->base_low <= heap_addr - KERNEL_VIRTUAL) {
         list->head->start = heap_addr - KERNEL_VIRTUAL;
     }
-    list->head->start = entry->base_low;
+    else {
+        list->head->start = entry->base_low;
+    }
     return list;
 }
 
@@ -105,7 +107,7 @@ void* brk(BuddyList* list, uint32_t size) {
         }
         bit_pos--;
     }
-    uint32_t size = bit_pos;
+    size = bit_pos;
     while (p->size <= size) {
         if (p->size == size) {
             while (p->head->free == 0) {
@@ -116,7 +118,7 @@ void* brk(BuddyList* list, uint32_t size) {
             }
             if (p->head->free == 1) {
                 p->head->free = 0;
-                return p->head->start;
+                return (void*)p->head->start;
             }
         }
         p = p->next;
