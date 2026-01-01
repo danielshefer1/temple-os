@@ -24,7 +24,11 @@ void kmain() {
     flush_tlb();
 
     E820Info* memory_map = init_E820(E820_ADDRESS);
-    print_E820_entrys(memory_map->entries, memory_map->num_entries);
-    
+    uint32_t valid_entries = num_valid_entries(memory_map);
+    uint32_t n_usable_entries = num_usable_entries(memory_map);
+    E820Entry usable_entries[n_usable_entries], unusable_entries[valid_entries - n_usable_entries];
+    fetch_usable_memory(memory_map, usable_entries);
+    fetch_unusable_memory(memory_map, unusable_entries);
+
     end();
 }
