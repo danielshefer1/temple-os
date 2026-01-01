@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdarg.h>
-#include "paging.h"
+#include "paging_bootstrap.h"
 
 #define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
 

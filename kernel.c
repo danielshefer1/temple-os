@@ -30,5 +30,7 @@ void kmain() {
     fetch_usable_memory(memory_map, usable_entries);
     fetch_unusable_memory(memory_map, unusable_entries);
 
+    BuddyList* buddy_list = InitBuddyList(4, &usable_entries[0]);
+    PrintBuddyList(buddy_list);
     end();
 }

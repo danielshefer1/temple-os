@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "paging.h"
+#include "paging_bootstrap.h"
 #include "print_text.h"
 
 #define E820_SIGNATURE 0x534D4150

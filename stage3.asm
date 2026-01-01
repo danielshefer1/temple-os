@@ -63,7 +63,8 @@ enable_paging:
     mov eax, [esp+4]
     mov esp, 0x80000000
     add esp, eax
-    add esp, 0x5FFF
+    add esp, 0x2000
+    add esp, 0x4FFF
 
     mov eax, kmain
     jmp eax
