@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "paging.h"
+#include "paging_bootstrap.h"
 #include "data_structs.h"
 #include "kernel.h"
 
