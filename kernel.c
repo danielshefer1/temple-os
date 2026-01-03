@@ -28,9 +28,9 @@ void kmain() {
     E820Entry usable_entries[n_usable_entries];
     fetch_usable_memory(memory_map, usable_entries);
 
-    //print_E820_entrys(usable_entries, n_usable_entries);
-    BuddyList* buddy_list = InitBuddyList(4, KERNEL_VIRTUAL / 2, KERNEL_VIRTUAL);
-    //uint32_t pointer = (uint32_t) brk(buddy_list, PAGE_SIZE);
-    PrintBuddyList(buddy_list);
+    Cache* caches = InitSlabCache(page_dir_addr_v() + 7 * PAGE_SIZE, page_directory);
+
+    BuddyList* list = InitBuddyList(KERNEL_VIRTUAL / 2, KERNEL_VIRTUAL);
+    PrintBuddyList(list);
     end();
 }

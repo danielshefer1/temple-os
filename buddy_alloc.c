@@ -1,17 +1,9 @@
 #include "buddy_alloc.h"
 
-static uint32_t start_page = 0;
 static uint32_t curr_id = 0;
-static uint32_t curr_addr = 0;
 
-BuddyList* InitBuddyList(uint32_t stack_size, uint32_t start, uint32_t size) {
-    uint32_t kernel_pages = (uint32_t)&__total_pages;
-    uint32_t heap_addr = KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE +
-        3 * PAGE_SIZE + stack_size * PAGE_SIZE;
-    start_page = (heap_addr - KERNEL_VIRTUAL) / PAGE_SIZE + 1;
-    curr_addr = heap_addr;
-    
-    BuddyList* list = AddList(), *tmp, *p = list;
+BuddyList* InitBuddyList(uint32_t start, uint32_t size) {
+    BuddyList* list = AddList(), *tmp;
     list->next = NULL;
 
     uint32_t bit_pos;
@@ -49,12 +41,10 @@ uint32_t pow(uint32_t base, uint32_t exp) {
 }
 
 BuddyList* AddList() {
-    curr_addr += sizeof(BuddyList);
-    return (BuddyList*) (curr_addr - sizeof(BuddyList));
+    return (BuddyList*) kmalloc(sizeof(BuddyList));
 }
 BuddyNode* AddNode() {
-    curr_addr += sizeof(BuddyNode);
-    return (BuddyNode*) (curr_addr - sizeof(BuddyNode));
+    return (BuddyNode*) kmalloc(sizeof(BuddyNode));
 }
 
 void PrintBuddyList(BuddyList* list) {
@@ -154,7 +144,7 @@ uint32_t SplitList(BuddyList* starting_list, uint32_t bit_pos, BuddyNode* split_
         split_node->free = 0;
         return split_node->start;
     }
-    uint32_t curr_size = starting_list->size, start_addr, d = pow(2, starting_list->size -1), p_start, p_end;
+    uint32_t start_addr, d = pow(2, starting_list->size -1), p_start, p_end;
     BuddyList* p_l = starting_list, *tmp = NULL;
     BuddyNode* p_n, *tmp_n, *tmp_n2;
     start_addr = split_node->start;
@@ -186,7 +176,7 @@ uint32_t SplitList(BuddyList* starting_list, uint32_t bit_pos, BuddyNode* split_
 
     while (p_n != NULL) {
         p_start = p_n->start;
-        p_end = p_end = p_n->next->start;
+        p_end = p_n->next->start;
         if (p_n->next == NULL) p_end = start_addr + 1;
          
         if (p_n->start < start_addr && start_addr < p_end) {
@@ -239,7 +229,7 @@ uint32_t SplitList(BuddyList* starting_list, uint32_t bit_pos, BuddyNode* split_
 
 
 void* brk(BuddyList* list, uint32_t size) {
-    BuddyList* p = list, *p_p;
+    BuddyList* p = list;
     BuddyNode* p_n;
     
     size = GetLargestBit(size);

@@ -1,7 +1,12 @@
 #pragma once
 
-#include "imports.h"
-
+#include "data_structs.h"
+#include <stdint.h>
+#include "E820.h"
+#include "paging_bootstrap.h"
+#include "E820.h"
+#include "print_text.h"
+#include "slab_alloc.h"
 
 extern uint32_t __total_pages; 
 
@@ -24,7 +29,7 @@ typedef struct BuddyList
 
 BuddyList* AddList();
 BuddyNode* AddNode();
-BuddyList* InitBuddyList(uint32_t stack_size, uint32_t start, uint32_t size);
+BuddyList* InitBuddyList(uint32_t start, uint32_t size);
 void PrintBuddyList(BuddyList* list);
 void PrintBuddyNode(BuddyNode* node);
 uint32_t GetLargestBit(uint32_t size);

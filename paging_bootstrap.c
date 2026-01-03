@@ -55,7 +55,7 @@ void InitPageTable(pte_t* page_table, uint32_t kernel_pages, bool is_global) {
     uint32_t page_tables_size = 3 * PAGE_SIZE;
     uint32_t stack_size = 0x4000;  // 16KB stack
 
-    uint32_t total_end = low_mem_end + kernel_size + page_tables_size + stack_size + PAGE_SIZE;
+    uint32_t total_end = low_mem_end + kernel_size + page_tables_size + stack_size + PAGE_SIZE * 4;
     uint32_t entries_needed = (total_end) / 0x1000;
 
     for (uint32_t i = 0; i < entries_needed; i++) {
