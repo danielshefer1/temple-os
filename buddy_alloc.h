@@ -9,25 +9,28 @@
 
 extern uint32_t __total_pages; 
 
-typedef struct buddyNode {
+typedef struct BuddyNode {
     bool free;
     uint32_t id;
     uint32_t buddy;
     uint32_t start;
-    struct buddyNode* next;
-    struct buddyNode* prev;
-} buddyNode;
+    struct BuddyNode* next;
+    struct BuddyNode* prev;
+} BuddyNode;
 
 typedef struct BuddyList
 {
     uint32_t size;
-    buddyNode* head;
+    BuddyNode* head;
     struct BuddyList* next;
     struct BuddyList* prev;
 } BuddyList;
 
-BuddyList* InitBuddyList(uint32_t stack_size, E820Entry* entry);
+BuddyList* AddList();
+BuddyNode* AddNode();
+BuddyList* InitBuddyList(uint32_t stack_size, uint32_t start, uint32_t size);
 void PrintBuddyList(BuddyList* list);
-void PrintBuddyListH(BuddyList* list);
-void PrintBuddyNode(buddyNode* node);
-void PrintBuddyNodeH(buddyNode* node);
+void PrintBuddyNode(BuddyNode* node);
+uint32_t GetLargestBit(uint32_t size);
+uint32_t NumOfActiveBits(uint32_t size);
+void* brk(BuddyList* list, uint32_t size);
