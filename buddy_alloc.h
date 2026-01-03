@@ -1,11 +1,7 @@
 #pragma once
 
-#include "data_structs.h"
-#include <stdint.h>
-#include "E820.h"
-#include "paging_bootstrap.h"
-#include "E820.h"
-#include "print_text.h"
+#include "imports.h"
+
 
 extern uint32_t __total_pages; 
 

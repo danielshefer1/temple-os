@@ -1,9 +1,7 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include "data_structs.h"
+#include "imports.h"
+
 
 #define PAGE_SIZE 4096
 #define KERNEL_VIRTUAL 0x80000000

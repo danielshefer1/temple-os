@@ -1,9 +1,5 @@
 #pragma once
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include "paging_bootstrap.h"
-#include "print_text.h"
+#include "imports.h"
 
 #define E820_SIGNATURE 0x534D4150
 #define E820_ADDRESS KERNEL_VIRTUAL + 0x500

@@ -26,7 +26,7 @@ QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=os.img
 # ============================================================================
 
 # C source files (add new .c files here)
-C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c print_text.c kernel.c buddy_alloc.c
+C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c print_text.c kernel.c buddy_alloc.c slab_alloc.c
 # Generated object files from C sources
 C_OBJECTS = $(C_SOURCES:.c=.o)
 # Assembly sources
