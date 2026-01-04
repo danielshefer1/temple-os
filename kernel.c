@@ -1,38 +1,26 @@
 #include "kernel.h"
 
-uint32_t page_dir_addr_v() {
-    uint32_t kernel_pages = (uint32_t)&__total_pages;
-    return KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE;
-}
+
 
 void end() {
     __asm__ volatile("cli");
     __asm__ volatile("hlt");
 }
 
-void flush_tlb() {
-    __asm__ volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" ::: "eax");
 
-}
 
 void kmain() {
     clear_screen();
 
-    uint32_t pd_addr = page_dir_addr_v();
-    pde_t* page_directory = (pde_t*) pd_addr;
-    page_directory[0].present = 0;
-    flush_tlb();
+    InitPaging();
 
     E820Info* memory_map = init_E820(E820_ADDRESS);
     uint32_t n_usable_entries = num_usable_entries(memory_map);
     E820Entry usable_entries[n_usable_entries];
     fetch_usable_memory(memory_map, usable_entries);
 
-    Cache* caches = InitSlabCache(page_dir_addr_v() + 7 * PAGE_SIZE, page_directory);
-
-    BuddyList* list = InitBuddyList(KERNEL_VIRTUAL / 2, KERNEL_VIRTUAL);
-    //PrintBuddyList(list);
-    brk(list, PAGE_SIZE * 256);
-    PrintBuddyList(list);
+    InitSlabCache(PageDirAddrV() + 7 * PAGE_SIZE);
+    InitBuddyAlloc(KERNEL_VIRTUAL / 2, KERNEL_VIRTUAL);
+    PrintList();
     end();
 }

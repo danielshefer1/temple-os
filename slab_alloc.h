@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "paging_bootstrap.h"
 #include "buddy_alloc.h"
+#include "paging.h"
 
 #define NUM_CACHE 2
 typedef struct Slab
@@ -23,7 +24,6 @@ typedef struct
     Slab* empty_slabs;
 } Cache;
 
-uint32_t AddKernelPages(uint32_t num_pages, pde_t* page_directory);
-Cache* InitSlabCache(uint32_t start, pde_t* page_directory);
+void InitSlabCache(uint32_t start);
 void* kmalloc(uint32_t size);
 void kfree(void* ptr, uint32_t size);
