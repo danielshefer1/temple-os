@@ -31,6 +31,8 @@ void kmain() {
     Cache* caches = InitSlabCache(page_dir_addr_v() + 7 * PAGE_SIZE, page_directory);
 
     BuddyList* list = InitBuddyList(KERNEL_VIRTUAL / 2, KERNEL_VIRTUAL);
+    //PrintBuddyList(list);
+    brk(list, PAGE_SIZE * 256);
     PrintBuddyList(list);
     end();
 }

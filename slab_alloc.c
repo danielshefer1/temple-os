@@ -54,7 +54,7 @@ uint32_t GetEmptyBit(uint32_t num) {
     while (bit_pos < 32) {
         bit = num << (31 - bit_pos);
         bit = bit >> 31;
-        if (bit == 1) {
+        if (bit == 0) {
             break;
         }
         bit_pos++;
@@ -88,8 +88,8 @@ void* SearchCache(Cache* cache, uint32_t cache_idx) {
         void* ret = (void*) s_p->start;
         s_p->bitmap[0] = 1;
         cache->empty_slabs = s_p->next;
-        s_p->next = cache->full_slabs;
-        cache->full_slabs = s_p;
+        s_p->next = cache->partial_slabs;
+        cache->partial_slabs = s_p;
         return ret;
     }
     return NULL;

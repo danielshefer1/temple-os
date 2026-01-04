@@ -116,6 +116,7 @@ bool DeleteNode(BuddyNode* node, BuddyList* list) {
         list->head = node->next;
         return true;
     }
+    kfree(node, sizeof(BuddyNode));
     return false;
 }
 
@@ -136,6 +137,7 @@ bool DeleteList(BuddyList* list) {
         list->next->prev = NULL;
         return true;
     }
+    kfree(list, sizeof(BuddyList));
     return false;
 }
 
