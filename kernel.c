@@ -2,6 +2,7 @@
 
 void start() {
     clear_screen();
+    kprintf("Starting Kernel\n");
     InitPaging();
     InitSlabAlloc(PageDirAddrV() + 7 * PAGE_SIZE);
     InitBuddyAlloc(KERNEL_VIRTUAL >> 1, KERNEL_VIRTUAL);

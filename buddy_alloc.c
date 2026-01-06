@@ -26,12 +26,17 @@ BuddyNode* CreateBuddyNode(void* address) {
 
 void PrintBuddyBin() {
     for (int i = 0; i < MAX_ORDER; i++) {
-        if (bins[i].head_free == NULL) {
-            kprintf("Order: %d Free:\n", i);
+        if (bins[i].head_free == NULL && bins[i].head_used == NULL) {
+            continue;
+        }
+        kprintf("Order: %d\n", i);
+
+        if (bins[i].head_free != NULL) {
+            kprintf("Free: ");
             PrintBuddyNode(bins[i].head_free);
         }
-        if (bins[i].head_used == NULL) {
-            kprintf("Order: %d Used:\n", i);
+        if (bins[i].head_used != NULL) {
+            kprintf("Used: ");
             PrintBuddyNode(bins[i].head_used);
         }
 
@@ -40,9 +45,9 @@ void PrintBuddyBin() {
 
 void PrintBuddyNode(BuddyNode* node) {
     BuddyNode* p = node;
-    while (p != NULL) {
-        kprintf("Address: 0x%x\t", p->address);
+    while (p->next != NULL) {
+        kprintf("Address: 0x%x -> ", p->address);
         p = p->next;
     }
-    kprintf("\n");
+    kprintf("Random Garbage");
 }
