@@ -1,13 +1,14 @@
 #include "slab_alloc.h"
 
 static Cache caches[NUM_CACHE];
-static uint32_t sizes[2] = {sizeof(BuddyList), sizeof(BuddyNode)};
-static uint32_t size_slabs[2] = {1, 1};
+static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode)};
+static uint32_t size_slabs[NUM_CACHE] = {1};
 static uint32_t curr_addr;
 
-void InitSlabCache(uint32_t start) {
+void InitSlabAlloc(uint32_t start) {
     uint32_t start_addr;
     curr_addr = start;
+    
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
         caches[i].size = sizes[i];
@@ -97,12 +98,41 @@ void* kmalloc(uint32_t size) {
         if (caches[i].size == size) {
             ret = SearchCache(&caches[i], i);
             if (ret != NULL) {
+                memset(ret, 0, size);
                 return ret;
             }
             AddSlabW(&caches[i], i);
             ret = SearchCache(&caches[i], i);
+            memset(ret, 0, size);
             return ret;            
         }
+    }
+    return NULL;
+}
+
+Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
+    Slab* p1 = slab1, *p2 = slab2;
+    while (p1 != NULL && p2 != NULL) {
+        if (p1->start <= ptr && p1->start + size_slabs[cache_idx] * PAGE_SIZE > ptr) {
+            return p1;
+        }
+        if (p2->start <= ptr && p2->start + size_slabs[cache_idx] * PAGE_SIZE > ptr) {
+            return p2;
+        }
+        p1 = p1->next;
+        p2 = p2->next;
+    }
+    while (p1 != NULL) {
+        if (p1->start <= ptr && p1->start + size_slabs[cache_idx] * PAGE_SIZE > ptr) {
+            return p1;
+        }
+        p1 = p1->next;
+    }
+    while (p2 != NULL) {
+        if (p2->start <= ptr && p2->start + size_slabs[cache_idx] * PAGE_SIZE > ptr) {
+            return p2;
+        }
+        p2 = p2->next;
     }
     return NULL;
 }
@@ -110,28 +140,46 @@ void* kmalloc(uint32_t size) {
 void kfree(void* ptr, uint32_t size) {
     uint32_t slot_index, bitmap_index, bit_pos;
 
+    memset(ptr, 0xAC, size);
+
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
         if (caches[i].size == size) {
-            Slab* s_p = caches[i].full_slabs;
-            while (!(s_p->start <= ptr &&
-                 s_p->start + size_slabs[i] * PAGE_SIZE > ptr)) {
-                s_p = s_p->next;
+            Slab* p = SearchSlab(caches[i].full_slabs, caches[i].partial_slabs, ptr, i);
+            if (p == NULL) {
+                return;
             }
-            s_p->free_count++;
-            slot_index = (uint32_t) ptr - (uint32_t) s_p->start;
+            p->free_count++;
+            slot_index = (uint32_t) ptr - (uint32_t) p->start;
             bitmap_index = slot_index / 32;
             bit_pos = slot_index % 32;
-            s_p->bitmap[bitmap_index] = s_p->bitmap[bitmap_index] ^ (1 << bit_pos);            
-            if (s_p->free_count == s_p->num_slots) {
-                caches[i].full_slabs = s_p->next;
-                s_p->next = caches[i].empty_slabs;
-                caches[i].empty_slabs = s_p;
+            p->bitmap[bitmap_index] = p->bitmap[bitmap_index] ^ (1 << bit_pos);            
+            if (p->free_count == 1) {
+                caches[i].full_slabs = p->next;
+                p->next = caches[i].partial_slabs;
+                caches[i].partial_slabs = p;
             }
-            if (s_p->free_count == 1) {
-                caches[i].full_slabs = s_p->next;
-                s_p->next = caches[i].partial_slabs;
-                caches[i].partial_slabs = s_p;
+            if (p->free_count == p->num_slots) {
+                caches[i].partial_slabs = p->next;
+                p->next = caches[i].empty_slabs;
+                caches[i].empty_slabs = p;
             }
+            return;
         }
+    }
+}
+
+
+void memset(void* address, uint8_t value, uint32_t size) {
+    uint32_t reminder = size % 4;
+    size -= reminder;
+    size /= 4;
+    uint32_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
+
+    for(uint32_t i = 0; i < size; i++) {
+        ((uint32_t*) address)[i] = value_32;
+    }
+
+    for(uint32_t i = 0; i < reminder; i++) {
+        ((uint8_t*) address)[size * 4 +i] = value;
     }
 }

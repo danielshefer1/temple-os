@@ -1,29 +1,11 @@
 #pragma once
 
-#include <stdint.h>
-#include "paging_bootstrap.h"
-#include "buddy_alloc.h"
+#include "includes.h"
 #include "paging.h"
+#include "types.h"
+#include "defintions.h"
 
-#define NUM_CACHE 2
-typedef struct Slab
-{
-    void* start;
-    uint32_t num_slots;
-    uint32_t free_count;
-    struct Slab* next;
-    uint32_t bitmap_size;
-    uint32_t bitmap[];
-} Slab;
-
-typedef struct 
-{
-    uint32_t size;
-    Slab* full_slabs;
-    Slab* partial_slabs;
-    Slab* empty_slabs;
-} Cache;
-
-void InitSlabCache(uint32_t start);
+void memset(void* address, uint8_t value, uint32_t size);
+void InitSlabAlloc(uint32_t start);
 void* kmalloc(uint32_t size);
 void kfree(void* ptr, uint32_t size);

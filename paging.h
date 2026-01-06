@@ -1,9 +1,8 @@
 #pragma once
 
-#include <stdint.h>
-#include "paging_bootstrap.h"
-
-extern uint32_t __total_pages;
+#include "includes.h"
+#include "types.h"
+#include "defintions.h"
 
 void AddGuardPage(uint32_t Tidx, uint32_t Pidx);
 uint32_t PageDirAddrV();

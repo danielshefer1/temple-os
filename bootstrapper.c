@@ -1,6 +1,6 @@
-#include <stdint.h>
+#include "includes.h"
 #include "paging_bootstrap.h"
-#include "data_structs.h"
+#include "types.h"
 #include "kernel.h"
 
 extern void enable_paging(uint32_t *page_directory);

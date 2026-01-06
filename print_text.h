@@ -1,8 +1,7 @@
 #pragma once
-#include "imports.h"
-
-
-#define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
+#include "includes.h"
+#include "types.h"
+#include "defintions.h"
 
 void print_str(const char* str);
 void flip_str(char* str);
