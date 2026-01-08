@@ -120,6 +120,18 @@ debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "layout src" \
 		-ex "continue"
 
+debug-stage3: $(DISK_IMG) $(KERNEL_ELF)
+	@echo "🐛 Starting QEMU with GDB server..."
+	qemu-system-i386 $(QEMU_FLAGS) -s -S &
+	gdb $(KERNEL_ELF) \
+		-tui \
+		-ex "target remote localhost:1234" \
+		-ex "set architecture i386" \
+		-ex "break stage3_entry" \
+		-ex "layout asm" \
+		-ex "continue"
+
+
 kill-qemu:
 	@echo "🔪 Killing QEMU..."
 	@pkill -9 qemu-system-i386 || true

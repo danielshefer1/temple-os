@@ -3,81 +3,76 @@ OUTPUT_FORMAT(elf32-i386)
 
 SECTIONS
 {
-    /* --- Stage 3: Starts at 0x8600 --- */
+    /* Stage 3 (on disk) */
     . = 0x8600;
-    _start_of_kernel_file = .; /* Mark start of file on disk */
+    _start_of_kernel_file = .;
 
     .stage3 : {
-        /* Use wildcard to be safe against filename changes */
-        *stage3.o(.text) 
-        *(.text.stage3_entry) 
+        *stage3.o(.text)
+        *(.text.stage3_entry)
     }
-    /* LMA calculation for C Kernel */
+
+    /* LMA where kernel pieces are placed on disk */
     _kernel_LMA_start = .;
 
+    /* Bootstrap placed at physical 1MB */
     . = 0x100000;
     _kernel_physical_start = .;
-    .bootstrap : AT(_kernel_LMA_start)
-    {
-        *(.bootstrap) 
+    .bootstrap : AT(_kernel_LMA_start) {
+        *(.bootstrap)
         *(.bootstrap.text)
         *(.rodata.bootstrap*)
         *(.data.bootstrap*)
     }
     _bootstrap_size = SIZEOF(.bootstrap);
 
-    /* --- C Kernel VMA: Starts at 2GB + 1MB --- */
+    /* Kernel VMA starts at 2GB + 1MB plus bootstrap size */
     . = 0x80100000 + _bootstrap_size;
     _kernel_VMA_start = .;
 
+    /* Compute properly aligned text start */
     _text_start = _kernel_LMA_start + _bootstrap_size;
-    _text_start_reminder = _text_start % 4;
-    _text_start = _text_start + 4 - _text_start_reminder;
+    _text_start = (_text_start + 3) & ~3;
 
     . = ALIGN(4);
-    .text : AT(_text_start) 
-    {
+    .text : AT(_text_start) {
         *(.text)
         *(.rodata*)
     }
 
-    _data_start = _text_start + SIZEOF(.text);
-    _data_start_reminder = _data_start % 0x1000;
-    _data_start_actual = _data_start + 0x1000 - _data_start_reminder;
+    _data_start_V = .;
 
     . = ALIGN(4K);
-    .data : AT(_data_start_actual) 
-    {
+
+    _data_start_V_actual = .;
+    _data_start = _text_start + SIZEOF(.text) + _data_start_V_actual - _data_start_V;
+    .data : AT(_data_start) {
         *(.data)
     }
 
-    /* Mark the end of the DATA (Stuff we must copy from disk) */
+    /* End of data that must be copied from disk */
     _kernel_VMA_data_end = .;
 
-    .bss : AT(_data_start_actual + SIZEOF(.data)) 
-    {
-        _bss_start = .;
+    /* BSS (does not take space on disk) */
+    _bss_start = _data_start + SIZEOF(.data);
+    .bss : AT(_data_start + SIZEOF(.data)) {
         *(.bss)
         *(COMMON)
-        _bss_end = .;
     }
-    
+    _bss_end = _bss_start + SIZEOF(.bss);
+
     _kernel_VMA_end = .;
 }
 
-/* --- Calculation Fixes --- */
-    
-    /* 1. Size to copy from disk (Text + Data only, NO BSS) */
-    _binary_size_text_data = _kernel_VMA_data_end - _kernel_VMA_start + _bootstrap_size;
+/* Calculations used by the bootloader / loader */
+_binary_size_text_data = _kernel_VMA_data_end - _kernel_VMA_start + _bootstrap_size;
 
-    /* 2. Total sectors to load (Stage3 + C Kernel Text/Data) */
-    /* We calculate physical file end address minus start address */
-    __end_of_file_phys = _data_start_actual + SIZEOF(.data);
-    __file_size_bytes = __end_of_file_phys - _start_of_kernel_file;
-    __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start + SIZEOF(.bootstrap);
+__end_of_file_phys = _data_start + SIZEOF(.data);
+__file_size_bytes = __end_of_file_phys - _start_of_kernel_file;
+__kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start + SIZEOF(.bootstrap);
 
-    __sector_size = 512;
-    __page_size = 1024 * 4;
+__sector_size = 512;
+__page_size = 1024 * 4;
 
-    __total_sectors = (__file_size_bytes + __sector_size - 1) / __sector_size;
-    __total_pages = (__file_size_bytes + __page_size - 1 - __sector_size) / __page_size;
+__total_sectors = (__file_size_bytes + __sector_size - 1) / __sector_size;
+__total_pages = (__file_size_bytes + __page_size - 1 - __sector_size) / __page_size;

@@ -49,5 +49,5 @@ void PrintBuddyNode(BuddyNode* node) {
         kprintf("Address: 0x%x -> ", p->address);
         p = p->next;
     }
-    kprintf("Random Garbage");
+    kprintf("Address: 0x%x\n", p->address);
 }

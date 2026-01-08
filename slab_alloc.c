@@ -1,7 +1,7 @@
 #include "slab_alloc.h"
 
 static Cache caches[NUM_CACHE];
-static uint32_t caches_sizes[NUM_CACHE] = {sizeof(BuddyNode)};
+static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode)};
 static uint32_t slab_sizes[NUM_CACHE] = {1};
 static uint32_t curr_addr;
 
@@ -11,13 +11,13 @@ void InitSlabAlloc(uint32_t start) {
     
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
-        caches[i].size = caches_sizes[i];
+        caches[i].size = sizes[i];
         start_addr = AddKernelPages(slab_sizes[i]);
         caches[i].empty_slabs = (Slab*) curr_addr;
         caches[i].empty_slabs->start = (void*) start_addr;
-        caches[i].empty_slabs->num_slots = slab_sizes[i] * PAGE_SIZE / caches_sizes[i];
-        caches[i].empty_slabs->free_count = slab_sizes[i] * PAGE_SIZE / caches_sizes[i];
-        caches[i].empty_slabs->bitmap_size = (slab_sizes[i] * PAGE_SIZE / caches_sizes[i]) / 32;
+        caches[i].empty_slabs->num_slots = slab_sizes[i] * PAGE_SIZE / sizes[i];
+        caches[i].empty_slabs->free_count = slab_sizes[i] * PAGE_SIZE / sizes[i];
+        caches[i].empty_slabs->bitmap_size = (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32;
         for (uint32_t j = 0; j < caches[i].empty_slabs->bitmap_size; j++) {
             caches[i].empty_slabs->bitmap[j] = 0;
         }
@@ -54,7 +54,7 @@ void* SearchCache(Cache* cache, uint32_t cache_idx) {
                 s_p->next = cache->full_slabs;
                 cache->full_slabs = s_p;
             }
-            return (void*) ((uint32_t) s_p->start + ((i * 32) + bit_pos) * caches_sizes[cache_idx]);
+            return (void*) ((uint32_t) s_p->start + ((i * 32) + bit_pos) * sizes[cache_idx]);
         }
         s_p = s_p->next;
     }
@@ -80,11 +80,11 @@ void AddSlabW(Cache* cache, uint32_t cache_idx) {
     void* slab_addr = (void*) AddKernelPages(slab_size);
     Slab* emps_p = cache->empty_slabs;
     
-    emps_p = AddSlab((slab_sizes[cache_idx] * PAGE_SIZE / caches_sizes[cache_idx]) / 32);
+    emps_p = AddSlab((slab_sizes[cache_idx] * PAGE_SIZE / sizes[cache_idx]) / 32);
     emps_p->start = slab_addr;
-    emps_p->num_slots = slab_size * PAGE_SIZE / caches_sizes[cache_idx];
-    emps_p->free_count = slab_size * PAGE_SIZE / caches_sizes[cache_idx];
-    emps_p->bitmap_size = (slab_size * PAGE_SIZE / caches_sizes[cache_idx]) / 32;
+    emps_p->num_slots = slab_size * PAGE_SIZE / sizes[cache_idx];
+    emps_p->free_count = slab_size * PAGE_SIZE / sizes[cache_idx];
+    emps_p->bitmap_size = (slab_size * PAGE_SIZE / sizes[cache_idx]) / 32;
 
     for (uint32_t i = 0; i < emps_p->bitmap_size; i++) {
         emps_p->bitmap[i] = 0;
