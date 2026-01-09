@@ -6,6 +6,7 @@
 #include "print_text.h"
 #include "math_ops.h"
 #include "slab_alloc.h"
+#include "paging.h"
 
 void PrintBuddyNode(BuddyNode* node);
 void PrintBuddyBin(uint32_t start_order, uint32_t end_order);
@@ -17,3 +18,4 @@ void InsertSortedBuddyNode(BuddyBin* bin, BuddyNode* node, bool free_list);
 void RemoveBuddyNode(BuddyBin* bin, void* address, bool free_list);
 void* SplitNode(BuddyNode* node, uint32_t target_order);
 void FreeBuddy(void* address);
+void FillPageDirectory(void* addr, uint32_t size);

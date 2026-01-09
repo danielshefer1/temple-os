@@ -28,28 +28,103 @@ uint32_t PageDirAddrV() {
 }
 
 uint32_t AddKernelPageTable() {
-    uint32_t next_table = curr_table + 1;
-    pd[next_table].present = 1;
-    pd[next_table].rw = 1;
-    pd[next_table].user = 0;
-    pd[next_table].write_thru = 0;
-    pd[next_table].cache_dis = 0;
-    pd[next_table].accessed = 0;
-    pd[next_table].dirty = 0;
-    pd[next_table].pat = 0;
-    pd[next_table].global = 1;
-    pd[next_table].frame = (curr_table * TABLE_SIZE + curr_page * PAGE_SIZE) >> 12;
+    uint32_t next_pt = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
+    curr_table++;
+    pd[curr_table].present = 1;
+    pd[curr_table].rw = 1;
+    pd[curr_table].user = 0;
+    pd[curr_table].write_thru = 0;
+    pd[curr_table].cache_dis = 0;
+    pd[curr_table].accessed = 0;
+    pd[curr_table].dirty = 0;
+    pd[curr_table].pat = 0;
+    pd[curr_table].global = 1;
+    pd[curr_table].frame = (next_pt - KERNEL_VIRTUAL) >> 12;
     
-    curr_page++;
-    if (curr_page == 1024) {
-        curr_page = 0;
-        curr_table = next_table;
+
+    return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
+}
+uint32_t AddUserPageTable(uint32_t table_idx) {
+    if (pd[table_idx].present == 1) {
+        return KERNEL_VIRTUAL + table_idx * TABLE_SIZE;
     }
+    uint32_t pt_addr = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
+    pd[table_idx].present = 1;
+    pd[table_idx].rw = 1;
+    pd[table_idx].user = 1;
+    pd[table_idx].write_thru = 0;
+    pd[table_idx].cache_dis = 0;
+    pd[table_idx].accessed = 0;
+    pd[table_idx].dirty = 0;
+    pd[table_idx].pat = 0;
+    pd[table_idx].global = 0;
+    pd[table_idx].frame = (pt_addr - KERNEL_VIRTUAL) >> 12;
+
     return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
 }
 
+void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
+    pte_t* user_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
+    uint32_t idx = start_page, end = start_page + num_pages;
+
+    for (; idx < end; idx++) {
+        user_pt[idx].present = 1;
+        user_pt[idx].rw = 1;
+        user_pt[idx].user = 1;
+        user_pt[idx].write_thru = 0;
+        user_pt[idx].cache_dis = 0;
+        user_pt[idx].accessed = 0;
+        user_pt[idx].dirty = 0;
+        user_pt[idx].pat = 0;
+        user_pt[idx].global = 0;
+        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
+    }
+}
+
+void FillPageDirectory(void* addr, uint32_t size) {
+    uint32_t start_addr = (uint32_t) addr;
+    uint32_t end_addr = start_addr + size;
+    uint32_t start_table = start_addr >> 21;
+    uint32_t num_pts = (end_addr - start_addr) / TABLE_SIZE;
+    uint32_t num_extra_pages = ((end_addr - start_addr) % TABLE_SIZE) / PAGE_SIZE, start_page = 0;
+    if (size < TABLE_SIZE) {
+        num_pts = 0;
+        start_page = start_addr % TABLE_SIZE / PAGE_SIZE;
+    }
+
+    num_extra_pages += ((end_addr - start_addr) % TABLE_SIZE) % PAGE_SIZE == 0 ? 0 : 1;
+
+    for (uint32_t i = 0; i < num_pts; i++) {
+        AddUserPageTable(start_table + i);
+        FillUserPageTable(start_table + i, 0, 1024);
+    }
+    if (num_extra_pages > 0) {
+        AddUserPageTable(start_table + num_pts);
+        FillUserPageTable(start_table + num_pts, start_page, num_extra_pages);
+    }
+}
+
+void RemovePageTables(uint32_t start_table, uint32_t end_table) {
+    for (uint32_t t = start_table; t < end_table; t++) {
+        if (pd[t].present == 1) {
+            kfree((void*)(KERNEL_VIRTUAL + (pd[t].frame << 12)), sizeof(pte_t) * 1024);
+        }
+    }
+    flush_tlb();
+}
+
+void RemovePages(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
+    pte_t* user_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
+    uint32_t idx = start_page, end = start_page + num_pages;
+
+    for (; idx < end; idx++) {
+        user_pt[idx].present = 0;
+    }
+    flush_tlb();
+}
+
 uint32_t AddKernelPages(uint32_t num_pages) {
-    if (curr_page + num_pages >= 1023) AddKernelPageTable();
+    if (curr_page + num_pages >= 1024) AddKernelPageTable();
     uint32_t idx = curr_page, ret = KERNEL_VIRTUAL + idx * PAGE_SIZE + curr_table * TABLE_SIZE, end = idx + num_pages;
 
     for(; idx < end; idx++) {

@@ -1,8 +1,8 @@
 #include "slab_alloc.h"
 
 static Cache caches[NUM_CACHE];
-static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode)};
-static uint32_t slab_sizes[NUM_CACHE] = {1};
+static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode), PAGE_SIZE};
+static uint32_t slab_sizes[NUM_CACHE] = {1, 16};
 static uint32_t curr_addr;
 
 void InitSlabAlloc(uint32_t start) {

@@ -1,7 +1,7 @@
 #pragma once
 #include "includes.h"
 
-#define NUM_CACHE 1
+#define NUM_CACHE 2
 #define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
 #define PAGE_SIZE 4096
 #define KERNEL_VIRTUAL 0x80000000

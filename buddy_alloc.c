@@ -146,8 +146,19 @@ BuddyNode* FindBuddyNode(BuddyBin* bin, void* address) {
 }
 
 void FreeBuddy(void* address) {
-    uint32_t order = 0;
+    uint32_t order = 0, page_count;
     BuddyNode* node = FindBuddyNode(&bins[order], address);
+    if (1 << node->order < TABLE_SIZE) {
+        page_count = (1 << node->order) / PAGE_SIZE;
+        if ((uint32_t)(1 << node->order) % PAGE_SIZE != 0) {
+            page_count++;
+        }
+        RemovePages((uint32_t)address / TABLE_SIZE, (uint32_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
+    }
+    else {
+        RemovePageTables((uint32_t)address / TABLE_SIZE, ((uint32_t)address + (1 << order)) / TABLE_SIZE);
+    }
+    
     while (node == NULL && order < MAX_ORDER) {
         order++;
         node = FindBuddyNode(&bins[order], address);
@@ -172,7 +183,11 @@ void* RequestBuddy(uint32_t size) {
 
     for (uint32_t current_order = order; current_order < MAX_ORDER; current_order++) {
         if (bins[current_order].head_free != NULL) {
-            return SplitNode(bins[current_order].head_free, order);
+            void* ret = SplitNode(bins[current_order].head_free, order);
+            if (ret != NULL) {
+                FillPageDirectory(ret, 1 << order);
+                return ret;
+            }
         }
     }
     return NULL;
