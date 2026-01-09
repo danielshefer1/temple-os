@@ -140,7 +140,7 @@ Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
 void kfree(void* ptr, uint32_t size) {
     uint32_t slot_index, bitmap_index, bit_pos;
 
-    memset(ptr, 0xAC, size);
+    memset(ptr, SLAB_GARBAGE_BYTE, size);
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
         if (caches[i].size == size) {

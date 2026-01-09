@@ -5,5 +5,6 @@
 #include "paging.h"
 #include "buddy_alloc.h"
 #include "slab_alloc.h"
+#include "math_ops.h"
 
 void kmain();

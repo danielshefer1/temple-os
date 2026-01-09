@@ -2,7 +2,9 @@
 #include "includes.h"
 
 typedef struct BuddyNode {
+    bool free;
     void* address;
+    uint32_t order;
     struct BuddyNode* next;
 } BuddyNode;
 
