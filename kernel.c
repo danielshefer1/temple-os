@@ -17,12 +17,14 @@ void kmain() {
     start();
 
     PrintBuddyBin(0, MAX_ORDER);
-    uint32_t test_size = pow(2, 10), test_size2 = pow(2, 16);
+    uint32_t test_size = pow(2, 12), test_size2 = pow(2, 16);
 
 
     kprintf("\n\n\n");
     void* test_addr = RequestBuddy(test_size);
     void* test_addr2 = RequestBuddy(test_size2);
+    //PrintBuddyBin(0, 20);
+
     FreeBuddy(test_addr);
     FreeBuddy(test_addr2);
     PrintBuddyBin(0, MAX_ORDER);

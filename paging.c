@@ -77,22 +77,21 @@ void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pag
         user_pt[idx].dirty = 0;
         user_pt[idx].pat = 0;
         user_pt[idx].global = 0;
-        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
+        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE + KERNEL_VIRTUAL) >> 12;
     }
 }
 
 void FillPageDirectory(void* addr, uint32_t size) {
     uint32_t start_addr = (uint32_t) addr;
     uint32_t end_addr = start_addr + size;
-    uint32_t start_table = start_addr >> 21;
+    uint32_t start_table = (start_addr - KERNEL_VIRTUAL / 2) >> 21;
     uint32_t num_pts = (end_addr - start_addr) / TABLE_SIZE;
-    uint32_t num_extra_pages = ((end_addr - start_addr) % TABLE_SIZE) / PAGE_SIZE, start_page = 0;
+    uint32_t num_extra_pages = 0, start_page = 0;
     if (size < TABLE_SIZE) {
         num_pts = 0;
         start_page = start_addr % TABLE_SIZE / PAGE_SIZE;
+        num_extra_pages = (end_addr - start_addr) / PAGE_SIZE;
     }
-
-    num_extra_pages += ((end_addr - start_addr) % TABLE_SIZE) % PAGE_SIZE == 0 ? 0 : 1;
 
     for (uint32_t i = 0; i < num_pts; i++) {
         AddUserPageTable(start_table + i);

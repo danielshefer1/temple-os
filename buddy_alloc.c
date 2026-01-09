@@ -148,17 +148,7 @@ BuddyNode* FindBuddyNode(BuddyBin* bin, void* address) {
 void FreeBuddy(void* address) {
     uint32_t order = 0, page_count;
     BuddyNode* node = FindBuddyNode(&bins[order], address);
-    if (1 << node->order < TABLE_SIZE) {
-        page_count = (1 << node->order) / PAGE_SIZE;
-        if ((uint32_t)(1 << node->order) % PAGE_SIZE != 0) {
-            page_count++;
-        }
-        RemovePages((uint32_t)address / TABLE_SIZE, (uint32_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
-    }
-    else {
-        RemovePageTables((uint32_t)address / TABLE_SIZE, ((uint32_t)address + (1 << order)) / TABLE_SIZE);
-    }
-    
+
     while (node == NULL && order < MAX_ORDER) {
         order++;
         node = FindBuddyNode(&bins[order], address);
@@ -166,6 +156,17 @@ void FreeBuddy(void* address) {
     if (node == NULL) {
         return;
     }
+    if (1 << node->order < TABLE_SIZE) {
+        page_count = (1 << node->order) / PAGE_SIZE;
+        if ((uint32_t)(1 << node->order) % PAGE_SIZE != 0) {
+            page_count++;
+        }
+        RemovePages(((uint32_t)address - KERNEL_VIRTUAL / 2) >> 21, (uint32_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
+    }
+    else {
+        RemovePageTables(((uint32_t)address - KERNEL_VIRTUAL / 2) >> 21, ((uint32_t)address + (1 << order) - KERNEL_VIRTUAL / 2) >> 21);
+    }
+
     bool merged = MergeBuddy(address, order);
     if (!merged) {
         MoveBuddyNode(&bins[order], node);
@@ -177,6 +178,10 @@ void* RequestBuddy(uint32_t size) {
     uint32_t order = BiggestBit(size);
     if (!IsPowerOfTwo(size)) order++;
 
+    if (order < PAGE_SIZE_LOG2) {
+        order = PAGE_SIZE_LOG2;
+    }
+
     if (order >= MAX_ORDER) {
         return NULL;
     }
@@ -185,7 +190,7 @@ void* RequestBuddy(uint32_t size) {
         if (bins[current_order].head_free != NULL) {
             void* ret = SplitNode(bins[current_order].head_free, order);
             if (ret != NULL) {
-                FillPageDirectory(ret, 1 << order);
+                FillPageDirectory(ret, (1 << order));
                 return ret;
             }
         }
