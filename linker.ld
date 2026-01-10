@@ -66,6 +66,8 @@ SECTIONS
 
 /* Calculations used by the bootloader / loader */
 _binary_size_text_data = _kernel_VMA_data_end - _kernel_VMA_start + _bootstrap_size;
+_text_size = SIZEOF(.text);
+
 
 __end_of_file_phys = _data_start + SIZEOF(.data);
 __file_size_bytes = __end_of_file_phys - _start_of_kernel_file;

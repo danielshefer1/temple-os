@@ -8,7 +8,7 @@ uint32_t page_dir_addr(void) {
 }
 
 __attribute__((section(".bootstrap")))
-void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages) {
+void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages, uint32_t text_size) {
     
     uint32_t pt_addr = pd_addr;
 
@@ -25,7 +25,7 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     page_directory[0].frame = pt_addr >> 12;
 
     pte_t* page_table = (pte_t*) pt_addr;
-    InitPageTable(page_table, kernel_pages, false);
+    InitPageTable(page_table, kernel_pages, text_size, false);
 
     pt_addr += PAGE_SIZE;
     page_directory[HIGHER_HALF_IDX].present = 1;
@@ -40,7 +40,7 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     page_directory[HIGHER_HALF_IDX].frame = pt_addr >> 12;
 
     page_table = (pte_t*) pt_addr;
-    InitPageTable(page_table, kernel_pages, true);
+    InitPageTable(page_table, kernel_pages, text_size, true);
 
     for (uint32_t i = 1; i < 1024; i++) {
         if (i == HIGHER_HALF_IDX) continue;
@@ -49,18 +49,25 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
 }
 
 __attribute__((section(".bootstrap")))
-void InitPageTable(pte_t* page_table, uint32_t kernel_pages, bool is_global) {
+void InitPageTable(pte_t* page_table, uint32_t kernel_pages, uint32_t text_size, bool is_global) {
     uint32_t low_mem_end = 0x100000;  // 1MB
     uint32_t kernel_size = kernel_pages * PAGE_SIZE;
     uint32_t page_tables_size = 3 * PAGE_SIZE;
     uint32_t stack_size = 0x4000;  // 16KB stack
+    uint32_t text_pages = (text_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint32_t start_text = (low_mem_end) / PAGE_SIZE;
 
     uint32_t total_end = low_mem_end + kernel_size + page_tables_size + stack_size + PAGE_SIZE * 4;
     uint32_t entries_needed = (total_end) / 0x1000;
 
     for (uint32_t i = 0; i < entries_needed; i++) {
         page_table[i].present = 1;
-        page_table[i].rw = 1;
+        if (i >= start_text && i < start_text + text_pages) {
+            page_table[i].rw = 0;  // Read-only for text segment
+        } else {
+            page_table[i].rw = 1;  // Read-write for others
+        }
+        page_table[i].user = 0;
         page_table[i].user = 0;
         page_table[i].write_thru = 0;
         page_table[i].cache_dis = 0;
