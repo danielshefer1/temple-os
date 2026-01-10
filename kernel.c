@@ -9,8 +9,8 @@ void start() {
 }
 
 void end() {
-    __asm__ volatile("cli");
-    __asm__ volatile("hlt");
+    CliHelper();
+    HltHelper();
 }
 
 void kmain() {

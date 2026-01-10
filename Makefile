@@ -33,7 +33,7 @@ C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c print_text.c kernel.c slab_
 # Generated object files from C sources (now in build dir)
 C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
 # Assembly sources
-ASM_SOURCES = stage3.asm
+ASM_SOURCES = stage3.asm helpers.asm
 ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
 
 # All object files needed for kernel
@@ -93,7 +93,7 @@ $(STAGE1_BIN): boot.asm | $(BUILD_DIR)
 # --- Create disk image ---
 $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) | $(BUILD_DIR)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .helpers -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
 
 	dd if=/dev/zero of=$@ bs=512 count=55 2>/dev/null
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null

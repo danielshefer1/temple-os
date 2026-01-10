@@ -30,11 +30,19 @@ SECTIONS
     . = 0x80100000 + _bootstrap_size;
     _kernel_VMA_start = .;
 
-    /* Compute properly aligned text start */
-    _text_start = _kernel_LMA_start + _bootstrap_size;
-    _text_start = (_text_start + 3) & ~3;
-
     . = ALIGN(4);
+    _text_VMA_actual = .;
+
+    _helpers_start = _kernel_LMA_start + _bootstrap_size + _text_VMA_actual - _kernel_VMA_start;
+    .helpers : AT(_helpers_start) {
+        *(.helpers)
+    }
+
+    _text_start_V = .;
+    . = ALIGN(4);
+    _text_start_V_actual = .;
+    /* Compute properly aligned text start */
+    _text_start = _helpers_start + SIZEOF(.helpers) + _text_start_V_actual - _text_start_V;
     .text : AT(_text_start) {
         *(.text)
         *(.rodata*)

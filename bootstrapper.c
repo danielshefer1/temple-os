@@ -3,8 +3,6 @@
 #include "types.h"
 #include "kernel.h"
 
-extern void enable_paging(uint32_t *page_directory);
-
 __attribute__((section(".bootstrap")))
 void bootstrap_kmain() {
     uint32_t pd_addr = page_dir_addr();
