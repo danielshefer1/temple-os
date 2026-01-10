@@ -91,25 +91,6 @@ void AddSlabW(Cache* cache, uint32_t cache_idx) {
     }
 }
 
-void* kmalloc(uint32_t size) {
-    void* ret;
-
-    for (uint32_t i = 0; i < NUM_CACHE; i++) {
-        if (caches[i].size == size) {
-            ret = SearchCache(&caches[i], i);
-            if (ret != NULL) {
-                memset(ret, 0, size);
-                return ret;
-            }
-            AddSlabW(&caches[i], i);
-            ret = SearchCache(&caches[i], i);
-            memset(ret, 0, size);
-            return ret;            
-        }
-    }
-    return NULL;
-}
-
 Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
     Slab* p1 = slab1, *p2 = slab2;
     while (p1 != NULL && p2 != NULL) {
@@ -133,6 +114,25 @@ Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
             return p2;
         }
         p2 = p2->next;
+    }
+    return NULL;
+}
+
+void* kmalloc(uint32_t size) {
+    void* ret;
+
+    for (uint32_t i = 0; i < NUM_CACHE; i++) {
+        if (caches[i].size == size) {
+            ret = SearchCache(&caches[i], i);
+            if (ret != NULL) {
+                memset(ret, 0, size);
+                return ret;
+            }
+            AddSlabW(&caches[i], i);
+            ret = SearchCache(&caches[i], i);
+            memset(ret, 0, size);
+            return ret;            
+        }
     }
     return NULL;
 }
