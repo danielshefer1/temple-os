@@ -3,6 +3,11 @@
 .PHONY: all clean run debug kill-qemu
 
 # ============================================================================
+# DIRECTORY CONFIGURATION
+# ============================================================================
+BUILD_DIR = build
+
+# ============================================================================
 # TOOLCHAIN CONFIGURATION
 # ============================================================================
 CC      = i686-elf-gcc
@@ -17,71 +22,76 @@ CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -
 ASFLAGS_BIN  = -f bin
 ASFLAGS_ELF  = -f elf32 -g
 LDFLAGS      = -m elf_i386 -T linker.ld
-QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=os.img
+QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=$(BUILD_DIR)/os.img
 
 # ============================================================================
-
 # SOURCE FILES
-
 # ============================================================================
 
 # C source files (add new .c files here)
 C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c print_text.c kernel.c slab_alloc.c paging.c math_ops.c buddy_alloc.c
-# Generated object files from C sources
-C_OBJECTS = $(C_SOURCES:.c=.o)
+# Generated object files from C sources (now in build dir)
+C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
 # Assembly sources
 ASM_SOURCES = stage3.asm
-ASM_OBJECTS = $(ASM_SOURCES:.asm=.o)
+ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
 
 # All object files needed for kernel
 KERNEL_OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
+
 # ============================================================================
 # OUTPUT FILES
 # ============================================================================
-STAGE1_BIN   = boot.bin
-STAGE2_BIN   = boot2.bin
-STAGE2_ELF   = stage2.elf
-KERNEL_ELF   = kernel.elf
-DISK_IMG     = os.img
-PAYLOAD_BIN  = payload.bin
+STAGE1_BIN   = $(BUILD_DIR)/boot.bin
+STAGE2_BIN   = $(BUILD_DIR)/boot2.bin
+STAGE2_ELF   = $(BUILD_DIR)/stage2.elf
+KERNEL_ELF   = $(BUILD_DIR)/kernel.elf
+DISK_IMG     = $(BUILD_DIR)/os.img
+PAYLOAD_BIN  = $(BUILD_DIR)/payload.bin
 
 # ============================================================================
 # BUILD RULES
 # ============================================================================
 all: $(DISK_IMG)
+
+# Create build directory if it doesn't exist
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
 # --- Link kernel ELF ---
-$(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld
+$(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld | $(BUILD_DIR)
 	@echo "🔗 Linking $(KERNEL_ELF)..."
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
 # --- Compile C sources ---
--include $(C_SOURCES:.c=.d)
+-include $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.d))
+
 # Generate dependency files alongside object files
-%.o: %.c
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	@echo "⚙️  Compiling $<..."
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # --- Assemble stage 3 (ELF) ---
-%.o: %.asm
+$(BUILD_DIR)/%.o: %.asm | $(BUILD_DIR)
 	@echo "💻 Assembling $< (ELF)..."
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 # --- Assemble stage 2 (binary) ---
-$(STAGE2_BIN): stage2.asm
+$(STAGE2_BIN): stage2.asm | $(BUILD_DIR)
 	@echo "💾 Assembling Stage 2 (BIN)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
-$(STAGE2_ELF): stage2.asm
+$(STAGE2_ELF): stage2.asm | $(BUILD_DIR)
 	@echo "💻 Assembling Stage 2 (ELF)..."
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 # --- Assemble stage 1 (MBR) ---
-$(STAGE1_BIN): boot.asm
+$(STAGE1_BIN): boot.asm | $(BUILD_DIR)
 	@echo "💾 Assembling Stage 1 (MBR)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
 # --- Create disk image ---
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF)
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) | $(BUILD_DIR)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
 	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
 
@@ -131,7 +141,6 @@ debug-stage3: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "layout asm" \
 		-ex "continue"
 
-
 kill-qemu:
 	@echo "🔪 Killing QEMU..."
 	@pkill -9 qemu-system-i386 || true
@@ -141,7 +150,7 @@ kill-qemu:
 # ============================================================================
 clean:
 	@echo "🧹 Cleaning up..."
-	rm -f $(C_OBJECTS) $(ASM_OBJECTS) *.bin *.elf *.d $(DISK_IMG) $(PAYLOAD_BIN)
+	rm -rf $(BUILD_DIR)
 	@echo "✅ Clean complete."
 
 # ============================================================================
