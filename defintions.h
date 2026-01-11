@@ -13,3 +13,5 @@
 #define MAX_ORDER 32
 #define SLAB_GARBAGE_BYTE 0xAC
 #define PAGE_SIZE_LOG2 12
+#define GREY_COLOR 0x07
+#define RED_COLOR 0x04

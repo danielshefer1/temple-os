@@ -117,9 +117,29 @@ typedef struct gdt_ptr {
     uint32_t base;
 } __attribute__((packed)) gdt_ptr;
 
-typedef struct {
-    uint32_t ds;
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+typedef struct interrupt_frame {
+    // Pushed by isr_common_stub
+    uint32_t gs, fs, es, ds;
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;  // pusha
     uint32_t int_no, err_code;
+    // Pushed by CPU
     uint32_t eip, cs, eflags, useresp, ss;
 } __attribute__((packed)) interrupt_frame;
+
+typedef struct idt_entry {
+    uint16_t base_low;
+    uint16_t sel;
+    uint8_t reserved;
+    // ---- Flags ----
+    uint8_t gate_type : 4;
+    uint8_t storage_segment : 1;
+    uint8_t privilege : 2;
+    uint8_t present : 1;
+    // ----------------
+    uint16_t base_high;
+} __attribute__((packed)) idt_entry;
+
+typedef struct idt_ptr {
+    uint16_t limit;
+    uint32_t base;
+} __attribute__((packed)) idt_ptr;

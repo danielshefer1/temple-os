@@ -50,7 +50,7 @@ void flip_str(char* str) {
     }
 }
 
-void putchar(char c) {
+void putchar(char c, uint8_t color) {
     if (c == '\n') {
         newline();
         return;
@@ -60,7 +60,7 @@ void putchar(char c) {
     }
 
     VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2] = c;
-    VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2 + 1] = 0x07; // Light gray on black background
+    VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2 + 1] = color;
 
     cursor_x++;
     if (cursor_x >= MAX_COLS) {
@@ -68,9 +68,9 @@ void putchar(char c) {
     }
 }
 
-void print_str(const char* str) {
+void print_str(const char* str, uint8_t color) {
     while (*str && *str != '\0') {
-        putchar(*str++);
+        putchar(*str++, color);
     }
 }
 
@@ -106,7 +106,7 @@ void newline() {
 
 void insert_tab() {
     for (uint32_t i = 0; i < 4; i++) {
-        putchar(' ');
+        putchar(' ', GREY_COLOR);
     }
 }
 
@@ -130,32 +130,85 @@ void kprintf(const char* format, ...) {
             
             switch (*format) {
             case 'c':
-                putchar((char)va_arg(args, uint32_t));
+                putchar((char)va_arg(args, uint32_t), GREY_COLOR);
                 break;
             case 's':
-                print_str(va_arg(args, char*));
+                print_str(va_arg(args, char*), GREY_COLOR);
                 break;
             case 'd':
                 num = va_arg(args, uint32_t);
                 itoa(num, str, 10, min_width);
-                print_str(str);
+                print_str(str, GREY_COLOR);
                 break;
             case 'x':
                 num = va_arg(args, uint32_t);
                 itoa(num, str, 16, min_width);
-                print_str(str);
+                print_str(str, GREY_COLOR);
                 break;
             case '%':
-                putchar('%');
+                putchar('%', GREY_COLOR);
                 break;
             default:
                 break;
             }
         } else {
-            putchar(*format);
+            putchar(*format, GREY_COLOR);
         }
         format++;
     }
     
     va_end(args);
+}
+
+void kerror(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    
+    while (*format != '\0') {
+        if (*format == '%') {
+            format++;
+            
+            // Check for width specifier FIRST
+            uint32_t min_width = 0;
+            while (*format >= '0' && *format <= '9') {
+                min_width = min_width * 10 + (*format - '0');
+                format++;
+            }
+            
+            char str[20];
+            uint32_t num;
+            
+            switch (*format) {
+            case 'c':
+                putchar((char)va_arg(args, uint32_t), RED_COLOR);
+                break;
+            case 's':
+                print_str(va_arg(args, char*), RED_COLOR);
+                break;
+            case 'd':
+                num = va_arg(args, uint32_t);
+                itoa(num, str, 10, min_width);
+                print_str(str, RED_COLOR);
+                break;
+            case 'x':
+                num = va_arg(args, uint32_t);
+                itoa(num, str, 16, min_width);
+                print_str(str, RED_COLOR);
+                break;
+            case '%':
+                putchar('%', RED_COLOR);
+                break;
+            default:
+                break;
+            }
+        } else {
+            putchar(*format, RED_COLOR);
+        }
+        format++;
+    }
+    
+    va_end(args);
+
+    CliHelper();
+    HltHelper();
 }

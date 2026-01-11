@@ -30,10 +30,18 @@ void SetGDTEntry(uint32_t base, uint32_t limit, uint8_t present, uint8_t privile
     entry->base_high = (base >> 24) & 0xFF;
 }
 
-void LoadGDT(gdt_entry* gdt_ptr, uint16_t size) {
-    gdtr.limit = size - 1;
-    gdtr.base = (uint32_t)gdt_ptr;
-    LoadGDTHelper(&gdtr);
+void CheckGDT() {
+    gdt_ptr current_gdtr;
+    
+    __asm__ volatile("sgdt %0" : "=m"(current_gdtr));
+    
+    uint32_t virtual_base = current_gdtr.base + KERNEL_VIRTUAL;
+    
+    kprintf("GDTR Base (Physical): 0x%x\n", current_gdtr.base);
+    kprintf("GDTR Base (Virtual): 0x%x\n", virtual_base);
+    kprintf("GDTR Limit: 0x%x\n", current_gdtr.limit);
+    kprintf("Expected Base (Physical): 0x%x\n", (uint32_t)&gdt - KERNEL_VIRTUAL);
+    kprintf("Expected Limit: 0x%x\n", sizeof(gdt) - 1);
 }
 
 void SetGDT() {
@@ -48,5 +56,11 @@ void SetGDT() {
     // User mode data segment
     SetGDTEntry(0, 0xFFFFF, 1, 3, 1, 0, 0, 1, 0, 0, 0, 1, 1, 4);
 
-    LoadGDT(gdt, sizeof(gdt));
+    gdtr.limit = sizeof(gdt) - 1;
+    gdtr.base = (uint32_t)gdt;
+
+    uint32_t gdtr_physical = &gdtr;
+    LoadGDTHelper(gdtr_physical);
+
+    CheckGDT();
 }
