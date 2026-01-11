@@ -18,5 +18,7 @@ void end() {
 void kmain() {
     start();
 
+    uint32_t test = 5 / 0;
+    kprintf("Is this displaying?\n");
     end();
 }
