@@ -6,6 +6,7 @@ void start() {
     InitPaging();
     InitSlabAlloc(PageDirAddrV() + 7 * PAGE_SIZE);
     InitBuddyAlloc(KERNEL_VIRTUAL >> 1, KERNEL_VIRTUAL);
+    SetGDT();
 }
 
 void end() {

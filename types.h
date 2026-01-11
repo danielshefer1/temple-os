@@ -88,3 +88,38 @@ typedef struct tupleNode {
     Tuple val;
     struct tupleNode* next;
 } tupleNode;
+
+typedef struct gdt_entry {
+    uint16_t limit_low;
+    uint16_t base_low;
+    uint8_t  base_middle;
+    // ---- Access byte ----
+    uint8_t  accessed : 1;
+    uint8_t  readable_writable : 1;
+    uint8_t  direction_conforming : 1;
+    uint8_t  executable : 1;
+    uint8_t  descriptor_type : 1;
+    uint8_t  privilege : 2;
+    uint8_t  present : 1;
+    // --------------------
+    uint8_t  limit_high : 4;
+    // ---- Flags ----
+    uint8_t reserved : 1;
+    uint8_t  long_mode : 1;
+    uint8_t  default_big : 1;
+    uint8_t  granularity : 1;
+    // ----------------
+    uint8_t  base_high;
+} __attribute__((packed)) gdt_entry;
+
+typedef struct gdt_ptr {
+    uint16_t limit;
+    uint32_t base;
+} __attribute__((packed)) gdt_ptr;
+
+typedef struct {
+    uint32_t ds;
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+    uint32_t int_no, err_code;
+    uint32_t eip, cs, eflags, useresp, ss;
+} __attribute__((packed)) interrupt_frame;

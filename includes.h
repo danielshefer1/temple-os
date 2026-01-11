@@ -12,3 +12,4 @@ extern void enable_paging(uint32_t *page_directory);
 extern void CliHelper();
 extern void StiHelper();
 extern void HltHelper();
+extern void LoadGDTHelper();

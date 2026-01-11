@@ -6,5 +6,6 @@
 #include "buddy_alloc.h"
 #include "slab_alloc.h"
 #include "math_ops.h"
+#include "set_gdt.h"
 
 void kmain();
