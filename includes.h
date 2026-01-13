@@ -14,6 +14,9 @@ extern void StiHelper();
 extern void HltHelper();
 extern void LoadGDTHelper();
 extern void LoadIDTHelper();
+extern uint8_t inb(uint8_t port);
+extern void outb(uint8_t port, uint8_t value);
+extern uint32_t test_func(uint32_t num1, uint32_t num2);
 
 // ISR stubs
 extern void isr_stub_0();
@@ -37,3 +40,5 @@ extern void isr_stub_18();
 extern void isr_stub_19();
 extern void isr_stub_20();
 extern void isr_stub_21();
+extern void isr_stub_32();
+extern void isr_stub_33();

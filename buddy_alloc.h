@@ -3,7 +3,7 @@
 #include "includes.h"
 #include "types.h"
 #include "defintions.h"
-#include "print_text.h"
+#include "vga.h"
 #include "math_ops.h"
 #include "slab_alloc.h"
 #include "paging.h"

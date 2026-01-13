@@ -1,83 +1,56 @@
-#include "int_handler.h"
+#include "isr_handler.h"
 
-static idt_entry idt[256];
-static idt_ptr idtr;
-
-static void* handlers[] = {
-    (void*)isr_stub_0,
-    (void*)isr_stub_1,
-    (void*)isr_stub_2,
-    (void*)isr_stub_3,
-    (void*)isr_stub_4,
-    (void*)isr_stub_5,
-    (void*)isr_stub_6,
-    (void*)isr_stub_7,
-    (void*)isr_stub_8,
-    (void*)isr_stub_9,
-    (void*)isr_stub_10,
-    (void*)isr_stub_11,
-    (void*)isr_stub_12,
-    (void*)isr_stub_13,
-    (void*)isr_stub_14,
+static char kbd_us[128] = {
+    0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	/* 9 */
+  '9', '0', '-', '=', '\b',	/* Backspace */
+  '\t',			/* Tab */
+  'q', 'w', 'e', 'r',	/* 19 */
+  't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',	/* Enter key */
+    0,			/* 29   - Control */
+  'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';',	/* 39 */
+ '\'', '`',   0,		/* Left shift */
+ '\\', 'z', 'x', 'c', 'v', 'b', 'n',			/* 49 */
+  'm', ',', '.', '/',   0,				/* Right shift */
+  '*',
+    0,	/* Alt */
+  ' ',	/* Space bar */
+    0,	/* Caps lock */
+    0,	/* 59 - F1 key ... > */
+    0,   0,   0,   0,   0,   0,   0,   0,
+    0,	/* < ... F10 */
+    0,	/* 69 - Num lock*/
+    0,	/* Scroll Lock */
+    0,	/* Home key */
+    0,	/* Up Arrow */
+    0,	/* Page Up */
+  '-',
+    0,	/* Left Arrow */
     0,
-    (void*)isr_stub_16,
-    (void*)isr_stub_17,
-    (void*)isr_stub_18,
-    (void*)isr_stub_19,
-    (void*)isr_stub_20,
-    (void*)isr_stub_21
+    0,	/* Right Arrow */
+  '+',
+    0,	/* 79 - End key*/
+    0,	/* Down Arrow */
+    0,	/* Page Down */
+    0,	/* Insert Key */
+    0,	/* Delete Key */
+    0,   0,   0,
+    0,	/* F11 Key */
+    0,	/* F12 Key */
+    0,	/* All other keys are undefined */
 };
-static uint32_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
 
-void SetIDTEntry(uint32_t offset, uint16_t sel, uint8_t present, uint8_t privilege, uint8_t type, uint32_t idx) {
-    idt_entry* entry = &idt[idx];
-
-    entry->base_low = offset & 0xFFFF;
-    entry->sel = sel;
-    entry->reserved = 0;
-
-    entry->gate_type = type;
-    entry->storage_segment = 0;
-    entry->privilege = privilege;
-    entry->present = present;
-
-    entry->base_high = (offset >> 16) & 0xFFFF;
-}
-
-void CheckIDT() {
-    idt_ptr current_idtr;
-    __asm__ volatile("sidt %0" : "=m"(current_idtr));
-    
-    kprintf("IDTR Base: 0x%x\n", current_idtr.base);
-    kprintf("IDTR Limit: 0x%x\n", current_idtr.limit);
-    kprintf("Expected Base: 0x%x\n", (uint32_t)&idt);  // or physical if needed
-    kprintf("Expected Limit: 0x%x\n", sizeof(idt) - 1);
-}
-
-void InitIDT() {
-    for (uint32_t i = 0; i < num_handlers; i++) {
-        if (handlers[i] != 0) {
-            SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT, PRIVILEGE_KERNEL, IDT_TYPE_INTERRUPT_GATE, i);
-        }
-        else {
-            // Unused entry
-            SetIDTEntry(NOT_PRESENT, GDT_CODE_SEGMENT, 0, 0, IDT_TYPE_INTERRUPT_GATE, i);
-        }
-    }
-    for (uint32_t i = num_handlers; i < 256; i++) {
-        // Unused entry
-        SetIDTEntry(NOT_PRESENT, GDT_CODE_SEGMENT, 0, 0, IDT_TYPE_INTERRUPT_GATE, i);
-    }
-
-    idtr.limit = sizeof(idt) - 1;
-    idtr.base = (uint32_t)&idt;
-    LoadIDTHelper(&idtr);
-    StiHelper();
-
-    CheckIDT();
-}
+static bool shift_pressed = false;
 
 void isr_handler(interrupt_frame* frame) {
+    uint32_t int_no = frame->int_no;
+    if (int_no >= 32 && int_no < 48) {
+        IRQHandler(frame);
+    } else {
+        ExecptionHandler(frame);
+    }
+}
+
+void ExecptionHandler(interrupt_frame* frame) {
     uint32_t int_no = frame->int_no;
 
     switch (int_no) {
@@ -144,9 +117,49 @@ void isr_handler(interrupt_frame* frame) {
         case 21:
             ControlProtectionExceptionHandler(frame);
             break;
+    }
+}
+
+void IRQHandler(interrupt_frame* frame) {
+    uint32_t int_no = frame->int_no;
+
+    switch (int_no) {
+        case 32:
+            TimerHandler(frame);
+            break;
+        case 33:
+            KeyboardHandler(frame);
+            break;
         default:
             UnknownExceptionHandler(frame);
             break;
+    }
+}
+
+void TimerHandler(interrupt_frame* frame) {
+    kprintf("Timer Interrupt\n");
+}
+
+void KeyboardHandler(interrupt_frame* frame) {
+    uint8_t scancode = inb(0x60);
+    uint8_t presscode = scancode & 0x7F;
+    bool is_release = scancode & 0x80;
+    char c = kbd_us[presscode];
+
+    if  (presscode == LEFT_SHIFT_MAKE_SCANCODE || presscode == RIGHT_SHIFT_MAKE_SCANCODE) {
+        shift_pressed = !is_release;
+        if (shift_pressed) kprintf("Shift Is Pressed!\n");
+        else kprintf("Shift Is Released!\n");
+        return;
+    }
+
+    if (scancode & 0x80) {
+        kprintf("Character %c Was Released!\n", c);
+    } else {
+        if (c >= 'a' && c <= 'z') {
+            if (shift_pressed) c -= 32;
+        }
+        kprintf("Character %c Was Pressed!\n", c);
     }
 }
 
@@ -239,3 +252,4 @@ void ControlProtectionExceptionHandler(interrupt_frame* frame) {
 void UnknownExceptionHandler(interrupt_frame* frame) {
     kerror("Unknown Exception %d at EIP: 0x%x\n", frame->int_no, frame->eip);
 }
+

@@ -7,6 +7,7 @@ void start() {
     InitBuddyAlloc(KERNEL_VIRTUAL >> 1, KERNEL_VIRTUAL);
     SetGDT();
     InitIDT();
+    InitTimer(100);
     kprintf("Kernel Initialized Successfully\n");
 }
 
@@ -18,7 +19,6 @@ void end() {
 void kmain() {
     start();
 
-    uint32_t test = 5 / 0;
-    kprintf("Is this displaying?\n");
+    while (1);
     end();
 }

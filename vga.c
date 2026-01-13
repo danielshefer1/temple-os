@@ -1,4 +1,4 @@
-#include "print_text.h"
+#include "vga.h"
 
 static uint32_t cursor_x = 0; // Column (0-79)
 static uint32_t cursor_y = 0; // Row (0-24)

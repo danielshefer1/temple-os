@@ -76,5 +76,5 @@ void SetGDT() {
 
     LoadGDTHelper(&gdtr);
 
-    CheckGDT();
+    //CheckGDT();
 }

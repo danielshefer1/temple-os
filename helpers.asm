@@ -40,6 +40,26 @@ LoadIDTHelper:
     lidt [eax]
     ret
 
+global inb
+inb:
+    push ebp
+    mov ebp, esp
+    xor eax, eax
+    mov dx, [ebp + 8]   ; Port
+    in al, dx
+    pop ebp
+    ret
+
+global outb
+outb:
+    push ebp
+    mov ebp, esp
+    mov dx, [ebp + 8]   ; Port
+    mov eax, [ebp + 12] ; Data
+    out dx, al
+    pop ebp
+    ret
+
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1
@@ -54,6 +74,14 @@ global isr_stub_%1
 isr_stub_%1:
     push dword %1       ; interrupt number (error code already pushed by CPU)
     jmp isr_common_stub
+%endmacro
+
+%macro ISR_HARDWARE_STUB 1
+global isr_stub_%1
+isr_stub_%1:
+    push dword 0        ; fake error code
+    push dword %1       ; interrupt number
+    jmp isr_hardware_stub
 %endmacro
 
 ISR_STUB_NO_ERROR 0
@@ -77,6 +105,8 @@ ISR_STUB_NO_ERROR 18
 ISR_STUB_NO_ERROR 19
 ISR_STUB_NO_ERROR 20
 ISR_STUB_ERROR 21
+ISR_HARDWARE_STUB 32
+ISR_HARDWARE_STUB 33
 
 global isr_common_stub
 isr_common_stub:
@@ -101,5 +131,40 @@ isr_common_stub:
     pop es
     pop ds
     popa
+    add esp, 8         ; clean up int num and error code
+    iret
+
+global isr_hardware_stub
+isr_hardware_stub:
+    pusha
+    push ds
+    push es
+    push fs
+    push gs
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp
+    call isr_handler
+    add esp, 4
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
+
+    mov eax, [esp] ; get interrupt number
+    cmp eax, 40        ; check if it's a hardware interrupt
+    jl .no_slave
+    mov al, 0x20
+    out 0xA0, al      ; send EOI to slave PIC
+.no_slave:
+    mov al, 0x20
+    out 0x20, al      ; send EOI to master PIC
+
     add esp, 8         ; clean up int num and error code
     iret

@@ -2,7 +2,7 @@
 #include "includes.h"
 #include "types.h"
 #include "defintions.h"
-#include "print_text.h"
+#include "vga.h"
 
 bool isUsableEntry(const E820Entry* entry);
 E820Info* init_E820(uintptr_t address);

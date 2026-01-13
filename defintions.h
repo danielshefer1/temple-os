@@ -1,20 +1,31 @@
 #pragma once
 #include "includes.h"
 
+// Slab Definitions
 #define NUM_CACHE 2
-#define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
+#define SLAB_GARBAGE_BYTE 0xAC
+// End Slab Definitions
+
+// Paging Definitions 
 #define PAGE_SIZE 4096
 #define KERNEL_VIRTUAL 0x80000000
 #define KERNEL_BASE 0x100000
 #define TABLE_SIZE PAGE_SIZE * 1024
 #define HIGHER_HALF_IDX 512
+#define PAGE_SIZE_LOG2 12
+// End Paging Definitions 
+
+// E820 Definitions
 #define E820_SIGNATURE 0x534D4150
 #define E820_ADDRESS KERNEL_VIRTUAL + 0x500
 #define MAX_ORDER 32
-#define SLAB_GARBAGE_BYTE 0xAC
-#define PAGE_SIZE_LOG2 12
+// End E820 Definitions
+
+// VGA Definitions
+#define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
 #define GREY_COLOR 0x07
 #define RED_COLOR 0x04
+// End VGA Definitions
 
 // GDT Definitions
 #define GDT_LIMIT 0xFFFFF
@@ -45,3 +56,15 @@
 #define GDT_CODE_SEGMENT 0x08
 #define IDT_TYPE_INTERRUPT_GATE 0xE
 #define IDT_TYPE_TRAP_GATE 0xF
+// End IDT Definitions
+
+// Keyboard Definitions
+#define LEFT_SHIFT_MAKE_SCANCODE 0x2A
+#define LEFT_SHIFT_BREAK_SCANCODE 0xAA
+#define RIGHT_SHIFT_MAKE_SCANCODE 0x36
+#define RIGHT_SHIFT_BREAK_SCANCODE 0xB6
+// End Keyboard Definitions
+
+// Timer Definitions
+#define TIMER_FREQUENCY 100
+// End Timer Definitions

@@ -1,12 +1,16 @@
 #pragma once
 
+#include "includes.h"
 #include "types.h"
 #include "defintions.h"
-#include "print_text.h"
+#include "vga.h"
 
 void isr_handler(interrupt_frame* frame);
-void InitIDT();
 
+void ExecptionHandler(interrupt_frame* frame);
+void IRQHandler(interrupt_frame* frame);
+
+// Exception Handlers
 void DivideByZeroHandler(interrupt_frame* frame);
 void DebugHandler(interrupt_frame* frame);
 void NMIHandler(interrupt_frame* frame);
@@ -29,3 +33,7 @@ void SIMDFloatingPointExceptionHandler(interrupt_frame* frame);
 void VirtualizationExceptionHandler(interrupt_frame* frame);
 void ControlProtectionExceptionHandler(interrupt_frame* frame);
 void UnknownExceptionHandler(interrupt_frame* frame);
+
+// IRQ Handlers
+void TimerHandler(interrupt_frame* frame);
+void KeyboardHandler(interrupt_frame* frame);

@@ -5,4 +5,5 @@
 #include "defintions.h"
 #include "vga.h"
 
-void SetGDT();
+void InitIDT();
+void InitTimer(uint32_t frequency);
