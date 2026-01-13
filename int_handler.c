@@ -57,16 +57,16 @@ void CheckIDT() {
 void InitIDT() {
     for (uint32_t i = 0; i < num_handlers; i++) {
         if (handlers[i] != 0) {
-            SetIDTEntry((uint32_t)handlers[i], 0x08, 1, 0, 0xE, i);
+            SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT, PRIVILEGE_KERNEL, IDT_TYPE_INTERRUPT_GATE, i);
         }
         else {
             // Unused entry
-            SetIDTEntry(0, 0x08, 0, 0, 0xE, i);
+            SetIDTEntry(NOT_PRESENT, GDT_CODE_SEGMENT, 0, 0, IDT_TYPE_INTERRUPT_GATE, i);
         }
     }
     for (uint32_t i = num_handlers; i < 256; i++) {
         // Unused entry
-        SetIDTEntry(0, 0x08, 0, 0, 0xE, i);
+        SetIDTEntry(NOT_PRESENT, GDT_CODE_SEGMENT, 0, 0, IDT_TYPE_INTERRUPT_GATE, i);
     }
 
     idtr.limit = sizeof(idt) - 1;
