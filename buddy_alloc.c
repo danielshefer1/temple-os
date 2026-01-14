@@ -146,7 +146,8 @@ BuddyNode* FindBuddyNode(BuddyBin* bin, void* address) {
 }
 
 void FreeBuddy(void* address) {
-    if (check_interrupts()) CliHelper();
+    bool org_int_state = check_interrupts();
+    CliHelper();
     uint32_t order = 0, page_count;
     BuddyNode* node = FindBuddyNode(&bins[order], address);
 
@@ -172,12 +173,13 @@ void FreeBuddy(void* address) {
     if (!merged) {
         MoveBuddyNode(&bins[order], node);
     }
-    if (!check_interrupts()) StiHelper();
+    if (org_int_state) StiHelper();
 
 }
 
 void* RequestBuddy(uint32_t size) {
-    if (check_interrupts()) CliHelper();
+    bool org_int_state = check_interrupts();
+    CliHelper();
     uint32_t order = BiggestBit(size);
     if (!IsPowerOfTwo(size)) order++;
 
@@ -194,12 +196,12 @@ void* RequestBuddy(uint32_t size) {
             void* ret = SplitNode(bins[current_order].head_free, order);
             if (ret != NULL) {
                 FillPageDirectory(ret, (1 << order));
-                if (!check_interrupts()) StiHelper();
+                if (org_int_state) StiHelper();
                 return ret;
             }
         }
     }
-    if (!check_interrupts()) StiHelper();
+    if (org_int_state) StiHelper();
     return NULL;
 }
 

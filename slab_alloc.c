@@ -154,7 +154,8 @@ uint32_t GetBestCacheIndex(uint32_t size) {
 }
 
 void* kmalloc(uint32_t size) {
-    if (check_interrupts()) CliHelper();
+    bool org_int_state = check_interrupts();
+    CliHelper();
     int idx = GetBestCacheIndex(size);
     
     // If size is too huge (larger than PAGE_SIZE cache), return NULL
@@ -166,7 +167,7 @@ void* kmalloc(uint32_t size) {
     void* ret = SearchCache(&caches[idx], idx);
     if (ret != NULL) {
         memset(ret, 0, size);
-        if (!check_interrupts()) StiHelper();
+        if (org_int_state) StiHelper();
         return ret;
     }
 
@@ -178,7 +179,7 @@ void* kmalloc(uint32_t size) {
     if (ret != NULL) {
         memset(ret, 0, size);
     }
-    if (!check_interrupts()) StiHelper();
+    if (org_int_state) StiHelper();
     return ret;
 }
 
@@ -197,13 +198,14 @@ Slab* DeleteSlab(Slab* head, Slab* target) {
 }
 
 void kfree(void* ptr, uint32_t size) {
-    if (check_interrupts()) CliHelper();
+    bool org_int_state = check_interrupts();
+    CliHelper();
     uint32_t slot_index, bitmap_index, bit_pos;
     memset(ptr, SLAB_GARBAGE_BYTE, size);
 
     uint32_t idx = GetBestCacheIndex(size);
     if (idx == -1) {
-        if (!check_interrupts()) StiHelper();
+        if (org_int_state) StiHelper();
         return;
     } 
 
@@ -212,7 +214,7 @@ void kfree(void* ptr, uint32_t size) {
     Slab* p = SearchSlab(cache->full_slabs, cache->partial_slabs, ptr, idx);
     
     if (p == NULL) {
-        if (!check_interrupts()) StiHelper();
+        if (org_int_state) StiHelper();
         return;
     }
 
@@ -233,7 +235,7 @@ void kfree(void* ptr, uint32_t size) {
         p->next = caches[idx].empty_slabs;
         caches[idx].empty_slabs = p;
     }
-    if (!check_interrupts()) StiHelper();
+    if (org_int_state) StiHelper();
 }
 
 
