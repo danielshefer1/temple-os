@@ -7,7 +7,8 @@ void start() {
     InitBuddyAlloc(KERNEL_VIRTUAL >> 1, KERNEL_VIRTUAL);
     SetGDT();
     InitIDT();
-    InitTimer(100);
+    InitTimer(TIMER_FREQUENCY);
+    //InitConsoleBuffer();
     kprintf("Kernel Initialized Successfully\n");
 }
 
@@ -19,6 +20,8 @@ void end() {
 void kmain() {
     start();
 
-    while (1);
+    uint32_t size = pow(2, 28);
+    RequestBuddy(size);
+    PrintBuddyBin(0, MAX_ORDER);
     end();
 }

@@ -66,5 +66,11 @@
 // End Keyboard Definitions
 
 // Timer Definitions
-#define TIMER_FREQUENCY 100
+#define TIMER_FREQUENCY 1000
+#define ONE_SEC 1000
+#define HALF_SEC 500
 // End Timer Definitions
+
+// Keyboard Definitions
+#define CONSOLE_BUFFER_SIZE 1024
+// End Keyboard Definitions

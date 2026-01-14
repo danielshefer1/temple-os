@@ -82,24 +82,38 @@ void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pag
 }
 
 void FillPageDirectory(void* addr, uint32_t size) {
-    uint32_t start_addr = (uint32_t) addr;
-    uint32_t end_addr = start_addr + size;
-    uint32_t start_table = (start_addr - KERNEL_VIRTUAL / 2) >> 21;
-    uint32_t num_pts = (end_addr - start_addr) / TABLE_SIZE;
-    uint32_t num_extra_pages = 0, start_page = 0;
-    if (size < TABLE_SIZE) {
-        num_pts = 0;
-        start_page = start_addr % TABLE_SIZE / PAGE_SIZE;
-        num_extra_pages = (end_addr - start_addr) / PAGE_SIZE;
-    }
 
-    for (uint32_t i = 0; i < num_pts; i++) {
-        AddUserPageTable(start_table + i);
-        FillUserPageTable(start_table + i, 0, 1024);
-    }
-    if (num_extra_pages > 0) {
-        AddUserPageTable(start_table + num_pts);
-        FillUserPageTable(start_table + num_pts, start_page, num_extra_pages);
+    uint32_t current_addr = (uint32_t)addr;
+    uint32_t end_addr = current_addr + size;
+
+    while (current_addr < end_addr) {
+        // 1. Calculate the Page Directory Index
+        // Standard x86: Shift right by 22 to get the top 10 bits
+        uint32_t pd_index = (current_addr - KERNEL_VIRTUAL / 2) >> 22; 
+        
+        // 2. Calculate the Page Table Index (0 to 1023)
+        // Shift right by 12, then mask the bottom 10 bits
+        uint32_t pt_index = (current_addr >> 12) & 0x3FF;
+
+        // 3. Calculate how many pages fit in THIS specific table
+        // The table ends at entry 1024. 
+        uint32_t pages_left_in_table = 1024 - pt_index;
+
+        // 4. Calculate how many pages we actually need to map right now
+        // It's the minimum of: what fits in the table vs. what we have left to map
+        uint32_t bytes_remaining = end_addr - current_addr;
+        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
+        
+        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
+                                 ? pages_remaining 
+                                 : pages_left_in_table;
+
+        // 5. Perform the mapping
+        AddUserPageTable(pd_index); // Ensure the table exists
+        FillUserPageTable(pd_index, pt_index, pages_to_fill);
+
+        // 6. Advance current_addr by the amount we just mapped
+        current_addr += pages_to_fill * PAGE_SIZE;
     }
 }
 

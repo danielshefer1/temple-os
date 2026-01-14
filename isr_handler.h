@@ -4,6 +4,8 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
+#include "global.h"
+#include "keyboard.h"
 
 void isr_handler(interrupt_frame* frame);
 

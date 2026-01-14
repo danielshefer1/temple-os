@@ -1,7 +1,7 @@
 #include "isr_handler.h"
 
 static char kbd_us[128] = {
-    0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	/* 9 */
+    0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
   '9', '0', '-', '=', '\b',	/* Backspace */
   '\t',			/* Tab */
   'q', 'w', 'e', 'r',	/* 19 */
@@ -38,8 +38,6 @@ static char kbd_us[128] = {
     0,	/* F12 Key */
     0,	/* All other keys are undefined */
 };
-
-static bool shift_pressed = false;
 
 void isr_handler(interrupt_frame* frame) {
     uint32_t int_no = frame->int_no;
@@ -137,7 +135,7 @@ void IRQHandler(interrupt_frame* frame) {
 }
 
 void TimerHandler(interrupt_frame* frame) {
-    kprintf("Timer Interrupt\n");
+    timer_ticks++;
 }
 
 void KeyboardHandler(interrupt_frame* frame) {
@@ -148,108 +146,102 @@ void KeyboardHandler(interrupt_frame* frame) {
 
     if  (presscode == LEFT_SHIFT_MAKE_SCANCODE || presscode == RIGHT_SHIFT_MAKE_SCANCODE) {
         shift_pressed = !is_release;
-        if (shift_pressed) kprintf("Shift Is Pressed!\n");
-        else kprintf("Shift Is Released!\n");
         return;
     }
+    if (c == 0) return;
 
-    if (scancode & 0x80) {
-        kprintf("Character %c Was Released!\n", c);
-    } else {
-        if (c >= 'a' && c <= 'z') {
-            if (shift_pressed) c -= 32;
-        }
-        kprintf("Character %c Was Pressed!\n", c);
+    if (!is_release) {
+        //PushKeyboardBuffer(c);
     }
 }
 
 void DivideByZeroHandler(interrupt_frame* frame) {
-    kerror("Exception 0: Divide by Zero at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 0: Divide by Zero at EIP: %x\n", frame->eip);
 }
 
 void DebugHandler(interrupt_frame* frame) {
-    kerror("Exception 1: Debug Trap at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 1: Debug Trap at EIP: %x\n", frame->eip);
 }
 
 void NMIHandler(interrupt_frame* frame) {
-    kerror("Exception 2: Non-Maskable Interrupt at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 2: Non-Maskable Interrupt at EIP: %x\n", frame->eip);
 }
 
 void BreakpointHandler(interrupt_frame* frame) {
-    kerror("Exception 3: Breakpoint at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 3: Breakpoint at EIP: %x\n", frame->eip);
 }
 
 void OverflowHandler(interrupt_frame* frame) {
-    kerror("Exception 4: Overflow at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 4: Overflow at EIP: %x\n", frame->eip);
 }
 
 void BoundRangeExceededHandler(interrupt_frame* frame) {
-    kerror("Exception 5: BOUND Range Exceeded at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 5: BOUND Range Exceeded at EIP: %x\n", frame->eip);
 }
 
 void InvalidOpcodeHandler(interrupt_frame* frame) {
-    kerror("Exception 6: Invalid Opcode at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 6: Invalid Opcode at EIP: %x\n", frame->eip);
 }
 
 void DeviceNotAvailableHandler(interrupt_frame* frame) {
-    kerror("Exception 7: Device Not Available at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 7: Device Not Available at EIP: %x\n", frame->eip);
 }
 
 void DoubleFaultHandler(interrupt_frame* frame) {
-    kerror("Exception 8: Double Fault (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 8: Double Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void CoprocessorSegmentOverrunHandler(interrupt_frame* frame) {
-    kerror("Exception 9: Coprocessor Segment Overrun at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 9: Coprocessor Segment Overrun at EIP: %x\n", frame->eip);
 }
 
 void InvalidTSSHandler(interrupt_frame* frame) {
-    kerror("Exception 10: Invalid TSS (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 10: Invalid TSS (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void SegmentNotPresentHandler(interrupt_frame* frame) {
-    kerror("Exception 11: Segment Not Present (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 11: Segment Not Present (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void StackSegmentFaultHandler(interrupt_frame* frame) {
-    kerror("Exception 12: Stack-Segment Fault (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 12: Stack-Segment Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void GeneralProtectionFaultHandler(interrupt_frame* frame) {
-    kerror("Exception 13: General Protection Fault (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 13: General Protection Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void PageFaultHandler(interrupt_frame* frame) {
     uint32_t faulting_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
-    kerror("Exception 14: Page Fault (Error Code: 0x%x) at Address: 0x%x, EIP: 0x%x\n", frame->err_code, faulting_addr, frame->eip);
+    kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, EIP: %x\n", frame->err_code, faulting_addr, frame->eip);
 }
 
 void FloatingPointExceptionHandler(interrupt_frame* frame) {
-    kerror("Exception 16: x87 Floating-Point Exception at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 16: x87 Floating-Point Exception at EIP: %x\n", frame->eip);
 }
 
 void AlignmentCheckHandler(interrupt_frame* frame) {
-    kerror("Exception 17: Alignment Check (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 17: Alignment Check (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void CoprocessorErrorHandler(interrupt_frame* frame) {
-    kerror("Exception 18: Machine Check at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 18: Machine Check at EIP: %x\n", frame->eip);
 }
 
 void SIMDFloatingPointExceptionHandler(interrupt_frame* frame) {
-    kerror("Exception 19: SIMD Floating-Point Exception at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 19: SIMD Floating-Point Exception at EIP: %x\n", frame->eip);
 }
 
 void VirtualizationExceptionHandler(interrupt_frame* frame) {
-    kerror("Exception 20: Virtualization Exception at EIP: 0x%x\n", frame->eip);
+    kerror("Exception 20: Virtualization Exception at EIP: %x\n", frame->eip);
 }
 
 void ControlProtectionExceptionHandler(interrupt_frame* frame) {
-    kerror("Exception 21: Control Protection Exception (Error Code: 0x%x) at EIP: 0x%x\n", frame->err_code, frame->eip);
+    kerror("Exception 21: Control Protection Exception (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
 void UnknownExceptionHandler(interrupt_frame* frame) {
-    kerror("Unknown Exception %d at EIP: 0x%x\n", frame->int_no, frame->eip);
+    kerror("Unknown Exception %d at EIP: %x\n", frame->int_no, frame->eip);
 }
 

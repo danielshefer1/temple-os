@@ -8,5 +8,7 @@
 #include "math_ops.h"
 #include "set_gdt.h"
 #include "set_idt.h"
+#include "timer.h"
+#include "keyboard.h"
 
 void kmain();

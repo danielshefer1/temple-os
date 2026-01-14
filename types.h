@@ -143,3 +143,10 @@ typedef struct idt_ptr {
     uint16_t limit;
     uint32_t base;
 } __attribute__((packed)) idt_ptr;
+
+typedef struct buffer_queue {
+    char* buffer;
+    uint32_t size;
+    uint32_t head;
+    uint32_t tail;
+} buffer_queue;

@@ -16,7 +16,7 @@ extern void LoadGDTHelper();
 extern void LoadIDTHelper();
 extern uint8_t inb(uint8_t port);
 extern void outb(uint8_t port, uint8_t value);
-extern uint32_t test_func(uint32_t num1, uint32_t num2);
+extern bool check_interrupts();
 
 // ISR stubs
 extern void isr_stub_0();

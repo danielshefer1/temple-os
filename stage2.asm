@@ -185,7 +185,7 @@ remap_pic:
     out 0xA1, al
     
     ; Mask all interrupts for now
-    mov al, 0xFD                  ; Mask all except IRQ0 (timer) and IRQ1 (keyboard)
+    mov al, 0xFC                ; Mask all except IRQ0 (timer) and IRQ1 (keyboard)
     out 0x21, al                     ; Master PIC
     mov al, 0xFF                     ; Mask all on slave
     out 0xA1, al                     ; Slave PIC

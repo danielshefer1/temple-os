@@ -1,14 +1,17 @@
 #include "slab_alloc.h"
 
 static Cache caches[NUM_CACHE];
-static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode), PAGE_SIZE};
-static uint32_t slab_sizes[NUM_CACHE] = {1, 16};
+static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode), PAGE_SIZE, 512};
+static uint32_t slab_sizes[NUM_CACHE] = {1, 16, 1};
 static uint32_t curr_addr;
 
 void InitSlabAlloc(uint32_t start) {
     uint32_t start_addr;
     curr_addr = start;
     
+    if (sizeof(sizes) != sizeof(slab_sizes)) {
+        kerror("sizes and slab_sizes don't line up!");
+    }
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
         caches[i].size = sizes[i];
@@ -50,7 +53,7 @@ void* SearchCache(Cache* cache, uint32_t cache_idx) {
             s_p->bitmap[i] = s_p->bitmap[i] ^ (1 << bit_pos);
             s_p->free_count--;
             if (s_p->free_count == 0) {
-                cache->partial_slabs = s_p->next;
+                cache->partial_slabs = DeleteSlab(cache->partial_slabs, s_p);
                 s_p->next = cache->full_slabs;
                 cache->full_slabs = s_p;
             }
@@ -62,6 +65,7 @@ void* SearchCache(Cache* cache, uint32_t cache_idx) {
         s_p = cache->empty_slabs;
         void* ret = (void*) s_p->start;
         s_p->bitmap[0] = 1;
+        s_p->free_count--;
         cache->empty_slabs = s_p->next;
         s_p->next = cache->partial_slabs;
         cache->partial_slabs = s_p;
@@ -78,17 +82,28 @@ Slab* AddSlab(uint32_t bitmap_size) {
 void AddSlabW(Cache* cache, uint32_t cache_idx) {
     uint32_t slab_size = slab_sizes[cache_idx];
     void* slab_addr = (void*) AddKernelPages(slab_size);
-    Slab* emps_p = cache->empty_slabs;
     
-    emps_p = AddSlab((slab_sizes[cache_idx] * PAGE_SIZE / sizes[cache_idx]) / 32);
-    emps_p->start = slab_addr;
-    emps_p->num_slots = slab_size * PAGE_SIZE / sizes[cache_idx];
-    emps_p->free_count = slab_size * PAGE_SIZE / sizes[cache_idx];
-    emps_p->bitmap_size = (slab_size * PAGE_SIZE / sizes[cache_idx]) / 32;
+    // 1. Calculate how many bitmap uint32s we need
+    uint32_t total_slots = slab_size * PAGE_SIZE / sizes[cache_idx];
+    uint32_t bitmap_len = total_slots / 32;
+    if (total_slots % 32 != 0) bitmap_len++; // Safety for non-aligned sizes
 
-    for (uint32_t i = 0; i < emps_p->bitmap_size; i++) {
-        emps_p->bitmap[i] = 0;
+    // 2. Allocate the metadata structure
+    Slab* new_slab = AddSlab(bitmap_len);
+    
+    // 3. Initialize metadata
+    new_slab->start = slab_addr;
+    new_slab->num_slots = total_slots;
+    new_slab->free_count = total_slots;
+    new_slab->bitmap_size = bitmap_len;
+
+    for (uint32_t i = 0; i < new_slab->bitmap_size; i++) {
+        new_slab->bitmap[i] = 0;
     }
+
+    // 4. IMPORTANT: Link the new slab to the cache!
+    new_slab->next = cache->empty_slabs;
+    cache->empty_slabs = new_slab;
 }
 
 Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
@@ -118,54 +133,107 @@ Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
     return NULL;
 }
 
-void* kmalloc(uint32_t size) {
-    void* ret;
+// Returns the index of the smallest cache that can fit 'size'
+// Returns -1 if the requested size is too large for any cache
+uint32_t GetBestCacheIndex(uint32_t size) {
+    uint32_t best_idx = -1;
+    uint32_t min_waste = 0xFFFFFFFF;
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
-        if (caches[i].size == size) {
-            ret = SearchCache(&caches[i], i);
-            if (ret != NULL) {
-                memset(ret, 0, size);
-                return ret;
+        if (caches[i].size >= size) {
+            uint32_t waste = caches[i].size - size;
+            
+            // Found a better fit (smaller waste)
+            if (waste < min_waste) {
+                min_waste = waste;
+                best_idx = i;
             }
-            AddSlabW(&caches[i], i);
-            ret = SearchCache(&caches[i], i);
-            memset(ret, 0, size);
-            return ret;            
         }
     }
-    return NULL;
+    return best_idx;
+}
+
+void* kmalloc(uint32_t size) {
+    if (check_interrupts()) CliHelper();
+    int idx = GetBestCacheIndex(size);
+    
+    // If size is too huge (larger than PAGE_SIZE cache), return NULL
+    if (idx == -1) {
+        return NULL; 
+    }
+
+    // Try to find a slot in the existing slabs
+    void* ret = SearchCache(&caches[idx], idx);
+    if (ret != NULL) {
+        memset(ret, 0, size);
+        if (!check_interrupts()) StiHelper();
+        return ret;
+    }
+
+    // No slot found, allocate a new Slab
+    AddSlabW(&caches[idx], idx);
+    
+    // Search again in the newly added slab
+    ret = SearchCache(&caches[idx], idx);
+    if (ret != NULL) {
+        memset(ret, 0, size);
+    }
+    if (!check_interrupts()) StiHelper();
+    return ret;
+}
+
+Slab* DeleteSlab(Slab* head, Slab* target) {
+    if (head == NULL) return head;
+    if (head == target) return head->next;
+    Slab* p = head;
+
+    while (p->next != NULL && p->next != target) {
+        p = p->next;
+    }
+    if (p->next == NULL) return head;
+
+    p->next = p->next->next;
+    return head;
 }
 
 void kfree(void* ptr, uint32_t size) {
+    if (check_interrupts()) CliHelper();
     uint32_t slot_index, bitmap_index, bit_pos;
-
     memset(ptr, SLAB_GARBAGE_BYTE, size);
 
-    for (uint32_t i = 0; i < NUM_CACHE; i++) {
-        if (caches[i].size == size) {
-            Slab* p = SearchSlab(caches[i].full_slabs, caches[i].partial_slabs, ptr, i);
-            if (p == NULL) {
-                return;
-            }
-            p->free_count++;
-            slot_index = (uint32_t) ptr - (uint32_t) p->start;
-            bitmap_index = slot_index / 32;
-            bit_pos = slot_index % 32;
-            p->bitmap[bitmap_index] = p->bitmap[bitmap_index] ^ (1 << bit_pos);            
-            if (p->free_count == 1) {
-                caches[i].full_slabs = p->next;
-                p->next = caches[i].partial_slabs;
-                caches[i].partial_slabs = p;
-            }
-            if (p->free_count == p->num_slots) {
-                caches[i].partial_slabs = p->next;
-                p->next = caches[i].empty_slabs;
-                caches[i].empty_slabs = p;
-            }
-            return;
-        }
+    uint32_t idx = GetBestCacheIndex(size);
+    if (idx == -1) {
+        if (!check_interrupts()) StiHelper();
+        return;
+    } 
+
+    Cache* cache = &caches[idx];
+    
+    Slab* p = SearchSlab(cache->full_slabs, cache->partial_slabs, ptr, idx);
+    
+    if (p == NULL) {
+        if (!check_interrupts()) StiHelper();
+        return;
     }
+
+    p->free_count++;
+    slot_index = (uint32_t) ptr - (uint32_t) p->start;
+    bitmap_index = slot_index / 32;
+    bit_pos = slot_index % 32;
+
+    p->bitmap[bitmap_index] ^=  (1 << bit_pos);        
+
+    if (p->free_count == 1) {
+        caches[idx].full_slabs = DeleteSlab(caches[idx].full_slabs, p);
+        p->next = caches[idx].partial_slabs;
+        caches[idx].partial_slabs = p;
+    }
+    if (p->free_count == p->num_slots) {
+        caches[idx].partial_slabs = DeleteSlab(caches[idx].partial_slabs, p);
+        p->next = caches[idx].empty_slabs;
+        caches[idx].empty_slabs = p;
+    }
+    if (!check_interrupts()) StiHelper();
 }
 
 

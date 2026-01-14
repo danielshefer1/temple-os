@@ -60,6 +60,14 @@ outb:
     pop ebp
     ret
 
+global check_interrupts
+check_interrupts:
+    pushfd              ; Push EFLAGS (32-bit) onto the stack
+    pop eax             ; Pop EFLAGS into EAX
+    shr eax, 9          ; Shift right by 9 to put the 'IF' bit at position 0
+    and eax, 1          ; Mask everything else (get only the IF bit)
+    ret
+
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1
