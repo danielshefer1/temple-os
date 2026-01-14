@@ -6,5 +6,6 @@
 #include "vga.h"
 #include "slab_alloc.h"
 
-void PushKeyboardBuffer(char c);
+void PushKeyboardBuffer(InputBuffer* buffer, char c);
 void InitConsoleBuffer();
+void scanf(const char *format, void* pointer);

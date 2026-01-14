@@ -144,9 +144,14 @@ typedef struct idt_ptr {
     uint32_t base;
 } __attribute__((packed)) idt_ptr;
 
-typedef struct buffer_queue {
-    char* buffer;
+typedef struct InputBuffer {
+    struct TimedKey* buffer;
     uint32_t size;
     uint32_t head;
     uint32_t tail;
-} buffer_queue;
+} InputBuffer;
+
+typedef struct TimedKey {
+    uint32_t time;
+    char c;
+} TimedKey;

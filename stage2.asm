@@ -45,8 +45,6 @@ start:
     call load_file
 
 no_additional_sectors:
-
-
     ; ===== ENTER PROTECTED MODE =====
 
     ; Disable interrupts

@@ -4,6 +4,6 @@
 #include "defintions.h"
 #include "types.h"
 
-extern volatile char key_buffer[];
+extern volatile InputBuffer console_buffer;
 extern volatile bool shift_pressed;
 extern volatile uint32_t timer_ticks;

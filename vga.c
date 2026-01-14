@@ -50,7 +50,43 @@ void flip_str(char* str) {
     }
 }
 
+bool isdigit(char c) {
+    if (c < '0' || c > '9') return false;
+    return true;
+}
+bool isuppercasealpha(char c) {
+    if (c < 'A' || c > 'F') return false;
+    return true;
+}
+bool islowercasealpha(char c) {
+    if (c < 'a' || c > 'f') return false;
+    return true;
+}
+
+uint32_t char_to_digit(char c) {
+    if (isdigit(c)) return c - '0';
+    if (islowercasealpha(c)) return c - 'a' + 10;
+    if (isuppercasealpha(c)) return c - 'A' + 10;
+    return 0xFF;
+}
+
+uint32_t atoi(char* str, uint32_t base) {
+    uint32_t result = 0, digit;
+    char* ptr = str, c;
+
+    while (*ptr != '\0') {
+        result *= base;
+        digit = char_to_digit(*ptr);
+        if (digit == 0xFF) break;
+        result += digit;
+        ptr++;
+    }
+    return result;
+}
+
 void deletechar() {
+    if (cursor_x == 0 && cursor_y == 0) return;
+
     if (cursor_x == 0) {
         cursor_y--;
         cursor_x = MAX_COLS - 1;
@@ -58,17 +94,19 @@ void deletechar() {
     else {
         cursor_x--;
     }
-    VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2] = 0x00;
-    VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2 + 1] = 0x00;
-}
+    VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2] = 0x00;}
 
 void putchar(char c, uint8_t color) {
-    if (c == '\n') {
-        newline();
-        return;
-    } else if (c == '\t') {
-        insert_tab();
-        return;
+    switch (c) {
+        case '\n':
+            newline();
+            return;
+        case '\t':
+            insert_tab();
+            return;
+        case '\b':
+            deletechar();
+            return;
     }
 
     VGA_BUFFER[(cursor_y * MAX_COLS + cursor_x) * 2] = c;
@@ -96,8 +134,9 @@ void print_str(const char* str, uint8_t color) {
 }
 
 void clear_screen() {
-    for (uint32_t i = 0; i < 80 * 25 * 2; i++) {
-        VGA_BUFFER[i] = 0;
+    for (uint32_t i = 0; i < MAX_COLS * MAX_ROWS; i++) {
+        VGA_BUFFER[i * 2] = 0;         // Space character
+        VGA_BUFFER[i * 2 + 1] = 0x07;    // Light gray on Black
     }
     cursor_x = 0;
     cursor_y = 0;
@@ -238,4 +277,8 @@ void kerror(const char* format, ...) {
 
     CliHelper();
     HltHelper();
+}
+
+InitVGA() {
+    clear_screen();
 }

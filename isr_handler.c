@@ -151,7 +151,8 @@ void KeyboardHandler(interrupt_frame* frame) {
     if (c == 0) return;
 
     if (!is_release) {
-        //PushKeyboardBuffer(c);
+        if (shift_pressed) c -= 32;
+        PushKeyboardBuffer(&console_buffer, c);
     }
 }
 

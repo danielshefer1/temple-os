@@ -25,6 +25,8 @@
 #define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
 #define GREY_COLOR 0x07
 #define RED_COLOR 0x04
+#define CURSOR_START 14
+#define CURSOR_END 15
 // End VGA Definitions
 
 // GDT Definitions
@@ -72,5 +74,5 @@
 // End Timer Definitions
 
 // Keyboard Definitions
-#define CONSOLE_BUFFER_SIZE 1024
+#define CONSOLE_BUFFER_SIZE 512
 // End Keyboard Definitions
