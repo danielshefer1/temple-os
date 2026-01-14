@@ -45,15 +45,6 @@ void scanfH(InputBuffer* buffer, char* user_buffer, uint32_t ms_back, char key) 
     }
 }
 
-void cpystr(char* source, char* dst) {
-    uint32_t idx = 0;
-    while (source[idx] != '\0') {
-        dst[idx] = source[idx];
-        idx++;
-    }
-    dst[idx] = '\0';
-}
-
 void scanf(const char *format, void* pointer) {
     if (*format != '%') kerror("You Need to Input a Type Specifier!");
 

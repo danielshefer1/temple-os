@@ -136,7 +136,7 @@ Slab* SearchSlab(Slab* slab1, Slab* slab2, void* ptr, uint32_t cache_idx) {
 // Returns the index of the smallest cache that can fit 'size'
 // Returns -1 if the requested size is too large for any cache
 uint32_t GetBestCacheIndex(uint32_t size) {
-    uint32_t best_idx = -1;
+    uint32_t best_idx = 0xFFFFFFF;
     uint32_t min_waste = 0xFFFFFFFF;
 
     for (uint32_t i = 0; i < NUM_CACHE; i++) {
@@ -204,7 +204,7 @@ void kfree(void* ptr, uint32_t size) {
     memset(ptr, SLAB_GARBAGE_BYTE, size);
 
     uint32_t idx = GetBestCacheIndex(size);
-    if (idx == -1) {
+    if (idx == 0xFFFFFFF) {
         if (org_int_state) StiHelper();
         return;
     } 
