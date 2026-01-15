@@ -1,0 +1,19 @@
+ENTRY(main)
+OUTPUT_FORMAT(elf32-i386)
+
+SECTIONS {
+    /* Dummy starting point */
+    . = 0x400000;
+    .text : AT (.) {
+        *(.text)
+        *(.rodata*)
+    }
+    . = ALIGN(4K);
+    .data : AT(.) {
+        *(.data)
+    }
+    .bss : AT(.) {
+        *(.bss);
+        *(COMMON);
+    }
+}

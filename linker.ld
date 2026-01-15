@@ -62,13 +62,13 @@ SECTIONS
     _kernel_VMA_data_end = .;
 
     /* BSS (does not take space on disk) */
-    _bss_start = _data_start + SIZEOF(.data);
+    _bss_start = _data_start + SIZEOF(.data) + _kernel_physical_start - _kernel_LMA_start;
     .bss : AT(_data_start + SIZEOF(.data)) {
         *(.bss)
         *(COMMON)
     }
     _bss_end = _bss_start + SIZEOF(.bss);
-
+    _bss_size = SIZEOF(.bss);
     _kernel_VMA_end = .;
 }
 

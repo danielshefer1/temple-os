@@ -28,14 +28,17 @@ QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=$(BUILD_DIR)/os.img
 # SOURCE FILES
 # ============================================================================
 
-# C source files (add new .c files here)
 C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
  slab_alloc.c paging.c math_ops.c buddy_alloc.c set_gdt.c isr_handler.c \
   set_idt.c timer.c keyboard.c global.c str_ops.c
-# Generated object files from C sources (now in build dir)
+
+USER_C_SOURCES = user_app.c
+
 C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
-# Assembly sources
+USER_C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_C_SOURCES:.c=.o))
+
 ASM_SOURCES = stage3.asm helpers.asm
+
 ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
 
 # All object files needed for kernel
@@ -50,6 +53,9 @@ STAGE2_ELF   = $(BUILD_DIR)/stage2.elf
 KERNEL_ELF   = $(BUILD_DIR)/kernel.elf
 DISK_IMG     = $(BUILD_DIR)/os.img
 PAYLOAD_BIN  = $(BUILD_DIR)/payload.bin
+USER_ELF = $(BUILD_DIR)/user.elf
+USER_BIN = $(BUILD_DIR)/user_payload.bin
+FULL_PAYLOAD = $(BUILD_DIR)/full_payload.bin
 
 # ============================================================================
 # BUILD RULES
@@ -65,6 +71,9 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld | $(BUILD_DIR)
 	@echo "🔗 Linking $(KERNEL_ELF)..."
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
+$(USER_ELF): $(USER_C_OBJECTS) user_linker.ld | $(BUILD_DIR)
+	@echo "🔗 Linking $(USER_ELF)..."
+	$(LD) $(LDFLAGS) -o $@ $(USER_C_OBJECTS)
 # --- Compile C sources ---
 -include $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.d))
 
@@ -93,14 +102,20 @@ $(STAGE1_BIN): boot.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
 # --- Create disk image ---
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) | $(BUILD_DIR)
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .helpers -j .text -j .data -j .bss $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .text -j .data -j .bss $(USER_ELF) $(USER_BIN)
 
-	dd if=/dev/zero of=$@ bs=512 count=55 2>/dev/null
+	truncate -s %512 $(PAYLOAD_BIN)
+	truncate -s %4096 $(USER_BIN)
+
+	cat $(PAYLOAD_BIN) $(USER_BIN) > $(FULL_PAYLOAD)
+
+    # Write to disk image
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
-	dd if=$(PAYLOAD_BIN) of=$@ bs=512 seek=5 iflag=fullblock count=50 2>/dev/null
+	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=5 conv=notrunc
 	@echo "✅ Disk image created successfully!"
 
 # ============================================================================

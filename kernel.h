@@ -10,5 +10,6 @@
 #include "set_idt.h"
 #include "timer.h"
 #include "keyboard.h"
+#include "E820.h"
 
 void kmain();

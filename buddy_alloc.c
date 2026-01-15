@@ -254,8 +254,8 @@ void PrintBuddyBin(uint32_t start_order, uint32_t end_order) {
 void PrintBuddyNode(BuddyNode* node) {
     BuddyNode* p = node;
     while (p->next != NULL) {
-        kprintf("Address: 0x%x -> ", p->address);
+        kprintf("Address: %x -> ", p->address);
         p = p->next;
     }
-    kprintf("Address: 0x%x\n", p->address);
+    kprintf("Address: %x\n", p->address);
 }

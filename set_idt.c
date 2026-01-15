@@ -56,10 +56,10 @@ void CheckIDT() {
     idt_ptr current_idtr;
     __asm__ volatile("sidt %0" : "=m"(current_idtr));
     
-    kprintf("IDTR Base: 0x%x\n", current_idtr.base);
-    kprintf("IDTR Limit: 0x%x\n", current_idtr.limit);
-    kprintf("Expected Base: 0x%x\n", (uint32_t)&idt);  // or physical if needed
-    kprintf("Expected Limit: 0x%x\n", sizeof(idt) - 1);
+    kprintf("IDTR Base: %x\n", current_idtr.base);
+    kprintf("IDTR Limit: %x\n", current_idtr.limit);
+    kprintf("Expected Base: %x\n", (uint32_t)&idt);  // or physical if needed
+    kprintf("Expected Limit: %x\n", sizeof(idt) - 1);
 }
 
 void InitIDT() {

@@ -6,6 +6,11 @@
 #define SLAB_GARBAGE_BYTE 0xAC
 // End Slab Definitions
 
+// Buddy Definitions
+#define MAX_ORDER 32
+// End Buddy Definitions
+
+
 // Paging Definitions 
 #define PAGE_SIZE 4096
 #define KERNEL_VIRTUAL 0x80000000
@@ -18,7 +23,6 @@
 // E820 Definitions
 #define E820_SIGNATURE 0x534D4150
 #define E820_ADDRESS KERNEL_VIRTUAL + 0x500
-#define MAX_ORDER 32
 // End E820 Definitions
 
 // VGA Definitions
