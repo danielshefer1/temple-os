@@ -8,4 +8,4 @@
 
 void PushKeyboardBuffer(InputBuffer* buffer, char c);
 void InitConsoleBuffer();
-void scanf(const char *format, void* pointer);
+void kscanf(const char *format, ...);

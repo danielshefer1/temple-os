@@ -75,6 +75,7 @@
 
 // Keyboard Definitions
 #define CONSOLE_BUFFER_SIZE 512
+#define KEYBOARD_MS_BACK 10
 // End Keyboard Definitions
 
 // Serial Definitions

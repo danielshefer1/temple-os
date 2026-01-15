@@ -19,9 +19,12 @@ void end() {
 
 void kmain() {
     start();
-    uint32_t result;
-    kprintf("Input Your Favorite Hexa Number: ");
-    scanf("%x", &result);
-    kprintf("Wow, %x is a Really Great Number!", result);
+    uint32_t num1;
+    uint32_t num2;
+    char c;
+    char str[20];
+    kprintf("Input Your Favorite 2 Numbers (And a String): ");
+    kscanf("%s %d %d", str, &num1, &num2);
+    kprintf("Wow, %d and %d are Really Great Numbers! (And %s is a Great String!)", num1, num2, str);
     end();
 }

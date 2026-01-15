@@ -6,7 +6,16 @@ void PushKeyboardBuffer(InputBuffer* buffer, char c) {
     buffer->head = (buffer->head + 1) % buffer->size;
 }
 
-void scanfH(InputBuffer* buffer, char* user_buffer, uint32_t ms_back, char key) {
+bool isInTuple(Tuple* tuple, uint32_t value) {
+    return (value == tuple->first || value == tuple->second);
+}
+
+void FlushBuffer(InputBuffer* buffer) {
+    buffer->head = 0;
+    buffer->tail = 0;
+}
+
+void GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, Tuple* keys) {
     uint32_t curr_time = timer_ticks, idx = buffer->tail, tmp_idx = 0, end = buffer->head;
 
     while (curr_time - ms_back > buffer->buffer[idx].time && idx != end) {
@@ -14,16 +23,29 @@ void scanfH(InputBuffer* buffer, char* user_buffer, uint32_t ms_back, char key) 
     }
 
     while (idx != end) {
-        if (buffer->buffer[idx].c == key) {
-            user_buffer[tmp_idx] = '\n';
+        if (isInTuple(keys, buffer->buffer[idx].c)) {
+            if (tmp_idx >= max_read - 1) user_buffer[tmp_idx] = '\0';
+            else user_buffer[tmp_idx] = buffer->buffer[idx].c;
+
             kprintf(user_buffer);
             idx++;
             buffer->tail = idx;
             return;
         }
-        user_buffer[tmp_idx] = buffer->buffer[idx].c;
+        if (buffer->buffer[buffer->tail].c == '\b') {
+            if (tmp_idx == 0) user_buffer[0] = '\0';
+            else {
+                tmp_idx--;
+                user_buffer[tmp_idx] = '\0';
+            }
+        }
+        else if (tmp_idx < max_read) {
+            user_buffer[tmp_idx] = buffer->buffer[buffer->tail].c;
+            tmp_idx++;
+        }
         tmp_idx++;
         idx++;
+        
     }
     buffer->tail = buffer->head;
     kprintf(user_buffer);
@@ -32,50 +54,78 @@ void scanfH(InputBuffer* buffer, char* user_buffer, uint32_t ms_back, char key) 
             HltHelper();
         }
         while (buffer->tail != buffer->head) {
-            if (buffer->buffer[buffer->tail].c == key) {
-                putchar('\n', GREY_COLOR);
+            if (isInTuple(keys, buffer->buffer[buffer->tail].c)) {
                 user_buffer[tmp_idx] = '\0';
+                putchar(buffer->buffer[buffer->tail].c, GREY_COLOR);
                 return;
             }
-            user_buffer[tmp_idx] = buffer->buffer[buffer->tail].c;
+            if (buffer->buffer[buffer->tail].c == '\b') {
+                if (tmp_idx == 0) user_buffer[0] = '\0';
+                else {
+                    tmp_idx--;
+                    user_buffer[tmp_idx] = '\0';
+                }
+            }
+            else if (tmp_idx < max_read) {
+                user_buffer[tmp_idx] = buffer->buffer[buffer->tail].c;
+                tmp_idx++;
+            }
             putchar(buffer->buffer[buffer->tail].c, GREY_COLOR);
             buffer->tail++;
-            tmp_idx++;
         }
     }
 }
 
-void scanf(const char *format, void* pointer) {
-    if (*format != '%') kerror("You Need to Input a Type Specifier!");
+void kscanf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    char nums_buffer[20];
+    char* p1;
+    uint32_t* p2;
+    Tuple num_triggers;
+    num_triggers.first = ' ';
+    num_triggers.second = '\n';
+    Tuple str_triggers;
+    str_triggers.first = '\0';
+    str_triggers.second = '\n';
 
-    char buffer[20];
-    memset(buffer, 0, sizeof(buffer));
-    uint32_t result;
-    uint32_t* p_n;
-    char* p_s;
+    memset(nums_buffer, 0, sizeof(nums_buffer));
 
-    scanfH(&console_buffer, buffer, 10, '\n');
-    format++;
-    switch (*format) {
-        case 'd':
-            result = atoi(buffer, 10);
-            p_n = (uint32_t*) pointer;
-            *p_n = result;
-            break;
-        case 'x':
-            result = atoi(buffer, 16);
-            p_n = (uint32_t*) pointer;
-            *p_n = result;
-            break;
-        case 's':
-            p_s = (char*) pointer;
-            cpystr(buffer, p_s);
-            break;
-        case 'c':
-            p_s = (char*) pointer;
-            *p_s = buffer[0];
-            break;
+    while (*format != '\0') {
+        if (*format == '%') {
+            format++;
+            switch (*format) {
+            case 'c':
+                p1 = va_arg(args, char*);
+                GetInputUntilKey(&console_buffer, nums_buffer, 1, KEYBOARD_MS_BACK, &num_triggers);
+                *p1 = nums_buffer[0];
+                memset(nums_buffer, 0, sizeof(nums_buffer));
+                break;
+            case 's':
+                p1 = va_arg(args, char*);
+                GetInputUntilKey(&console_buffer, p1, -1, KEYBOARD_MS_BACK, &str_triggers);
+                break;
+            case 'd':
+                p2 = va_arg(args, uint32_t*);
+                GetInputUntilKey(&console_buffer, nums_buffer, sizeof(nums_buffer) / sizeof(nums_buffer[0]), KEYBOARD_MS_BACK, &num_triggers);
+                *p2 = atoi(nums_buffer, 10);
+                memset(nums_buffer, 0, sizeof(nums_buffer));
+                break;
+            case 'x':
+                p2 = va_arg(args, uint32_t*);
+                GetInputUntilKey(&console_buffer, nums_buffer, sizeof(nums_buffer) / sizeof(nums_buffer[0]), KEYBOARD_MS_BACK, &num_triggers);
+                *p2 = atoi(nums_buffer, 10);
+                memset(nums_buffer, 0, sizeof(nums_buffer));
+                break;
+            default:
+                break;
+            }
+        }
+        format++;
+        FlushBuffer(&console_buffer);
     }
+    
+    va_end(args);
 }
 
 void InitConsoleBuffer() {
