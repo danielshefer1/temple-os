@@ -37,5 +37,5 @@ void ControlProtectionExceptionHandler(interrupt_frame* frame);
 void UnknownExceptionHandler(interrupt_frame* frame);
 
 // IRQ Handlers
-void TimerHandler(interrupt_frame* frame);
-void KeyboardHandler(interrupt_frame* frame);
+void TimerHandler();
+void KeyboardHandler();

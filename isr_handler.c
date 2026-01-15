@@ -127,10 +127,10 @@ void IRQHandler(interrupt_frame* frame) {
 
     switch (int_no) {
         case 32:
-            TimerHandler(frame);
+            TimerHandler();
             break;
         case 33:
-            KeyboardHandler(frame);
+            KeyboardHandler();
             break;
         default:
             UnknownExceptionHandler(frame);
@@ -138,11 +138,11 @@ void IRQHandler(interrupt_frame* frame) {
     }
 }
 
-void TimerHandler(interrupt_frame* frame) {
+void TimerHandler() {
     timer_ticks++;
 }
 
-void KeyboardHandler(interrupt_frame* frame) {
+void KeyboardHandler() {
     uint8_t scancode = inb(0x60);
     uint8_t presscode = scancode & 0x7F;
     bool is_release = scancode & 0x80;
