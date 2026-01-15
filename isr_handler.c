@@ -39,6 +39,10 @@ static char kbd_us[128] = {
     0,	/* All other keys are undefined */
 };
 
+static char special_chars[] = {
+    ')', '!', '@', '#', '$', '%', '^', '&', '*', '('
+};
+
 void isr_handler(interrupt_frame* frame) {
     uint32_t int_no = frame->int_no;
     if (int_no >= 32 && int_no < 48) {
@@ -151,7 +155,13 @@ void KeyboardHandler(interrupt_frame* frame) {
     if (c == 0) return;
 
     if (!is_release) {
-        if (shift_pressed) c -= 32;
+        if (shift_pressed) {
+            if (c <= 'z' && c >= 'a') c -= 32;
+            else {
+                c -= 48;
+                c = special_chars[c];
+            }
+        }
         PushKeyboardBuffer(&console_buffer, c);
     }
 }
