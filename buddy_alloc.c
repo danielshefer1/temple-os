@@ -230,6 +230,8 @@ void InsertSortedBuddyNode(BuddyBin* bin, BuddyNode* node, bool free_list) {
 
 
 void PrintBuddyBin(uint32_t start_order, uint32_t end_order) {
+    bool sti = check_interrupts();
+    CliHelper();
     for (uint32_t i = start_order; i < end_order && i < MAX_ORDER; i++) {
         if (bins[i].head_free == NULL && bins[i].head_used == NULL) {
             continue;
@@ -246,6 +248,7 @@ void PrintBuddyBin(uint32_t start_order, uint32_t end_order) {
         }
 
     }
+    if (sti) StiHelper();
 }
 
 void PrintBuddyNode(BuddyNode* node) {
