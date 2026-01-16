@@ -140,11 +140,9 @@ void IRQHandler(interrupt_frame* frame) {
 
 void TimerHandler() {
     timer_ticks++;
-    kprintf("Timer\t");
 }
 
 void KeyboardHandler() {
-    kprintf("Key Pressed / Released!\t");
     uint8_t scancode = inb(0x60);
     uint8_t presscode = scancode & 0x7F;
     bool is_release = scancode & 0x80;

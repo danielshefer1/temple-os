@@ -12,15 +12,6 @@ stage4_entry:
     dd _bss_start
     dd _bss_end
 
-    mov ebx, 0xB8000
-    mov byte [ebx], '?'
-    inc ebx
-    mov byte [ebx], 0x07
-
-    mov eax, bootstrap_kmain
-    jmp eax
-
-
 global enable_paging
 enable_paging:
     mov eax, [esp+4]      ; Get page_directory parameter

@@ -14,9 +14,18 @@ stage3_entry:
     mov al, [BOOT_DRIVE]
     mov [boot_drive], al
 
+.test_error
+
+
     jmp switch_to_real_mode
 
 stage3_return1:
+    mov eax, 0x10      
+    mov ds, eax
+    mov es, eax
+    mov fs, eax
+    mov gs, eax
+    mov ss, eax
     call fetch_stage4_data
     jmp switch_to_real_mode
 
@@ -36,37 +45,61 @@ fetch_stage4_data:
     ret
 
 stage3_return2:
-    ; Copying to High Adddress 
+    mov eax, 0x10      
+    mov ds, eax
+    mov es, eax
+    mov fs, eax
+    mov gs, eax
+    mov ss, eax
+    ; 1. Calculate bytes loaded: ECX = sectors_loaded * 512
+    movzx eax, word [sectors_loaded]
+    imul ecx, eax, 512      ; Use imul for 3-operand math
+    test ecx, ecx           ; If we somehow loaded 0 bytes, skip
+    jz .check_finished
+
+    ; 2. Prepare pointers for copying
+    mov edi, [current_kernel_loading_address]
+    mov esi, 0x9000         ; Source: Temporary Buffer
+    push ecx                ; Save byte count for cleanup and pointer update
+    
+    cld
+    rep movsb               ; Move data to 1MB+ (EDI and ESI increment automatically)
+
+    ; 3. Update the global loading pointer for the next track
+    pop ecx                 ; Restore byte count
+    add [current_kernel_loading_address], ecx
+
+    ; 4. Clean up the 0x9000 buffer (Critical: Must reload ECX!)
+    mov edi, 0x9000
+    mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
+    xor eax, eax
+    rep stosd               ; Zero out the temporary buffer
+
+.check_finished:
     mov eax, [sectors_left]
     test eax, eax
-    jz done
-    mov eax, [sectors_loaded]
-    imul ecx, eax, 512
-    push ecx
-    mov edi, [current_kernel_loading_address]
-    mov [current_kernel_loading_address], edi
-    mov esi, 0x9000
-    cld
-    rep movsb
-
-    pop ecx
-    add [current_kernel_loading_address], ecx
-    ; Cleaning Up the lower addresses
-    mov edi, 0x9000
-    xor eax, eax
-    rep stosb
+    jz .done                ; If no sectors left, we are finished!
 
     jmp switch_to_real_mode
 
-done:
-    mov edi, bss_start
-    mov ecx, bss_end
-    sub ecx, bss_start ; Calculate BSS size
-    xor eax, eax        ; Value to write (0)
-    rep stosb           ; Store AL (0) into [EDI] ECX times
+.done:
+    ; 5. Clear the Kernel's BSS area
+    mov edi, [bss_start]
+    mov ecx, [bss_end]
+    sub ecx, edi            ; ECX = Size of BSS
+    js .launch              ; If size is negative, skip to launch
+    test ecx, ecx
+    jz .launch              ; If size is zero, skip to launch
 
-    mov eax, STAGE4_BASE + 12
-    jmp eax
+    xor eax, eax
+    cld
+    rep stosb               ; Zero the BSS memory at 1MB+
+
+.launch:
+    cli
+    mov esp, 0x90000
+    ; 6. Jump to the Kernel Entry Point at 1MB
+    jmp KERNEL_LOADING_ADDRESS
 
 
 print_string_protected:
@@ -81,6 +114,65 @@ print_string_protected:
 .done_print_protected:
     ret
 
+
+print_dd_hexa:
+    push eax
+    push ecx
+    push edx
+    mov edx, eax        ; Keep original value in EDX
+    mov ecx, 8          ; 8 nibbles in a 32-bit doubleword
+
+.loop:
+    rol edx, 4          ; Rotate left 4 bits (brings the highest nibble to the bottom)
+    mov eax, edx        ; Copy to EAX
+    and al, 0x0F        ; Isolate the lowest 4 bits (the nibble)
+    call print_byte_hexa
+    loop .loop          ; Decrement ECX and jump if not zero
+
+    pop edx
+    pop ecx
+    pop eax
+    ret
+
+print_byte_hexa:
+    push eax
+    push edx
+    cmp al, 10
+    jl .digit
+    add al, 'A' - 10
+    jmp .print
+
+.digit
+    add al, '0'
+.print
+    mov edx, [curr_place]
+    mov byte [edx], al
+    inc edx
+    mov byte [edx], 0x07 ; Attribute byte (light grey on black)
+    inc edx
+    mov [curr_place], edx
+
+    pop edx
+    pop eax
+    ret
+
+go_to_next_line:
+    push edx
+    push eax
+    push ebx
+
+    mov eax, [curr_place]
+    sub eax, VGA_TEXT
+    xor edx, edx
+    mov ebx, 160
+    div ebx
+    add [curr_place], 160;
+    sub [curr_place], edx;
+
+    pop ebx
+    pop eax
+    pop edx
+    ret
 
 switch_to_real_mode:
     ; 1. Load 16-bit Data Segment (0x20) into DS, ES, SS
@@ -133,17 +225,17 @@ real_entry:
     call load_stage4
     jmp switch_to_protected_mode1
 .loading:
+    ; We just came back from fetching metadata or copying a chunk
     mov eax, [sectors_left]
     test eax, eax
-    jz .skip
-    call load_section
+    jz .all_done                ; If 0, we are finished loading
 
-.skip:
-    jmp switch_to_protected_mode2
+    call load_section           ; READ the next chunk (Starting at Sector 9)
+    jmp switch_to_protected_mode2 ; Go COPY the chunk we just read
 
-    cli
-    hlt
-
+.all_done:
+    ; This part only hits when sectors_left is 0
+    jmp switch_to_protected_mode2 ; Final jump to trigger the BSS/Jump logic
 switch_to_protected_mode1:
     cli
 
@@ -207,8 +299,8 @@ load_section:
     xor edx, edx                ; CLEAR EDX (Critical for 32-bit div!)
     movzx ebx, word [MAX_SECTOR]; Load 16-bit limit into 32-bit reg
     div ebx                     ; EDX:EAX / EBX
+    inc dx
     
-    inc edx                     ; Convert 0-based remainder to 1-based Sector
     mov [current_sector_val], dx ; Save standard sector number for later
 
     ; 3. Calculate "Safe Read Count"
@@ -415,7 +507,7 @@ USER_LOADING_ADDRESS equ 0x40100000
 KERNEL_LOADING_ADDRESS equ 0x100000
 BOOT_DRIVE equ 0x85F0
 STAGE4_SECTOR equ 8
-START_SECTOR equ 9
+START_SECTOR equ 8
 STAGE4_BASE equ 0x8A00
 VGA_TEXT equ 0xB8000
 
@@ -424,7 +516,7 @@ VGA_TEXT equ 0xB8000
 sectors_left dd 0
 start_sector dd START_SECTOR
 boot_drive db 0
-sectors_loaded dw 0
+sectors_loaded dd 0
 
 current_kernel_loading_address dd KERNEL_LOADING_ADDRESS
 current_user_loading_address dd USER_LOADING_ADDRESS
