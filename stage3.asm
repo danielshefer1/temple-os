@@ -14,10 +14,28 @@ stage3_entry:
     mov al, [BOOT_DRIVE]
     mov [boot_drive], al
 
-.test_error
-
+    call clear_screen
 
     jmp switch_to_real_mode
+
+clear_screen:
+    push eax
+    push ebx
+    push ecx
+
+    mov ebx, VGA_TEXT
+    xor eax, eax
+    mov ecx, 80 * 25 * 2 / 4
+
+.loop_start:
+    mov [ebx], eax
+    add ebx, 4
+    loop .loop_start
+
+    pop ecx
+    pop ebx
+    pop eax
+    ret
 
 stage3_return1:
     mov eax, 0x10      
@@ -52,7 +70,7 @@ stage3_return2:
     mov gs, eax
     mov ss, eax
     ; 1. Calculate bytes loaded: ECX = sectors_loaded * 512
-    movzx eax, word [sectors_loaded]
+    mov eax, [sectors_loaded]
     imul ecx, eax, 512      ; Use imul for 3-operand math
     test ecx, ecx           ; If we somehow loaded 0 bytes, skip
     jz .check_finished
@@ -71,21 +89,20 @@ stage3_return2:
     cld
     rep movsd 
 
+    mov ecx, [sectors_loaded]
+    imul ecx, 512
+    and ecx, 3              ; Get remainder (0-3 bytes)
+    rep movsb               ; Copy remaining bytes
+
     ; 3. Update the global loading pointer for the next track
     pop ecx                 ; Restore byte count
     add [current_kernel_loading_address], ecx
 
-    ; ADD THIS: Ensure 4-byte alignment
-    mov eax, [current_kernel_loading_address]
-    add eax, 3              ; Round up
-    and eax, ~3             ; Clear bottom 2 bits
-    mov [current_kernel_loading_address], eax
-
     ; 4. Clean up the 0x9000 buffer (Critical: Must reload ECX!)
-    ;mov edi, 0xA000
-    ;mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
-    ;xor eax, eax
-    ;rep stosd               ; Zero out the temporary buffer
+    mov edi, 0xA000
+    mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
+    xor eax, eax
+    rep stosd               ; Zero out the temporary buffer
 
 .check_finished:
     mov eax, [sectors_left]
@@ -95,6 +112,15 @@ stage3_return2:
     jmp switch_to_real_mode
 
 .done:
+    mov ebx, [current_kernel_loading_address]
+    sub ebx, 512 
+    mov ecx, 128
+.loop_start:
+    mov eax, [ebx]
+    call print_dd_hexa
+    add ebx, 4
+    loop .loop_start
+
     ; 5. Clear the Kernel's BSS area
     mov edi, [bss_start]
     mov ecx, [bss_end]
@@ -139,7 +165,10 @@ print_dd_hexa:
     mov eax, edx        ; Copy to EAX
     and al, 0x0F        ; Isolate the lowest 4 bits (the nibble)
     call print_byte_hexa
-    loop .loop1          ; Decrement ECX and jump if not zero
+    loop .loop1
+    mov edx, [curr_place]
+    add edx, 4
+    mov [curr_place], edx
 
     pop edx
     pop ecx
@@ -154,9 +183,9 @@ print_byte_hexa:
     add al, 'A' - 10
     jmp .print
 
-.digit
+.digit:
     add al, '0'
-.print
+.print:
     mov edx, [curr_place]
     mov byte [edx], al
     inc edx
@@ -311,8 +340,11 @@ load_section:
     xor edx, edx                ; CLEAR EDX (Critical for 32-bit div!)
     movzx ebx, word [MAX_SECTOR]; Load 16-bit limit into 32-bit reg
     div ebx                     ; EDX:EAX / EBX
-    inc dx
-    
+    test edx, edx
+    jnz .isnt_63
+    inc edx
+
+.isnt_63:
     mov [current_sector_val], dx ; Save standard sector number for later
 
     ; 3. Calculate "Safe Read Count"
@@ -519,7 +551,7 @@ USER_LOADING_ADDRESS equ 0x40100000
 KERNEL_LOADING_ADDRESS equ 0x100000
 BOOT_DRIVE equ 0x85F0
 STAGE4_SECTOR equ 8
-START_SECTOR equ 8
+START_SECTOR equ 9
 STAGE4_BASE equ 0x8A00
 VGA_TEXT equ 0xB8000
 

@@ -12,49 +12,6 @@ stage4_entry:
     dd _bss_start
     dd _bss_end
 
-
-print_dd_hexa:
-    push eax
-    push ecx
-    push edx
-    mov edx, eax        ; Keep original value in EDX
-    mov ecx, 8          ; 8 nibbles in a 32-bit doubleword
-
-.loop1:
-    rol edx, 4          ; Rotate left 4 bits (brings the highest nibble to the bottom)
-    mov eax, edx        ; Copy to EAX
-    and al, 0x0F        ; Isolate the lowest 4 bits (the nibble)
-    call print_byte_hexa
-    loop .loop1          ; Decrement ECX and jump if not zero
-
-    pop edx
-    pop ecx
-    pop eax
-    ret
-
-print_byte_hexa:
-    push eax
-    push edx
-    cmp al, 10
-    jl .digit
-    add al, 'A' - 10
-    jmp .print
-
-.digit
-    add al, '0'
-.print
-    mov edx, [curr_place]
-    mov byte [edx], al
-    inc edx
-    mov byte [edx], 0x07 ; Attribute byte (light grey on black)
-    inc edx
-    mov [curr_place], edx
-
-    pop edx
-    pop eax
-    ret
-
-
 global enable_paging
 enable_paging:
     mov eax, [esp+4]      ; Get page_directory parameter
@@ -75,5 +32,7 @@ enable_paging:
 
     cli
     hlt
+
+
 
 times 512 - ($ - $$) db 0
