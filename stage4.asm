@@ -12,8 +12,6 @@ stage4_entry:
     dd _bss_start
     dd _bss_end
 
-    mov eax, 
-
 
 print_dd_hexa:
     push eax
