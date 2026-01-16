@@ -20,9 +20,10 @@ void end() {
 void kmain() {
     start();
 
-    uint32_t test;
-    kprintf("Enter a Number: ");
-    kscanf("%d", &test);
+    char test[50];
+    kprintf("Enter a Phrase: ");
+    kscanf("%s", test);
+    kprintf("I like %s too!", test);
 
     end();
 }

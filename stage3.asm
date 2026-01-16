@@ -25,11 +25,13 @@ clear_screen:
 
     mov ebx, VGA_TEXT
     xor eax, eax
-    mov ecx, 80 * 25 * 2 / 4
+    mov ecx, 80 * 25 * 2
 
 .loop_start:
     mov [ebx], eax
-    add ebx, 4
+    inc ebx
+    mov [ebx], 0x07
+    inc ebx
     loop .loop_start
 
     pop ecx
@@ -50,6 +52,8 @@ stage3_return1:
 fetch_stage4_data:
     push eax
 
+    ; Debug: Try to print a known value first
+    
     mov eax, [STAGE4_BASE]
     mov [sectors_left], eax
 
@@ -71,55 +75,62 @@ stage3_return2:
     mov ss, eax
     ; 1. Calculate bytes loaded: ECX = sectors_loaded * 512
     mov eax, [sectors_loaded]
+    call print_dd_hexa
     imul ecx, eax, 512      ; Use imul for 3-operand math
     test ecx, ecx           ; If we somehow loaded 0 bytes, skip
     jz .check_finished
 
-    ; Disable cache
-    mov eax, cr0
-    or eax, 0x60000000      ; Set CD and NW bits
-    mov cr0, eax
-    wbinvd                  ; Flush and invalidate cache
-    ; 2. Prepare pointers for copying
+    cmp [sub_from_user], 0
+    jz .load_kernel
+.load_user:
+    mov edi, [current_user_loading_address]
+    jmp .load_con
+.load_kernel
     mov edi, [current_kernel_loading_address]
+.load_con:
+    ; 2. Prepare pointers for copying
+
     mov esi, 0xA000         ; Source: Temporary Buffer
-    push ecx                ; Save byte count for cleanup and pointer update
     
+    ; 3. Copy data correctly
+    push ecx                ; Save total byte count
+    mov ebx, ecx            ; Save copy in EBX for later
     shr ecx, 2              ; Divide by 4 for dword operations
     cld
-    rep movsd 
-
-    mov ecx, [sectors_loaded]
-    imul ecx, 512
+    rep movsd               ; Copy dwords
+    
+    mov ecx, ebx            ; Restore original count
     and ecx, 3              ; Get remainder (0-3 bytes)
     rep movsb               ; Copy remaining bytes
 
-    ; 3. Update the global loading pointer for the next track
-    pop ecx                 ; Restore byte count
+    ; 4. Update the global loading pointer for the next track
+    pop ecx                 ; Restore total byte count
+    cmp [sub_from_user], 0
+    jz .append_kernel
+.append_user:
+    add [current_user_loading_address], ecx
+    jmp .append_con
+.append_kernel:
     add [current_kernel_loading_address], ecx
 
-    ; 4. Clean up the 0x9000 buffer (Critical: Must reload ECX!)
+.append_con:
+
+    
+
+    ; 5. Clean up the temporary buffer
     mov edi, 0xA000
     mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
     xor eax, eax
     rep stosd               ; Zero out the temporary buffer
 
 .check_finished:
-    mov eax, [sectors_left]
+    mov eax, [user_sectors_left]
     test eax, eax
     jz .done                ; If no sectors left, we are finished!
 
     jmp switch_to_real_mode
 
 .done:
-    mov ebx, [current_kernel_loading_address]
-    sub ebx, 512 
-    mov ecx, 128
-.loop_start:
-    mov eax, [ebx]
-    call print_dd_hexa
-    add ebx, 4
-    loop .loop_start
 
     ; 5. Clear the Kernel's BSS area
     mov edi, [bss_start]
@@ -360,13 +371,30 @@ load_section:
 
 .limit_calculated:
     movzx ecx, cx
+    cmp [kernel_ended], 0
+    jnz .user_sub
+
+.kernel_sub:
     mov ebx, [sectors_left]
     cmp ecx, ebx
-    jge .done
+    jge .kernel_done
     jmp .con 
 
-.done:
+.user_sub:
+    mov byte [sub_from_user], 1
+    mov ebx, [user_sectors_left]
+    cmp ecx, ebx
+    jge .user_done
+    jmp .con
+
+.kernel_done:
     mov ecx, ebx
+    mov byte [kernel_ended], 1
+    jmp .con
+
+.user_done:
+    mov ecx, ebx
+
 .con:
     push cx                     ; Save [Count] for INT 0x13
     
@@ -409,7 +437,17 @@ load_section:
     movzx eax, al               ; Zero-extend AL to 32-bit
     add [start_sector], eax     ; Update the global variable
     mov [sectors_loaded], eax
+    cmp [sub_from_user], 1
+    jz .sub_from_user
+
+
     sub [sectors_left], eax
+    jmp .end_of_func
+
+.sub_from_user:
+    sub [user_sectors_left], eax
+
+.end_of_func:
 
     popa
     pop es
@@ -463,7 +501,11 @@ get_drive_geometry:
     ret
 
 .error:
-    ; Handle error (e.g., print a message)
+    mov si, error_msg
+    call print_string
+    mov al, ah
+    call print_hex_byte
+    cli
     hlt
 
 print_tab:
@@ -550,17 +592,20 @@ print_hex_digit:
 USER_LOADING_ADDRESS equ 0x40100000
 KERNEL_LOADING_ADDRESS equ 0x100000
 BOOT_DRIVE equ 0x85F0
-STAGE4_SECTOR equ 8
-START_SECTOR equ 9
-STAGE4_BASE equ 0x8A00
+STAGE4_SECTOR equ 10
+START_SECTOR equ 11
+STAGE4_BASE equ 0x8E00
 VGA_TEXT equ 0xB8000
+USER_SECTORS equ 8
 
 ; ----- Data Section -----
 
 sectors_left dd 0
+user_sectors_left dd 8
 start_sector dd START_SECTOR
 boot_drive db 0
 sectors_loaded dd 0
+user_sectors_loaded dd 0
 
 current_kernel_loading_address dd KERNEL_LOADING_ADDRESS
 current_user_loading_address dd USER_LOADING_ADDRESS
@@ -573,6 +618,8 @@ bss_start dd 0
 bss_end dd 0
 
 start db 0
+kernel_ended db 0
+sub_from_user db 0
 
 
 curr_place dd VGA_TEXT
@@ -588,4 +635,4 @@ error_msg:
 result_msg:
     db "Loaded Kernel Sectors! ", 0
 
-times 1024 -($-$$) db 0
+times 2048 -($-$$) db 0

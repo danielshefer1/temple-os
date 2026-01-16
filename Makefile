@@ -117,7 +117,7 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(KERNEL_ELF) $(USER_ELF)
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE3_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null
-	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=7 conv=notrunc
+	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=9 conv=notrunc
 	@echo "✅ Disk image created successfully!"
 
 # ============================================================================
