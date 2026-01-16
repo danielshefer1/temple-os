@@ -10,7 +10,7 @@ start:
 
     ; Load Stage 2 from disk
     mov ah, 0x02              ; BIOS read sector function
-    mov al, 4                 ; Number of sectors to read (Stage 2 size)
+    mov al, 6                 ; Number of sectors to read (Stage 2 + Stage 3 size)
     mov ch, 0                 ; Cylinder 0
     mov cl, 2                 ; Start at sector 2 (sector 1 is boot sector)
     mov dh, 0                 ; Head 0

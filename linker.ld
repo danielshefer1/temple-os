@@ -1,15 +1,14 @@
-ENTRY(stage3_entry)
+ENTRY(stage4_entry)
 OUTPUT_FORMAT(elf32-i386)
 
 SECTIONS
 {
-    /* Stage 3 (on disk) */
-    . = 0x8600;
+    /* Stage 4 (on disk) */
+    . = 0x8A00;
     _start_of_kernel_file = .;
 
-    .stage3 : {
-        *stage3.o(.text)
-        *(.text.stage3_entry)
+    .stage4 : {
+        *stage4.o(.text)
     }
 
     /* LMA where kernel pieces are placed on disk */
@@ -78,7 +77,7 @@ _text_size = SIZEOF(.text);
 
 
 __end_of_file_phys = _data_start + SIZEOF(.data);
-__file_size_bytes = __end_of_file_phys - _start_of_kernel_file;
+__file_size_bytes = __end_of_file_phys - _kernel_LMA_start;
 __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start + SIZEOF(.bootstrap);
 
 __sector_size = 512;

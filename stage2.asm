@@ -1,7 +1,4 @@
-%ifidn __OUTPUT_FORMAT__, bin
-    [ORG 0x7E00]
-%endif
-
+[ORG 0x7E00]
 [BITS 16]
 
 ; ----- Stage 2 Bootloader -----
@@ -13,7 +10,9 @@ start:
     mov ss, ax
     mov sp, STACK_ADDR         ; Set up stack
     ; Store boot drive number
-    mov [BOOT_DRIVE], dl
+    mov bx, boot_drive
+    mov [byte bx], dl
+
 
     ;mov si, message
     ;call print_string
@@ -30,13 +29,6 @@ start:
     ; Remap PIC (Programmable Interrupt Controller)
     call remap_pic
     
-    mov bx, STAGE3_ADDR      ; Destination address (ES:BX)
-    mov cl, 6           ; Start at Sector 6
-    mov al, 2        
-    call load_file
-
-
-no_additional_sectors:
     ; ===== ENTER PROTECTED MODE =====
 
     ; Disable interrupts
@@ -44,7 +36,7 @@ no_additional_sectors:
     
     ; Load the GDT
     lgdt [gdt_descriptor]
-    
+
     ; Enable protected mode
     mov eax, cr0
     or eax, 1
@@ -181,45 +173,6 @@ remap_pic:
     
     ret
 
-; INPUT
-; bx - destination address (ES:BX)
-; cl - sector
-; al - number of sectors to read
-; OUTPUT
-; Reads sectors into ES:BX
-load_file:
-    push bx
-    push es
-    push dx
-    push ax
-    push cx
-
-
-    mov dh, 0           ; Head 0
-    mov dl, [BOOT_DRIVE]; Drive number (saved from DL at boot)
-    mov ch, 0           ; Cylinder 0
-    mov ah, 0x02        ; BIOS Read Sector function
-    int 0x13
-    
-    jc .disk_error       ; Handle error if carry flag set
-    jmp .file_loaded
-
-.disk_error:
-    ; Print error message and halt
-    mov si, disk_error_msg
-    call print_string
-    shr ax, 8
-    call print_hex_byte
-    hlt
-
-.file_loaded:
-    pop cx
-    pop ax
-    pop dx
-    pop es
-    pop bx
-    ret
-
 ; ----- Data Section -----
 
 message:
@@ -231,8 +184,7 @@ message_protected:
 disk_error_msg:
     db "Disk Read Error!", 0
 
-BOOT_DRIVE db 0
-KERNEL_SIZE dd 0
+boot_drive equ 0x85F0
 
 STACK_ADDR equ 0x7C00
 
@@ -258,11 +210,11 @@ gdt_start:
 
     ; 3. 16-bit Code (0x18) - For returning to Real Mode
     dw 0xFFFF, 0x0000
-    db 0x00, 10011010b, 00001111b, 0x00 ; D bit is 0 (16-bit)
+    db 0x00, 10011010b, 10001111b, 0x00 ; D bit is 0 (16-bit)
 
     ; 4. 16-bit Data (0x20) - For returning to Real Mode
     dw 0xFFFF, 0x0000
-    db 0x00, 10010010b, 00001111b, 0x00 ; D bit is 0 (16-bit)
+    db 0x00, 10010010b, 10001111b, 0x00 ; D bit is 0 (16-bit)
 gdt_end:
 
 ; 4. GDT Descriptor (This is what you load into the CPU using LGDT)

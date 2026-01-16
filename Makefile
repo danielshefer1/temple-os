@@ -37,7 +37,7 @@ USER_C_SOURCES = user_app.c
 C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
 USER_C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_C_SOURCES:.c=.o))
 
-ASM_SOURCES = stage3.asm helpers.asm
+ASM_SOURCES = stage4.asm helpers.asm
 
 ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
 
@@ -48,8 +48,8 @@ KERNEL_OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 # OUTPUT FILES
 # ============================================================================
 STAGE1_BIN   = $(BUILD_DIR)/boot.bin
-STAGE2_BIN   = $(BUILD_DIR)/boot2.bin
-STAGE2_ELF   = $(BUILD_DIR)/stage2.elf
+STAGE2_BIN   = $(BUILD_DIR)/stage2.bin
+STAGE3_BIN	 = $(BUILD_DIR)/stage3.bin
 KERNEL_ELF   = $(BUILD_DIR)/kernel.elf
 DISK_IMG     = $(BUILD_DIR)/os.img
 PAYLOAD_BIN  = $(BUILD_DIR)/payload.bin
@@ -92,9 +92,10 @@ $(STAGE2_BIN): stage2.asm | $(BUILD_DIR)
 	@echo "💾 Assembling Stage 2 (BIN)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
-$(STAGE2_ELF): stage2.asm | $(BUILD_DIR)
-	@echo "💻 Assembling Stage 2 (ELF)..."
-	$(AS) $(ASFLAGS_ELF) $< -o $@
+# --- Assemble stage 3 (binary) ---
+$(STAGE3_BIN): stage3.asm | $(BUILD_DIR)
+	@echo "💾 Assembling Stage 3 (BIN)..."
+	$(AS) $(ASFLAGS_BIN) $< -o $@
 
 # --- Assemble stage 1 (MBR) ---
 $(STAGE1_BIN): boot.asm | $(BUILD_DIR)
@@ -102,9 +103,9 @@ $(STAGE1_BIN): boot.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
 # --- Create disk image ---
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage3 -j .bootstrap -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage4 -j .bootstrap -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
 	$(OBJCOPY) -O binary -j .text -j .data -j .bss $(USER_ELF) $(USER_BIN)
 
 	truncate -s %512 $(PAYLOAD_BIN)
@@ -115,7 +116,8 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR
     # Write to disk image
 	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
-	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=5 conv=notrunc
+	dd if=$(STAGE3_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null
+	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=7 conv=notrunc
 	@echo "✅ Disk image created successfully!"
 
 # ============================================================================
@@ -145,17 +147,6 @@ debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "set architecture i386" \
 		-ex "break bootstrap_kmain" \
 		-ex "layout src" \
-		-ex "continue"
-
-debug-stage3: $(DISK_IMG) $(KERNEL_ELF)
-	@echo "🐛 Starting QEMU with GDB server..."
-	qemu-system-i386 $(QEMU_FLAGS) -s -S &
-	gdb $(KERNEL_ELF) \
-		-tui \
-		-ex "target remote localhost:1234" \
-		-ex "set architecture i386" \
-		-ex "break stage3_entry" \
-		-ex "layout asm" \
 		-ex "continue"
 
 kill-qemu:
