@@ -210,11 +210,11 @@ gdt_start:
 
     ; 3. 16-bit Code (0x18) - For returning to Real Mode
     dw 0xFFFF, 0x0000
-    db 0x00, 10011010b, 10001111b, 0x00 ; D bit is 0 (16-bit)
+    db 0x00, 10011010b, 00001111b, 0x00 ; D bit is 0 (16-bit)
 
     ; 4. 16-bit Data (0x20) - For returning to Real Mode
     dw 0xFFFF, 0x0000
-    db 0x00, 10010010b, 10001111b, 0x00 ; D bit is 0 (16-bit)
+    db 0x00, 10010010b, 00001111b, 0x00 ; D bit is 0 (16-bit)
 gdt_end:
 
 ; 4. GDT Descriptor (This is what you load into the CPU using LGDT)

@@ -57,23 +57,35 @@ stage3_return2:
     test ecx, ecx           ; If we somehow loaded 0 bytes, skip
     jz .check_finished
 
+    ; Disable cache
+    mov eax, cr0
+    or eax, 0x60000000      ; Set CD and NW bits
+    mov cr0, eax
+    wbinvd                  ; Flush and invalidate cache
     ; 2. Prepare pointers for copying
     mov edi, [current_kernel_loading_address]
-    mov esi, 0x9000         ; Source: Temporary Buffer
+    mov esi, 0xA000         ; Source: Temporary Buffer
     push ecx                ; Save byte count for cleanup and pointer update
     
+    shr ecx, 2              ; Divide by 4 for dword operations
     cld
-    rep movsb               ; Move data to 1MB+ (EDI and ESI increment automatically)
+    rep movsd 
 
     ; 3. Update the global loading pointer for the next track
     pop ecx                 ; Restore byte count
     add [current_kernel_loading_address], ecx
 
+    ; ADD THIS: Ensure 4-byte alignment
+    mov eax, [current_kernel_loading_address]
+    add eax, 3              ; Round up
+    and eax, ~3             ; Clear bottom 2 bits
+    mov [current_kernel_loading_address], eax
+
     ; 4. Clean up the 0x9000 buffer (Critical: Must reload ECX!)
-    mov edi, 0x9000
-    mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
-    xor eax, eax
-    rep stosd               ; Zero out the temporary buffer
+    ;mov edi, 0xA000
+    ;mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
+    ;xor eax, eax
+    ;rep stosd               ; Zero out the temporary buffer
 
 .check_finished:
     mov eax, [sectors_left]
@@ -122,12 +134,12 @@ print_dd_hexa:
     mov edx, eax        ; Keep original value in EDX
     mov ecx, 8          ; 8 nibbles in a 32-bit doubleword
 
-.loop:
+.loop1:
     rol edx, 4          ; Rotate left 4 bits (brings the highest nibble to the bottom)
     mov eax, edx        ; Copy to EAX
     and al, 0x0F        ; Isolate the lowest 4 bits (the nibble)
     call print_byte_hexa
-    loop .loop          ; Decrement ECX and jump if not zero
+    loop .loop1          ; Decrement ECX and jump if not zero
 
     pop edx
     pop ecx
@@ -355,7 +367,7 @@ load_section:
     pop ax                      ; Restore [Count] into AL
     mov ah, 0x02                ; Read Sectors Function
     mov dl, [boot_drive]        ; Drive ID
-    mov bx, 0x9000              ; Destination Address (Buffer)
+    mov bx, 0xA000              ; Destination Address (Buffer)
     
     int 0x13
     jc .error
