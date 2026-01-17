@@ -77,31 +77,29 @@ load_tss:
 
 global switch_to_user_mode
 switch_to_user_mode:
-    ; 1. Setup Segment Registers for User Data (0x23)
-    mov ax, 0x23      ; User Data Selector (Index 4 | RPL 3)
+    mov ax, 0x23      ; User Data Selector
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    mov ebx, [esp + 4]
-    mov ecx, [esp + 8]
+    mov ebx, [esp + 4] ; EIP from the stack
+    mov ecx, [esp + 8] ; ESP from the stack
 
-    ; 2. Prepare the stack for IRET
-    ; The stack must contain: [SS] [ESP] [EFLAGS] [CS] [EIP]
+    ; [SS] [ESP] [EFLAGS] [CS] [EIP]
     
-    push 0x23               ; User Stack Segment (SS)
-    push ecx         ; User Stack Pointer (ESP) - Pointing to your 1GB map
+    push 0x23 ; User Stack Segment 
+    push ecx ; ESP
     
-    pushfd                  ; Push current EFLAGS
+    pushfd ; Push current EFLAGS
     pop eax
-    or eax, 0x200           ; Set IF bit (Interrupt Flag) so interrupts are enabled
-    push eax                ; Push modified EFLAGS
+    or eax, 0x200 ; Set IF bit (Interrupt Flag) so interrupts are enabled
+    push eax
     
-    push 0x1B               ; User Code Segment (CS) (Index 3 | RPL 3)
-    push ebx         ; Instruction Pointer (EIP) - Where to start execution
+    push 0x1B ; User Code Segment
+    push ebx ; EIP
 
-    iret                    ; Pop registers and drop to Ring 3
+    iret ; Pop registers and drop to Ring 3
 
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
