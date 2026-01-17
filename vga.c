@@ -54,6 +54,15 @@ void print_str(const char* str, uint8_t color) {
     }
 }
 
+uint32_t print_str_SYSCALL(const char* str, uint8_t color, uint32_t length) {
+    uint32_t idx = 0;
+    while (str[idx] != '\0' && idx < length) {
+        putchar(str[idx], color);
+        idx++;
+    }
+    return idx;
+}
+
 void clear_screen() {
     for (uint32_t i = 0; i < MAX_COLS * MAX_ROWS; i++) {
         VGA_BUFFER[i * 2] = 0;         // Space character

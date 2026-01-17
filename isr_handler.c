@@ -51,28 +51,6 @@ void isr_handler(interrupt_frame* frame) {
     else if (32 <= int_no && int_no < 48) {
         IRQHandler(frame);
     }
-    else if (int_no == SYS_CALL) {
-       SysCallHandler(frame); 
-    }
-}
-
-void SysCallHandler(interrupt_frame* frame) {
-    uint32_t cs = frame->cs;
-    if (cs == 0) return;
-
-    uint32_t syscall_id = frame->eax;
-
-    switch (syscall_id) {
-        case 1:
-            CliHelper();
-            HltHelper();
-            break;
-        case 2:
-            WriteHandler(frame);
-            break;
-        default:
-            UnknownSysCall();
-    }
 }
 
 void ExecptionHandler(interrupt_frame* frame) {
@@ -156,15 +134,6 @@ void IRQHandler(interrupt_frame* frame) {
             KeyboardHandler();
             break;
     }
-}
-
-void WriteHandler(interrupt_frame* frame) {
-    char* pointer = (char*) frame->ebx;
-    kprintf("%s", pointer);
-}
-
-void UnknownSysCall() {
-    kprintf("This is not a known SYSCALL");
 }
 
 void TimerHandler() {

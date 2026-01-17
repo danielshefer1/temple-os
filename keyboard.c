@@ -15,7 +15,7 @@ void FlushBuffer(InputBuffer* buffer) {
     buffer->tail = 0;
 }
 
-void GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, Tuple* keys) {
+uint32_t GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, Tuple* keys) {
     uint32_t curr_time = timer_ticks, idx = buffer->tail, tmp_idx = 0, end = buffer->head;
 
     while (curr_time - ms_back > buffer->buffer[idx].time && idx != end) {
@@ -30,7 +30,7 @@ void GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read,
             kprintf(user_buffer);
             idx++;
             buffer->tail = idx;
-            return;
+            return idx;
         }
         if (buffer->buffer[buffer->tail].c == '\b') {
             if (tmp_idx == 0) user_buffer[0] = '\0';
@@ -57,7 +57,7 @@ void GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read,
             if (isInTuple(keys, buffer->buffer[buffer->tail].c)) {
                 user_buffer[tmp_idx] = '\0';
                 putchar(buffer->buffer[buffer->tail].c, GREY_COLOR);
-                return;
+                return tmp_idx;
             }
             if (buffer->buffer[buffer->tail].c == '\b') {
                 if (tmp_idx == 0) user_buffer[0] = '\0';

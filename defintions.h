@@ -68,7 +68,11 @@
 
 // System Calls Definitions
 #define HLT_SYSCALL 1
-#define PRINT_SYS_CALL 2
+#define WRITE_SYSCALL 2
+#define READ_SYSCALL 3
+#define FLUSH_BUFFER_SYSCALL 4
+#define MMAP_SYSCALL 5
+#define MUNMAP_SYSCALL 6
 // System Calls Definitions End
 
 // Keyboard Definitions

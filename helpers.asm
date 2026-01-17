@@ -1,6 +1,7 @@
 [BITS 32]
 
 extern isr_handler
+extern syscall_handler
 
 section .helpers
 
@@ -125,6 +126,14 @@ isr_stub_%1:
     jmp isr_hardware_stub
 %endmacro
 
+%macro ISR_SYSCALL_STUB 1
+global isr_stub_%1
+isr_stub_%1:
+    push dword 0        ; fake error code
+    push dword %1       ; interrupt number
+    jmp isr_syscall_stub
+%endmacro
+
 ISR_STUB_NO_ERROR 0
 ISR_STUB_NO_ERROR 1
 ISR_STUB_NO_ERROR 2
@@ -148,7 +157,7 @@ ISR_STUB_NO_ERROR 20
 ISR_STUB_ERROR 21
 ISR_HARDWARE_STUB 32
 ISR_HARDWARE_STUB 33
-ISR_STUB_NO_ERROR 128
+ISR_SYSCALL_STUB 128
 
 
 global isr_common_stub
@@ -208,6 +217,32 @@ isr_hardware_stub:
 .no_slave:
     mov al, 0x20
     out 0x20, al      ; send EOI to master PIC
+
+    add esp, 8         ; clean up int num and error code
+    iret
+
+global isr_syscall_stub
+isr_syscall_stub:
+    pusha
+    push ds
+    push es
+    push fs
+    push gs
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp
+    call syscall_handler
+    add esp, 4
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
 
     add esp, 8         ; clean up int num and error code
     iret
