@@ -1,6 +1,8 @@
 #include "user_app.h"
 
+__attribute__((section(".text.entry")))
 void main() {
-    uint32_t test = 0;
-    test += 5;
+    char test[] = "Is this working";
+    write(test);
+    hlt_syscall();
 }

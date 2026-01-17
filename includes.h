@@ -44,3 +44,4 @@ extern void isr_stub_20();
 extern void isr_stub_21();
 extern void isr_stub_32();
 extern void isr_stub_33();
+extern void isr_stub_128();

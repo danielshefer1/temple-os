@@ -22,6 +22,7 @@ CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -
 ASFLAGS_BIN  = -f bin
 ASFLAGS_ELF  = -f elf32 -g
 LDFLAGS      = -m elf_i386 -T linker.ld
+USER_LDFLAGS = -m elf_i386 -T user_linker.ld
 QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=$(BUILD_DIR)/os.img
 
 # ============================================================================
@@ -38,11 +39,14 @@ C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
 USER_C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_C_SOURCES:.c=.o))
 
 ASM_SOURCES = stage4.asm helpers.asm
+USER_ASM_SOURCES = user_helpers.asm
+
 
 ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
-
+USER_ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_ASM_SOURCES:.asm=.o))
 # All object files needed for kernel
 KERNEL_OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
+USER_OBJECTS = $(USER_ASM_OBJECTS) $(USER_C_OBJECTS)
 
 # ============================================================================
 # OUTPUT FILES
@@ -71,9 +75,9 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld | $(BUILD_DIR)
 	@echo "🔗 Linking $(KERNEL_ELF)..."
 	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
 
-$(USER_ELF): $(USER_C_OBJECTS) user_linker.ld | $(BUILD_DIR)
+$(USER_ELF): $(USER_OBJECTS) user_linker.ld | $(BUILD_DIR)
 	@echo "🔗 Linking $(USER_ELF)..."
-	$(LD) $(LDFLAGS) -o $@ $(USER_C_OBJECTS)
+	$(LD) $(USER_LDFLAGS) -o $@ $(USER_C_OBJECTS) $(USER_ASM_OBJECTS)
 # --- Compile C sources ---
 -include $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.d))
 

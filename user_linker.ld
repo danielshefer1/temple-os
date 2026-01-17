@@ -5,6 +5,7 @@ SECTIONS {
     /* Dummy starting point */
     . = 0x1000;
     .text : AT (.) {
+        *(.text.entry)
         *(.text)
         *(.rodata*)
     }

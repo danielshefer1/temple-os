@@ -63,7 +63,13 @@
 #define GDT_CODE_SEGMENT 0x08
 #define IDT_TYPE_INTERRUPT_GATE 0xE
 #define IDT_TYPE_TRAP_GATE 0xF
+#define SYS_CALL 0x80
 // End IDT Definitions
+
+// System Calls Definitions
+#define HLT_SYSCALL 1
+#define PRINT_SYS_CALL 2
+// System Calls Definitions End
 
 // Keyboard Definitions
 #define LEFT_SHIFT_MAKE_SCANCODE 0x2A

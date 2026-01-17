@@ -11,6 +11,7 @@ void isr_handler(interrupt_frame* frame);
 
 void ExecptionHandler(interrupt_frame* frame);
 void IRQHandler(interrupt_frame* frame);
+void SysCallHandler(interrupt_frame* frame);
 
 // Exception Handlers
 void DivideByZeroHandler(interrupt_frame* frame);
@@ -39,3 +40,7 @@ void UnknownExceptionHandler(interrupt_frame* frame);
 // IRQ Handlers
 void TimerHandler();
 void KeyboardHandler();
+
+// SysCall Handlers
+void WriteHandler(interrupt_frame* frame);
+void UnknownSysCall();
