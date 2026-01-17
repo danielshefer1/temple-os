@@ -341,16 +341,11 @@ load_section:
     push es
     pusha
 
-    ; 1. Setup Buffer Segment
     xor eax, eax
     mov es, ax
 
     mov [sectors_loaded], eax
 
-    ; 2. 32-bit Division for Sector Calculation
-    ; Formula: LBA / MAX_SECTOR
-    ; Quotient (EAX) = Total Tracks
-    ; Remainder (EDX) = Sector Index (0-based)
     
     mov eax, [start_sector]     ; Load 32-bit LBA
     xor edx, edx                ; CLEAR EDX (Critical for 32-bit div!)
@@ -363,16 +358,13 @@ load_section:
 .isnt_63:
     mov [current_sector_val], dx ; Save standard sector number for later
 
-    ; 3. Calculate "Safe Read Count"
-    ; We can only read up to the end of the current track.
-    ; SafeCount = MAX_SECTOR - CurrentSector + 1
+    ; SafeCount = MAX_SECTOR - CurrentSector
     mov cx, [MAX_SECTOR]
     sub cx, dx                  ; Remaining sectors after this one
     inc cx                      ; Include this one
-    ; If remaining sectors > 16, just read 16. Otherwise read whatever is left.
     cmp cx, 16
     jle .limit_calculated
-    mov cx, 16                  ; Cap read size at 16
+    mov cx, 16                  
 
 .limit_calculated:
     movzx ecx, cx
@@ -395,44 +387,34 @@ load_section:
 .con:
     push cx                     ; Save [Count] for INT 0x13
     
-    ; 4. Calculate Cylinder and Head
-    ; EAX currently holds "Total Tracks".
-    ; Formula: TotalTracks / MAX_HEAD
-    ; Quotient (EAX) = Cylinder
-    ; Remainder (EDX) = Head
-    
-    xor edx, edx                ; Clear EDX again!
+    xor edx, edx                
     movzx ebx, word [MAX_HEAD]
     div ebx
     
-    ; Now: EAX = Cylinder, EDX = Head
     
-    ; 5. Construct BIOS Registers
     ; CH = Cylinder Low, DH = Head, CL = Sector
-    mov dh, dl                  ; Head
-    mov ch, al                  ; Cylinder Low 8 bits
+    mov dh, dl                  
+    mov ch, al                  
 
-    ; Handle Cylinder High Bits (Bits 8-9 go to CL bits 6-7)
+    ; Handle Cylinder High Bits
     mov dl, ah                  ; Get Cylinder High bits
     shl dl, 6                   ; Shift to top position
     
-    mov bx, [current_sector_val]; Retrieve the sector number we calculated
+    mov bx, [current_sector_val]
     or dl, bl                   ; Combine High Cyl bits with Sector
-    mov cl, dl                  ; Move to CL
+    mov cl, dl                  
     
-    ; 6. Perform the Read
-    pop ax                      ; Restore [Count] into AL
-    mov ah, 0x02                ; Read Sectors Function
-    mov dl, [boot_drive]        ; Drive ID
-    mov bx, 0xA000              ; Destination Address (Buffer)
+    pop ax                      
+    mov ah, 0x02                
+    mov dl, [boot_drive]        
+    mov bx, 0xA000              
     
     int 0x13
     jc .error
 
-    ; 7. Update the LBA for the next loop
-    ; Add the number of sectors we actually read (AL) to the start_sector variable
+
     movzx eax, al               ; Zero-extend AL to 32-bit
-    add [start_sector], eax     ; Update the global variable
+    add [start_sector], eax     
     mov [sectors_loaded], eax
     mov ebx, [sectors_left]
     cmp ebx, 0
