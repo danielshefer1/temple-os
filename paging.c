@@ -41,6 +41,7 @@ uint32_t AddKernelPageTable() {
     pd[curr_table].global = 1;
     pd[curr_table].frame = (next_pt - KERNEL_VIRTUAL) >> 12;
     
+    flush_tlb();
 
     return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
 }
@@ -115,6 +116,8 @@ void FillPageDirectory(void* addr, uint32_t size) {
         // 6. Advance current_addr by the amount we just mapped
         current_addr += pages_to_fill * PAGE_SIZE;
     }
+    flush_tlb();
+
 }
 
 void RemovePageTables(uint32_t start_table, uint32_t end_table) {
@@ -158,7 +161,39 @@ uint32_t AddKernelPages(uint32_t num_pages) {
         pt[curr_page].frame = (curr_table * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
         curr_page++;
     }
+    flush_tlb();
     return ret;
+}
+
+uint32_t AddStack() {
+    if (curr_page + STACK_PAGES >= 1024) AddKernelPageTable();
+    uint32_t idx = curr_page, end = idx + STACK_PAGES;
+
+    pt[curr_page].present = 0;
+    idx++;
+    curr_page++;
+
+    for(; idx < end; idx++) {
+        if (curr_page == 1024) {
+            curr_page = 0;
+            curr_table++;
+            pt = (pte_t*)(KERNEL_VIRTUAL + (pd[curr_table].frame << 12));
+        }
+        pt[curr_page].present = 1;
+        pt[curr_page].rw = 1;
+        pt[curr_page].user = 0;
+        pt[curr_page].write_thru = 0;
+        pt[curr_page].cache_dis = 0;
+        pt[curr_page].accessed = 0;
+        pt[curr_page].dirty = 0;
+        pt[curr_page].pat = 0;
+        pt[curr_page].global = 1;
+        pt[curr_page].frame = (curr_table * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
+        curr_page++;
+    }
+    flush_tlb();
+
+    return KERNEL_VIRTUAL + curr_page * PAGE_SIZE + curr_table * TABLE_SIZE - 4;
 }
 
 void AddGuardPage(uint32_t Tidx, uint32_t Pidx) {
@@ -167,4 +202,5 @@ void AddGuardPage(uint32_t Tidx, uint32_t Pidx) {
     }
     pte_t* page_table = (pte_t*)(KERNEL_VIRTUAL + (pd[Tidx].frame << 12));
     page_table[Pidx].present = 0;
+    flush_tlb();
 }

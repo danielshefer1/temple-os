@@ -18,6 +18,7 @@
 #define TABLE_SIZE PAGE_SIZE * 1024
 #define HIGHER_HALF_IDX 512
 #define PAGE_SIZE_LOG2 12
+#define STACK_PAGES 8
 // End Paging Definitions 
 
 // E820 Definitions

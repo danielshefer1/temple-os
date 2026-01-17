@@ -68,6 +68,41 @@ check_interrupts:
     and eax, 1          ; Mask everything else (get only the IF bit)
     ret
 
+global load_tss
+load_tss:
+    xor eax, eax
+    mov ax, 0x2B      ; Index 5 | RPL 3 (0x28 | 3 = 0x2B)
+    ltr ax            ; Load Task Register
+    ret
+
+global switch_to_user_mode
+switch_to_user_mode:
+    ; 1. Setup Segment Registers for User Data (0x23)
+    mov ax, 0x23      ; User Data Selector (Index 4 | RPL 3)
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov ebx, [esp + 4]
+    mov ecx, [esp + 8]
+
+    ; 2. Prepare the stack for IRET
+    ; The stack must contain: [SS] [ESP] [EFLAGS] [CS] [EIP]
+    
+    push 0x23               ; User Stack Segment (SS)
+    push ecx         ; User Stack Pointer (ESP) - Pointing to your 1GB map
+    
+    pushfd                  ; Push current EFLAGS
+    pop eax
+    or eax, 0x200           ; Set IF bit (Interrupt Flag) so interrupts are enabled
+    push eax                ; Push modified EFLAGS
+    
+    push 0x1B               ; User Code Segment (CS) (Index 3 | RPL 3)
+    push ebx         ; Instruction Pointer (EIP) - Where to start execution
+
+    iret                    ; Pop registers and drop to Ring 3
+
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1

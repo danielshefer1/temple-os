@@ -17,6 +17,8 @@ extern void LoadIDTHelper();
 extern uint8_t inb(uint8_t port);
 extern void outb(uint8_t port, uint8_t value);
 extern bool check_interrupts();
+extern void load_tss();
+extern void switch_to_user_mode(uint32_t eip, uint32_t esp);
 
 // ISR stubs
 extern void isr_stub_0();

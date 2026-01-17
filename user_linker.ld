@@ -3,7 +3,7 @@ OUTPUT_FORMAT(elf32-i386)
 
 SECTIONS {
     /* Dummy starting point */
-    . = 0x400000;
+    . = 0x1000;
     .text : AT (.) {
         *(.text)
         *(.rodata*)

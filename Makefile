@@ -30,7 +30,7 @@ QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=$(BUILD_DIR)/os.img
 
 C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
  slab_alloc.c paging.c math_ops.c buddy_alloc.c set_gdt.c isr_handler.c \
-  set_idt.c timer.c keyboard.c global.c str_ops.c
+  set_idt.c timer.c keyboard.c global.c str_ops.c set_tss.c
 
 USER_C_SOURCES = user_app.c
 
@@ -149,15 +149,14 @@ debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "layout src" \
 		-ex "continue"
 
-debug-stage4: $(DISK_IMG) $(KERNEL_ELF)
+debug-user: $(DISK_IMG) $(USER_ELF)
 	@echo "🐛 Starting QEMU with GDB server..."
 	qemu-system-i386 $(QEMU_FLAGS) -s -S &
-	gdb $(KERNEL_ELF) \
+	gdb $(USER_ELF) \
 		-tui \
 		-ex "target remote localhost:1234" \
 		-ex "set architecture i386" \
-		-ex "break *0x8A0C" \
-		-ex "layout asm" \
+		-ex "break main" \
 		-ex "continue"
 
 kill-qemu:

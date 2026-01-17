@@ -1,6 +1,6 @@
 #include "set_gdt.h"
 
-static gdt_entry gdt[5];
+static gdt_entry gdt[6];
 static gdt_ptr gdtr;
 
 void SetGDTEntry(uint32_t base, uint32_t limit, uint8_t present, uint8_t privilege, uint8_t type,
