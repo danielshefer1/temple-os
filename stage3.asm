@@ -121,10 +121,10 @@ stage3_return2:
     
 
     ; 5. Clean up the temporary buffer
-    mov edi, 0xA000
-    mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
-    xor eax, eax
-    rep stosd               ; Zero out the temporary buffer
+    ;mov edi, 0xA000
+    ;mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
+    ;xor eax, eax
+    ;rep stosd               ; Zero out the temporary buffer
 
 .check_finished:
     mov eax, [user_sectors_left]
