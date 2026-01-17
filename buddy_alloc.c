@@ -1,6 +1,7 @@
 #include "buddy_alloc.h"
 
 static BuddyBin bins[MAX_ORDER];
+static uint32_t lowest_valid;
 
 void InitBuddyAlloc(uint32_t start, uint32_t size) {
     for (int i = 0; i < MAX_ORDER; i++) {
@@ -14,6 +15,7 @@ void InitBuddyAlloc(uint32_t start, uint32_t size) {
         size -= 1 << bit;
         bins[bit].head_free = CreateBuddyNode((void*)start, bit);
         start += 1 << bit;
+        lowest_valid = bit;
     }
 }
 
@@ -175,12 +177,14 @@ void FreeBuddy(void* address) {
     }
     if (org_int_state) StiHelper();
 
+    lowest_valid = FindLowest();
+
 }
 
 void* RequestBuddy(uint32_t size) {
     bool org_int_state = check_interrupts();
     CliHelper();
-    uint32_t order = BiggestBit(size);
+    uint32_t order = BiggestBit(size), tmp;
     if (!IsPowerOfTwo(size)) order++;
 
     if (order < PAGE_SIZE_LOG2) {
@@ -190,6 +194,13 @@ void* RequestBuddy(uint32_t size) {
     if (order >= MAX_ORDER) {
         return NULL;
     }
+
+    if (order < lowest_valid) {
+        tmp = order;
+        order = lowest_valid;
+        lowest_valid = tmp;
+    } 
+
 
     for (uint32_t current_order = order; current_order < MAX_ORDER; current_order++) {
         if (bins[current_order].head_free != NULL) {
@@ -225,6 +236,13 @@ void InsertSortedBuddyNode(BuddyBin* bin, BuddyNode* node, bool free_list) {
     }
     node->next = current->next;
     current->next = node;
+}
+
+uint32_t FindLowest() {
+    for (uint32_t i = PAGE_SIZE_LOG2; i < MAX_ORDER; i++) {
+        if (bins[i].head_free != NULL) return i;
+    }
+    return 0;
 }
 
 

@@ -73,16 +73,18 @@ stage3_return2:
     mov fs, eax
     mov gs, eax
     mov ss, eax
+
     ; 1. Calculate bytes loaded: ECX = sectors_loaded * 512
     mov eax, [sectors_loaded]
-    call print_dd_hexa
+    ;call print_dd_hexa
     imul ecx, eax, 512      ; Use imul for 3-operand math
     test ecx, ecx           ; If we somehow loaded 0 bytes, skip
     jz .check_finished
 
-    cmp [sub_from_user], 0
+    mov ebx, [user_sectors_left]
+    cmp ebx, USER_SECTORS
     jz .load_kernel
-.load_user:
+
     mov edi, [current_user_loading_address]
     jmp .load_con
 .load_kernel
@@ -105,7 +107,8 @@ stage3_return2:
 
     ; 4. Update the global loading pointer for the next track
     pop ecx                 ; Restore total byte count
-    cmp [sub_from_user], 0
+    mov ebx, [user_sectors_left]
+    cmp ebx, USER_SECTORS
     jz .append_kernel
 .append_user:
     add [current_user_loading_address], ecx
@@ -278,7 +281,7 @@ real_entry:
     jmp switch_to_protected_mode1
 .loading:
     ; We just came back from fetching metadata or copying a chunk
-    mov eax, [sectors_left]
+    mov eax, [user_sectors_left]
     test eax, eax
     jz .all_done                ; If 0, we are finished loading
 
@@ -339,8 +342,10 @@ load_section:
     pusha
 
     ; 1. Setup Buffer Segment
-    xor ax, ax
+    xor eax, eax
     mov es, ax
+
+    mov [sectors_loaded], eax
 
     ; 2. 32-bit Division for Sector Calculation
     ; Formula: LBA / MAX_SECTOR
@@ -371,28 +376,20 @@ load_section:
 
 .limit_calculated:
     movzx ecx, cx
-    cmp [kernel_ended], 0
-    jnz .user_sub
-
-.kernel_sub:
     mov ebx, [sectors_left]
-    cmp ecx, ebx
-    jge .kernel_done
-    jmp .con 
+    test ebx, ebx
+    jz .user_sub
+    cmp ebx, ecx
+    jge .con
+
+.kernel_end:
+    mov ecx, ebx
+    jmp .con
 
 .user_sub:
-    mov byte [sub_from_user], 1
     mov ebx, [user_sectors_left]
-    cmp ecx, ebx
-    jge .user_done
-    jmp .con
-
-.kernel_done:
-    mov ecx, ebx
-    mov byte [kernel_ended], 1
-    jmp .con
-
-.user_done:
+    cmp ebx, ecx
+    jge .con
     mov ecx, ebx
 
 .con:
@@ -437,11 +434,10 @@ load_section:
     movzx eax, al               ; Zero-extend AL to 32-bit
     add [start_sector], eax     ; Update the global variable
     mov [sectors_loaded], eax
-    cmp [sub_from_user], 1
+    mov ebx, [sectors_left]
+    cmp ebx, 0
     jz .sub_from_user
-
-
-    sub [sectors_left], eax
+    sub [sectors_left], eax 
     jmp .end_of_func
 
 .sub_from_user:
@@ -618,8 +614,6 @@ bss_start dd 0
 bss_end dd 0
 
 start db 0
-kernel_ended db 0
-sub_from_user db 0
 
 
 curr_place dd VGA_TEXT

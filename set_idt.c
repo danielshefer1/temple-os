@@ -3,10 +3,6 @@
 static idt_entry idt[256];
 static idt_ptr idtr;
 
-static uint32_t test_arr[] = {
-    0xFFFF, 0XFFFFFFFF
-};
-
 static void* handlers[] = {
     (void*)isr_stub_0,
     (void*)isr_stub_1,

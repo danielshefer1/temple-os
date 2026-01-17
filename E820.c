@@ -86,6 +86,6 @@ void print_E820_entrys(E820Entry* entries, uint32_t length) {
 }
 
 void print_E820_entry(E820Entry entry, uint32_t idx) {
-    kprintf("Entry %d:\nBase: 0x%8x\tLength: 0x%8x\tType: %d\n",
+    kprintf("Entry %d:\nBase: %8x\tLength: %8x\tType: %d\n",
          idx, entry.base_low, entry.length_low, entry.type);
 }

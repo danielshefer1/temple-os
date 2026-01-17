@@ -19,3 +19,4 @@ void RemoveBuddyNode(BuddyBin* bin, void* address, bool free_list);
 void* SplitNode(BuddyNode* node, uint32_t target_order);
 void FreeBuddy(void* address);
 void FillPageDirectory(void* addr, uint32_t size);
+uint32_t FindLowest();

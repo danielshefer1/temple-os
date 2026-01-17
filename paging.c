@@ -77,7 +77,7 @@ void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pag
         user_pt[idx].dirty = 0;
         user_pt[idx].pat = 0;
         user_pt[idx].global = 0;
-        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE + KERNEL_VIRTUAL) >> 12;
+        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE + (KERNEL_VIRTUAL >> 1)) >> 12;
     }
 }
 
