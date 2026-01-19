@@ -67,7 +67,7 @@
 // End IDT Definitions
 
 // System Calls Definitions
-#define HLT_SYSCALL 1
+#define EXIT_SYSCALL 1
 #define WRITE_SYSCALL 2
 #define READ_SYSCALL 3
 #define FLUSH_BUFFER_SYSCALL 4

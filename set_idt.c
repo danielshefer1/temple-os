@@ -74,6 +74,11 @@ void InitIDT() {
         if (handlers[i] == 0) {
             kerror("Handler %d is NULL\n", i);    
         }
+        if (handlers_idx[i] == 128) {
+            SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
+                PRIVILEGE_USER, IDT_TYPE_TRAP_GATE, handlers_idx[i]);
+            continue;
+        }
         SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
          PRIVILEGE_USER, IDT_TYPE_INTERRUPT_GATE, handlers_idx[i]);
     }

@@ -59,6 +59,7 @@ void InitPageTable(pte_t* page_table, uint32_t kernel_pages, uint32_t text_size,
 
     uint32_t total_end = low_mem_end + kernel_size + page_tables_size + stack_size + PAGE_SIZE * 4;
     uint32_t entries_needed = (total_end) / 0x1000;
+    uint32_t MMIO_entries = low_mem_end / PAGE_SIZE;
 
     for (uint32_t i = 0; i < entries_needed; i++) {
         page_table[i].present = 1;
@@ -67,10 +68,11 @@ void InitPageTable(pte_t* page_table, uint32_t kernel_pages, uint32_t text_size,
         } else {
             page_table[i].rw = 1;  // Read-write for others
         }
+        if (i < MMIO_entries && is_global) page_table[i].cache_dis = 1;
+        else page_table[i].cache_dis = 0;
         page_table[i].user = 0;
         page_table[i].user = 0;
         page_table[i].write_thru = 0;
-        page_table[i].cache_dis = 0;
         page_table[i].accessed = 0;
         page_table[i].dirty = 0;
         page_table[i].pat = 0;

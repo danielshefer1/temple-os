@@ -2,13 +2,8 @@
 
 __attribute__((section(".text.entry")))
 void main() {
-    uint32_t size = 0x1000;
-    void* ret_addr = (void*) mmap(size);
-    printf("Returned Address: %x\n", ret_addr);
-    uint32_t munmap_status = munmap(ret_addr);
-    printf("MunMap Status: %d", munmap_status);
-    uint32_t* test_addr = (uint32_t*) ret_addr;
-    uint32_t test = test_addr[0];
+    uint32_t test;
+    scanf("%d", &test);
     hlt_syscall();
 }
 
