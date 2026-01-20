@@ -169,3 +169,15 @@ struct tss_entry_struct {
 } __attribute__((packed));
 
 typedef struct tss_entry_struct tss_entry_t;
+
+typedef struct VFSNode {
+    uint32_t type;
+    uint32_t size;
+    uint32_t permissions;
+    uint32_t owner_id;
+    uint32_t group_id;
+    uint32_t link_count;
+    bool lock;
+    char* name;
+    struct VFSNode* next;
+} VFSNode;
