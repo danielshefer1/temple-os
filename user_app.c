@@ -3,8 +3,11 @@
 __attribute__((section(".text.entry")))
 void main() {
     uint32_t test;
-    scanf("%d", &test);
-    hlt_syscall();
+    char test1[20];
+    printf("Input a number and phrase: ");
+    scanf("%d %s", &test, test1);
+    printf("Number: %d\nPhrase: %s\n", test, test1);
+    exit();
 }
 
 void printf(const char* format, ...) {

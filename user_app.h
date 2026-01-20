@@ -14,7 +14,7 @@ extern uint32_t read(const char* buffer, Tuple* triggers, uint32_t max_read);
 extern uint32_t mmap(uint32_t size);
 extern uint32_t munmap(void* addr);
 extern uint32_t flush_consle_buffer();
-extern void hlt_syscall();
+extern void exit();
 
 void main();
 void printf(const char* format, ...);

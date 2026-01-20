@@ -38,8 +38,8 @@ munmap:
     int 0x80
     ret
 
-global hlt_syscall
-hlt_syscall:
+global exit
+exit:
     mov eax, 1
     int 0x80
     ret
