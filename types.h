@@ -170,7 +170,7 @@ struct tss_entry_struct {
 
 typedef struct tss_entry_struct tss_entry_t;
 
-typedef struct VFSNode {
+typedef struct VFSAttr {
     uint32_t type;
     uint32_t size;
     uint32_t permissions;
@@ -178,6 +178,11 @@ typedef struct VFSNode {
     uint32_t group_id;
     uint32_t link_count;
     bool lock;
+} VFSAttr;
+typedef struct VFSNode {
+    VFSAttr attr;
     char* name;
+    struct VFSNode* parent;
+    struct VFSNode* children;
     struct VFSNode* next;
 } VFSNode;

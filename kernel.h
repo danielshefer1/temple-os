@@ -12,5 +12,6 @@
 #include "keyboard.h"
 #include "E820.h"
 #include "set_tss.h"
+#include "vfs.h"
 
 void kmain();

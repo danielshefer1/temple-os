@@ -2,7 +2,7 @@
 #include "includes.h"
 
 // Slab Definitions
-#define NUM_CACHE 2
+#define NUM_CACHE 3
 #define SLAB_GARBAGE_BYTE 0xAC
 // End Slab Definitions
 
@@ -101,3 +101,8 @@
 #define MASTER_PIC_IMR 0x21
 #define IRQ_COM1 4
 // End Serial Definitions
+
+// VFS Definitons
+#define VFS_FILE 0
+#define VFS_DIRECTORY 1
+// VFS Definitons

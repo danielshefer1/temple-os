@@ -15,6 +15,9 @@ void start() {
     InitTimer(TIMER_FREQUENCY);
     InitVGA();
     InitConsoleBuffer();
+
+    InitVFS();
+
     kprintf("Kernel Initialized Successfully\n");
 }
 
@@ -28,10 +31,9 @@ void end() {
 void kmain() {
     start();
 
+    AddVFSNode(VFS_FILE, 0, 0, 0, "test1", "/");
+    PrintVFS();
 
-    RequestBuddy(pow(2, 30));
-
-    switch_to_user_mode(0x1000 , 0x3000);
 
     end();
 }

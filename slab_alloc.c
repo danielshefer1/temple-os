@@ -1,8 +1,8 @@
 #include "slab_alloc.h"
 
 static Cache caches[NUM_CACHE];
-static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode), PAGE_SIZE};
-static uint32_t slab_sizes[NUM_CACHE] = {1, 16};
+static uint32_t sizes[NUM_CACHE] = {sizeof(BuddyNode), PAGE_SIZE, sizeof(VFSNode)};
+static uint32_t slab_sizes[NUM_CACHE] = {1, 32, 2};
 static uint32_t curr_addr;
 
 void InitSlabAlloc(uint32_t start) {
@@ -20,13 +20,19 @@ void InitSlabAlloc(uint32_t start) {
         caches[i].empty_slabs->start = (void*) start_addr;
         caches[i].empty_slabs->num_slots = slab_sizes[i] * PAGE_SIZE / sizes[i];
         caches[i].empty_slabs->free_count = slab_sizes[i] * PAGE_SIZE / sizes[i];
-        caches[i].empty_slabs->bitmap_size = (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32;
+        caches[i].empty_slabs->bitmap_size = CalculateBitMapSize(i);
         for (uint32_t j = 0; j < caches[i].empty_slabs->bitmap_size; j++) {
             caches[i].empty_slabs->bitmap[j] = 0;
         }
         curr_addr += sizeof(Slab) + sizeof(uint32_t) * caches[i].empty_slabs->bitmap_size;
     }
 }
+
+uint32_t CalculateBitMapSize(uint32_t i) {
+    if ((slab_sizes[i] * PAGE_SIZE / sizes[i]) % 32 == 0) return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32; 
+    else return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32 + 1;
+}
+
 uint32_t GetEmptyBit(uint32_t num) {
     uint32_t bit_pos = 0, bit;
     while (bit_pos < 32) {
