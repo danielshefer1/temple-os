@@ -34,6 +34,5 @@ void kmain() {
     AddVFSNode(VFS_FILE, 0, 0, 0, "test1", "/");
     PrintVFS();
 
-
     end();
 }
