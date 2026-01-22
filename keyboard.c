@@ -1,21 +1,21 @@
 #include "keyboard.h"
 
-void PushKeyboardBuffer(InputBuffer* buffer, char c) {
+void PushKeyboardBuffer(input_buffer_t* buffer, char c) {
     buffer->buffer[buffer->head].c = c;
     buffer->buffer[buffer->head].time = timer_ticks;
     buffer->head = (buffer->head + 1) % buffer->size;
 }
 
-bool isInTuple(Tuple* tuple, uint32_t value) {
+bool isInTuple(tuple_t* tuple, uint32_t value) {
     return (value == tuple->first || value == tuple->second);
 }
 
-void FlushBuffer(InputBuffer* buffer) {
+void FlushBuffer(input_buffer_t* buffer) {
     buffer->head = 0;
     buffer->tail = 0;
 }
 
-uint32_t GetInputUntilKey(InputBuffer* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, Tuple* keys) {
+uint32_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, tuple_t* keys) {
     uint32_t curr_time = timer_ticks, idx = buffer->tail, tmp_idx = 0, end = buffer->head;
 
     while (curr_time - ms_back > buffer->buffer[idx].time && idx != end) {
@@ -82,10 +82,10 @@ void kscanf(const char *format, ...) {
     char nums_buffer[20];
     char* p1;
     uint32_t* p2;
-    Tuple num_triggers;
+    tuple_t num_triggers;
     num_triggers.first = ' ';
     num_triggers.second = '\n';
-    Tuple str_triggers;
+    tuple_t str_triggers;
     str_triggers.first = '\0';
     str_triggers.second = '\n';
 
@@ -132,5 +132,5 @@ void InitConsoleBuffer() {
     console_buffer.head = 0;
     console_buffer.tail = 0;
     console_buffer.size = CONSOLE_BUFFER_SIZE;
-    console_buffer.buffer = kmalloc(sizeof(TimedKey) * CONSOLE_BUFFER_SIZE);
+    console_buffer.buffer = kmalloc(sizeof(timed_key_t) * CONSOLE_BUFFER_SIZE);
 }

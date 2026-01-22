@@ -152,10 +152,10 @@ void scanf(const char *format, ...) {
     char nums_buffer[20];
     char* p1;
     uint32_t* p2;
-    Tuple num_triggers;
+    tuple_t num_triggers;
     num_triggers.first = ' ';
     num_triggers.second = '\n';
-    Tuple str_triggers;
+    tuple_t str_triggers;
     str_triggers.first = '\0';
     str_triggers.second = '\n';
 

@@ -1,12 +1,12 @@
 #include "set_gdt.h"
 
-static gdt_entry gdt[6];
-static gdt_ptr gdtr;
+static gdt_entry_t gdt[6];
+static gdt_ptr_t gdtr;
 
 void SetGDTEntry(uint32_t base, uint32_t limit, uint8_t present, uint8_t privilege, uint8_t type,
      uint8_t exec, uint8_t dir_conf, uint8_t wr, uint8_t access, uint8_t reserved,
      uint8_t long_mode, uint8_t default_big, uint8_t granularity, uint32_t idx) {
-    gdt_entry* entry = &gdt[idx];
+    gdt_entry_t* entry = &gdt[idx];
 
     entry->limit_low = (limit & 0xFFFF);
     entry->base_low = (base & 0xFFFF);
@@ -31,7 +31,7 @@ void SetGDTEntry(uint32_t base, uint32_t limit, uint8_t present, uint8_t privile
 }
 
 void CheckGDT() {
-    gdt_ptr current_gdtr;
+    gdt_ptr_t current_gdtr;
     
     __asm__ volatile("sgdt %0" : "=m"(current_gdtr));
     

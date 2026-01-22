@@ -43,7 +43,7 @@ static char special_chars[] = {
     ')', '!', '@', '#', '$', '%', '^', '&', '*', '('
 };
 
-void isr_handler(interrupt_frame* frame) {
+void isr_handler(interrupt_frame_t* frame) {
     uint32_t int_no = frame->int_no;
     if (int_no < 32) {
         ExecptionHandler(frame);
@@ -53,7 +53,7 @@ void isr_handler(interrupt_frame* frame) {
     }
 }
 
-void ExecptionHandler(interrupt_frame* frame) {
+void ExecptionHandler(interrupt_frame_t* frame) {
     uint32_t int_no = frame->int_no;
 
     switch (int_no) {
@@ -123,7 +123,7 @@ void ExecptionHandler(interrupt_frame* frame) {
     }
 }
 
-void IRQHandler(interrupt_frame* frame) {
+void IRQHandler(interrupt_frame_t* frame) {
     uint32_t int_no = frame->int_no;
 
     switch (int_no) {
@@ -156,101 +156,101 @@ void KeyboardHandler() {
         if (shift_pressed) {
             if (c <= 'z' && c >= 'a') c -= 32;
             else {
-                c -= 48;
-                c = special_chars[c];
+                uint8_t special_idx = c - 48;
+                c = special_chars[special_idx];
             }
         }
         PushKeyboardBuffer(&console_buffer, c);
     }
 }
 
-void DivideByZeroHandler(interrupt_frame* frame) {
+void DivideByZeroHandler(interrupt_frame_t* frame) {
     kerror("Exception 0: Divide by Zero at EIP: %x\n", frame->eip);
 }
 
-void DebugHandler(interrupt_frame* frame) {
+void DebugHandler(interrupt_frame_t* frame) {
     kerror("Exception 1: Debug Trap at EIP: %x\n", frame->eip);
 }
 
-void NMIHandler(interrupt_frame* frame) {
+void NMIHandler(interrupt_frame_t* frame) {
     kerror("Exception 2: Non-Maskable Interrupt at EIP: %x\n", frame->eip);
 }
 
-void BreakpointHandler(interrupt_frame* frame) {
+void BreakpointHandler(interrupt_frame_t* frame) {
     kerror("Exception 3: Breakpoint at EIP: %x\n", frame->eip);
 }
 
-void OverflowHandler(interrupt_frame* frame) {
+void OverflowHandler(interrupt_frame_t* frame) {
     kerror("Exception 4: Overflow at EIP: %x\n", frame->eip);
 }
 
-void BoundRangeExceededHandler(interrupt_frame* frame) {
+void BoundRangeExceededHandler(interrupt_frame_t* frame) {
     kerror("Exception 5: BOUND Range Exceeded at EIP: %x\n", frame->eip);
 }
 
-void InvalidOpcodeHandler(interrupt_frame* frame) {
+void InvalidOpcodeHandler(interrupt_frame_t* frame) {
     kerror("Exception 6: Invalid Opcode at EIP: %x\n", frame->eip);
 }
 
-void DeviceNotAvailableHandler(interrupt_frame* frame) {
+void DeviceNotAvailableHandler(interrupt_frame_t* frame) {
     kerror("Exception 7: Device Not Available at EIP: %x\n", frame->eip);
 }
 
-void DoubleFaultHandler(interrupt_frame* frame) {
+void DoubleFaultHandler(interrupt_frame_t* frame) {
     kerror("Exception 8: Double Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void CoprocessorSegmentOverrunHandler(interrupt_frame* frame) {
+void CoprocessorSegmentOverrunHandler(interrupt_frame_t* frame) {
     kerror("Exception 9: Coprocessor Segment Overrun at EIP: %x\n", frame->eip);
 }
 
-void InvalidTSSHandler(interrupt_frame* frame) {
+void InvalidTSSHandler(interrupt_frame_t* frame) {
     kerror("Exception 10: Invalid TSS (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void SegmentNotPresentHandler(interrupt_frame* frame) {
+void SegmentNotPresentHandler(interrupt_frame_t* frame) {
     kerror("Exception 11: Segment Not Present (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void StackSegmentFaultHandler(interrupt_frame* frame) {
+void StackSegmentFaultHandler(interrupt_frame_t* frame) {
     kerror("Exception 12: Stack-Segment Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void GeneralProtectionFaultHandler(interrupt_frame* frame) {
+void GeneralProtectionFaultHandler(interrupt_frame_t* frame) {
     kerror("Exception 13: General Protection Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void PageFaultHandler(interrupt_frame* frame) {
+void PageFaultHandler(interrupt_frame_t* frame) {
     uint32_t faulting_addr;
     __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
     kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, EIP: %x\n", frame->err_code, faulting_addr, frame->eip);
 }
 
-void FloatingPointExceptionHandler(interrupt_frame* frame) {
+void FloatingPointExceptionHandler(interrupt_frame_t* frame) {
     kerror("Exception 16: x87 Floating-Point Exception at EIP: %x\n", frame->eip);
 }
 
-void AlignmentCheckHandler(interrupt_frame* frame) {
+void AlignmentCheckHandler(interrupt_frame_t* frame) {
     kerror("Exception 17: Alignment Check (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void CoprocessorErrorHandler(interrupt_frame* frame) {
+void CoprocessorErrorHandler(interrupt_frame_t* frame) {
     kerror("Exception 18: Machine Check at EIP: %x\n", frame->eip);
 }
 
-void SIMDFloatingPointExceptionHandler(interrupt_frame* frame) {
+void SIMDFloatingPointExceptionHandler(interrupt_frame_t* frame) {
     kerror("Exception 19: SIMD Floating-Point Exception at EIP: %x\n", frame->eip);
 }
 
-void VirtualizationExceptionHandler(interrupt_frame* frame) {
+void VirtualizationExceptionHandler(interrupt_frame_t* frame) {
     kerror("Exception 20: Virtualization Exception at EIP: %x\n", frame->eip);
 }
 
-void ControlProtectionExceptionHandler(interrupt_frame* frame) {
+void ControlProtectionExceptionHandler(interrupt_frame_t* frame) {
     kerror("Exception 21: Control Protection Exception (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
 }
 
-void UnknownExceptionHandler(interrupt_frame* frame) {
+void UnknownExceptionHandler(interrupt_frame_t* frame) {
     kerror("Unknown Exception %d at EIP: %x\n", frame->int_no, frame->eip);
 }
 

@@ -8,12 +8,14 @@
 #include "str_ops.h"
 
 void InitVFS();
-void PrintVFSNode(VFSNode* node, uint32_t tab_number);
-void PrintVFSRoot();
-void PrintVFSAttr(VFSAttr* attr);
-void AddVFSNode(VFSAttr* attr, char* name, char* parent_name);
-VFSNode* FindNode(VFSNode* parent, char* name);
-VFSNode* CreateNode(VFSAttr* attr, char* name);
-void AddNodeToParent(VFSNode* parent, VFSNode* node);
-char* GetUntilSlash(char* name, char* buffer);
-void PrintVFSHelper(VFSNode* node, uint32_t tab_number);
+void PrintVFS_Dentry(vfs_dentry_t* dentry, int32_t tab_number);
+void PrintVFS_Root();
+void PrintVFS_Helper(vfs_dentry_t* dentry, int32_t tab_number);
+void PrintVFS_Inode(vfs_inode_t* inode);
+vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, const char* path);
+vfs_dentry_t* CreateDentry(vfs_inode_t* inode, char* name);
+void AddDentryToParent(vfs_dentry_t* parent, vfs_dentry_t* node);
+const char* GetNextSegment(const char* path, char* buffer, uint32_t max_len);
+vfs_dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, vfs_dentry_t* start_dentry);
+vfs_dentry_t* VFS_Link(vfs_inode_t* inode, char* name, char* parent_name, vfs_dentry_t* start_dentry);
+vfs_dentry_t* VFS_Mount(char* name, char* parent_name, vfs_dentry_t* start_dentry, vfs_dentry_t* mounted_dir);

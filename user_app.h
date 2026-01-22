@@ -4,13 +4,13 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
-typedef struct Tuple {
+typedef struct tuple_t {
     uint32_t first;
     uint32_t second;
-} Tuple;
+} tuple_t;
 
 extern uint32_t write(const char* str, uint32_t length);
-extern uint32_t read(const char* buffer, Tuple* triggers, uint32_t max_read);
+extern uint32_t read(const char* buffer, tuple_t* triggers, uint32_t max_read);
 extern uint32_t mmap(uint32_t size);
 extern uint32_t munmap(void* addr);
 extern uint32_t flush_consle_buffer();

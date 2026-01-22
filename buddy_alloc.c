@@ -1,6 +1,6 @@
 #include "buddy_alloc.h"
 
-static BuddyBin bins[MAX_ORDER];
+static buddy_bin_t bins[MAX_ORDER];
 static uint32_t lowest_valid;
 
 void InitBuddyAlloc(uint32_t start, uint32_t size) {
@@ -19,8 +19,8 @@ void InitBuddyAlloc(uint32_t start, uint32_t size) {
     }
 }
 
-BuddyNode* CreateBuddyNode(void* address, uint32_t order) {
-    BuddyNode* node = (BuddyNode*) kmalloc(sizeof(BuddyNode));
+buddy_node_t* CreateBuddyNode(void* address, uint32_t order) {
+    buddy_node_t* node = (buddy_node_t*) kmalloc(sizeof(buddy_node_t));
     node->free = true;
     node->address = address;
     node->order = order;
@@ -28,8 +28,8 @@ BuddyNode* CreateBuddyNode(void* address, uint32_t order) {
     return node;
 }
 
-BuddyNode* CreateDupeBuddyNode(BuddyNode* original) {
-    BuddyNode* node = (BuddyNode*) kmalloc(sizeof(BuddyNode));
+buddy_node_t* CreateDupeBuddyNode(buddy_node_t* original) {
+    buddy_node_t* node = (buddy_node_t*) kmalloc(sizeof(buddy_node_t));
     node->free = original->free;
     node->address = original->address;
     node->order = original->order;
@@ -37,10 +37,10 @@ BuddyNode* CreateDupeBuddyNode(BuddyNode* original) {
     return node;
 }
 
-void RemoveBuddyNode(BuddyBin* bin, void* address, bool free_list) {
-    BuddyNode** head = free_list ? &bin->head_free : &bin->head_used;
-    BuddyNode* current = *head;
-    BuddyNode* prev = NULL;
+void RemoveBuddyNode(buddy_bin_t* bin, void* address, bool free_list) {
+    buddy_node_t** head = free_list ? &bin->head_free : &bin->head_used;
+    buddy_node_t* current = *head;
+    buddy_node_t* prev = NULL;
 
     while (current != NULL) {
         if (current->address == address) {
@@ -49,7 +49,7 @@ void RemoveBuddyNode(BuddyBin* bin, void* address, bool free_list) {
             } else {
                 prev->next = current->next;
             }
-            kfree(current, sizeof(BuddyNode));
+            kfree(current, sizeof(buddy_node_t));
             return;
         }
         prev = current;
@@ -57,20 +57,20 @@ void RemoveBuddyNode(BuddyBin* bin, void* address, bool free_list) {
     }
 }
 
-void RemoveBuddyNodeComplete(BuddyBin* bin, void* address) {
+void RemoveBuddyNodeComplete(buddy_bin_t* bin, void* address) {
     RemoveBuddyNode(bin, address, true);
     RemoveBuddyNode(bin, address, false);
 }
 
-void MoveBuddyNode(BuddyBin* bin, BuddyNode* node) {
+void MoveBuddyNode(buddy_bin_t* bin, buddy_node_t* node) {
     bool was_free = node->free;
     node->free = !node->free;
-    BuddyNode* new_node = CreateDupeBuddyNode(node);
+    buddy_node_t* new_node = CreateDupeBuddyNode(node);
     InsertSortedBuddyNode(bin, new_node, !was_free);
     RemoveBuddyNode(bin, node->address, was_free);
 }
 
-void* SplitNode(BuddyNode* node, uint32_t target_order) {
+void* SplitNode(buddy_node_t* node, uint32_t target_order) {
     if (node == NULL) {
         return NULL;
     }
@@ -85,13 +85,13 @@ void* SplitNode(BuddyNode* node, uint32_t target_order) {
     uint32_t addr = (uint32_t)node->address, curr_order = node->order;
     RemoveBuddyNode(&bins[node->order], node->address, true);
 
-    BuddyNode* target_buddy1 = CreateBuddyNode((void*)addr, target_order);
+    buddy_node_t* target_buddy1 = CreateBuddyNode((void*)addr, target_order);
     target_buddy1->free = false;
     InsertSortedBuddyNode(&bins[target_order], target_buddy1, false);
 
     while (curr_order > target_order) {
         void* buddy_address = GetBuddyAddress((void*)addr, curr_order - 1);
-        BuddyNode* buddy2 = CreateBuddyNode(buddy_address, curr_order - 1);
+        buddy_node_t* buddy2 = CreateBuddyNode(buddy_address, curr_order - 1);
         InsertSortedBuddyNode(&bins[curr_order - 1], buddy2, true);
         curr_order--;
     }
@@ -100,7 +100,7 @@ void* SplitNode(BuddyNode* node, uint32_t target_order) {
 
 bool MergeBuddy(void* address, uint32_t order) {
     void* buddy_address = GetBuddyAddress(address, order);
-    BuddyNode* buddy_node = bins[order].head_free;
+    buddy_node_t* buddy_node = bins[order].head_free;
     bool found = false;
 
     while (buddy_node != NULL) {
@@ -116,7 +116,7 @@ bool MergeBuddy(void* address, uint32_t order) {
         RemoveBuddyNodeComplete(&bins[order], buddy_address);
 
         void* merged_address = (address < buddy_address) ? address : buddy_address;
-        BuddyNode* merged_node = CreateBuddyNode(merged_address, order + 1);
+        buddy_node_t* merged_node = CreateBuddyNode(merged_address, order + 1);
         merged_node->free = false;
         InsertSortedBuddyNode(&bins[order + 1], merged_node, false);
 
@@ -128,8 +128,8 @@ bool MergeBuddy(void* address, uint32_t order) {
     return found;
 }
 
-BuddyNode* FindBuddyNode(BuddyBin* bin, void* address) {
-    BuddyNode* current_free = bin->head_free, *current_used = bin->head_used;
+buddy_node_t* FindBuddyNode(buddy_bin_t* bin, void* address) {
+    buddy_node_t* current_free = bin->head_free, *current_used = bin->head_used;
     while (current_free != NULL || current_used != NULL) {
         if (current_free != NULL && current_free->address == address) {
             return current_free;
@@ -148,10 +148,8 @@ BuddyNode* FindBuddyNode(BuddyBin* bin, void* address) {
 }
 
 void FreeBuddy(void* address) {
-    bool org_int_state = check_interrupts();
-    CliHelper();
     uint32_t order = 0, page_count;
-    BuddyNode* node = FindBuddyNode(&bins[order], address);
+    buddy_node_t* node = FindBuddyNode(&bins[order], address);
 
     while (node == NULL && order < MAX_ORDER) {
         order++;
@@ -160,6 +158,8 @@ void FreeBuddy(void* address) {
     if (node == NULL) {
         return;
     }
+    bool org_int_state = check_interrupts();
+    CliHelper();
     if (1 << node->order < TABLE_SIZE) {
         page_count = (1 << node->order) / PAGE_SIZE;
         if ((uint32_t)(1 << node->order) % PAGE_SIZE != 0) {
@@ -182,8 +182,6 @@ void FreeBuddy(void* address) {
 }
 
 void* RequestBuddy(uint32_t size) {
-    bool org_int_state = check_interrupts();
-    CliHelper();
     uint32_t order = BiggestBit(size), tmp;
     if (!IsPowerOfTwo(size)) order++;
 
@@ -204,6 +202,9 @@ void* RequestBuddy(uint32_t size) {
 
     for (uint32_t current_order = order; current_order < MAX_ORDER; current_order++) {
         if (bins[current_order].head_free != NULL) {
+            bool org_int_state = check_interrupts();
+            CliHelper();
+
             void* ret = SplitNode(bins[current_order].head_free, order);
             if (ret != NULL) {
                 FillPageDirectory(ret, (1 << order));
@@ -212,7 +213,6 @@ void* RequestBuddy(uint32_t size) {
             }
         }
     }
-    if (org_int_state) StiHelper();
     return NULL;
 }
 
@@ -222,15 +222,15 @@ void* GetBuddyAddress(void* address, uint32_t order) {
     return (void*)buddy_addr;
 }
 
-void InsertSortedBuddyNode(BuddyBin* bin, BuddyNode* node, bool free_list) {
-    BuddyNode** head = free_list ? &bin->head_free : &bin->head_used;
+void InsertSortedBuddyNode(buddy_bin_t* bin, buddy_node_t* node, bool free_list) {
+    buddy_node_t** head = free_list ? &bin->head_free : &bin->head_used;
 
     if (*head == NULL || (*head)->address > node->address) {
         node->next = *head;
         *head = node;
         return;
     }
-    BuddyNode* current = *head;
+    buddy_node_t* current = *head;
     while (current->next != NULL && current->next->address < node->address) {
         current = current->next;
     }
@@ -269,8 +269,8 @@ void PrintBuddyBin(uint32_t start_order, uint32_t end_order) {
     if (sti) StiHelper();
 }
 
-void PrintBuddyNode(BuddyNode* node) {
-    BuddyNode* p = node;
+void PrintBuddyNode(buddy_node_t* node) {
+    buddy_node_t* p = node;
     while (p->next != NULL) {
         kprintf("Address: %x -> ", p->address);
         p = p->next;

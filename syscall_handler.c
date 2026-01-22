@@ -1,6 +1,6 @@
 #include "syscall_handler.h"
 
-void syscall_handler(interrupt_frame* frame) {
+void syscall_handler(interrupt_frame_t* frame) {
     uint32_t cs = frame->cs;
     if (cs == 0x08) return;
 
@@ -31,27 +31,27 @@ void syscall_handler(interrupt_frame* frame) {
     frame->eax = ret;
 }
 
-int32_t WriteHandler(interrupt_frame* frame) {
+int32_t WriteHandler(interrupt_frame_t* frame) {
     char* pointer = (char*) frame->ebx;
     int32_t length = frame->ecx;
     return print_str_SYSCALL(pointer, GREY_COLOR, length);
 }
 
-int32_t ReadHandler(interrupt_frame* frame) {
+int32_t ReadHandler(interrupt_frame_t* frame) {
     char* buffer = (char*) frame->ebx;
-    Tuple* triggers = (Tuple*) frame->ecx;
+    tuple_t* triggers = (tuple_t*) frame->ecx;
     int32_t max_read = frame->edx;
     return GetInputUntilKey(&console_buffer, buffer, max_read, KEYBOARD_MS_BACK, triggers);
 }
 
-int32_t MmapHandler(interrupt_frame* frame) {
+int32_t MmapHandler(interrupt_frame_t* frame) {
 
     int32_t size = frame->ebx;
     void* ret = RequestBuddy(size);
     return (int32_t) ret;
 }
 
-int32_t MunmapHandler(interrupt_frame* frame) {
+int32_t MunmapHandler(interrupt_frame_t* frame) {
     int32_t addr = frame->ebx;
     FreeBuddy((void*) addr);
     return 1;

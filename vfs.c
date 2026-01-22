@@ -1,112 +1,157 @@
 #include "vfs.h"
 
-static VFSNode* root;
+static vfs_dentry_t* root_dentry;
+
+// Global FAT32 operations table
+static vfs_ops_t fat32_ops = {
+    .read = 0x00, // PlaceHolder for fat32_read
+    .write = 0x00, // PlaceHolder for fat32_write
+    .finddir = 0x00 // PlaceHolder for fat32_finddir
+};
 
 void InitVFS() {
-    bool sti = check_interrupts();
-    CliHelper();
-    root = kmalloc(sizeof(VFSNode));
-    VFSAttr* root_attr = &root->attr;
-    root_attr->type = VFS_DIRECTORY;
-    root_attr->size = 0;
-    root_attr->permissions = 0;
-    root_attr->owner_id = 0;
-    root_attr->group_id = 0;
-    root_attr->link_count = 0;
-    root_attr->lock = false;
+    vfs_inode_t* root_inode;
 
-    root->name = "/";
-    root->parent = NULL;
-    root->children = NULL;
-    root->next = NULL;
+    root_dentry = (vfs_dentry_t*) kmalloc(sizeof(vfs_dentry_t));
+    root_inode = (vfs_inode_t*) kmalloc(sizeof(vfs_inode_t));
+    root_dentry->inode = root_inode;
+    *root_inode = (vfs_inode_t) {VFS_DIRECTORY, 0, 0, 0, 0, 1, (mutex_t){false, 0, 0}};
+    root_dentry->ops = &fat32_ops;
+
+    root_dentry->name = "/";
+    root_dentry->parent = NULL;
+    root_dentry->children = NULL;
+    root_dentry->next = NULL;
+    root_dentry->mount_root = NULL;
     
-    if (sti) StiHelper();
 }
 
-void PrintVFSRoot() {
-    PrintVFSHelper(root, 0);
+void PrintVFS_Root() {
+    PrintVFS_Helper(root_dentry, -1);
 }
 
-void PrintVFSDirectory(VFSNode* node) {
-    if (node->attr.type == VFS_FILE) {
+void PrintVFS_Directory(vfs_dentry_t* dentry) {
+    if (dentry->inode->type == VFS_FILE) {
         kerror("You passed a File to PrintVFSDirectory");
     }
-    PrintVFSHelper(node, 0);
+    PrintVFS_Helper(dentry, -1);
 }
 
-void PrintVFSHelper(VFSNode* node, uint32_t tab_number) {
-    if (node == NULL) {
+void PrintVFS_Helper(vfs_dentry_t* dentry, int32_t tab_number) {
+    if (dentry == NULL) {
         return;
     }
-    PrintVFSNode(node, tab_number);
-    VFSNode* p = node->children;
+    PrintVFS_Dentry(dentry, tab_number);
+    vfs_dentry_t* p;
+    if (dentry->inode->type == MOUNT_POINT && dentry->mount_root != NULL) p = dentry->mount_root->children;
+    else p = dentry->children;
+
     while (p != NULL) {
-        PrintVFSHelper(p, tab_number + 1);
+        PrintVFS_Helper(p, tab_number + 1);
         p = p->next;
     }
 
 }
 
-void PrintVFSNode(VFSNode* node, uint32_t tab_number) {
-    for (uint32_t i = 0; i < tab_number; i++) { putchar('\t', GREY_COLOR); }
-    kprintf("Name: %s\t", node->name);
-    PrintVFSAttr(&node->attr);
-    node = node->next;
+void PrintVFS_Dentry(vfs_dentry_t* dentry, int32_t tab_number) {
+    if (*dentry->name == '/') return;
+    for (int32_t i = 0; i < tab_number; i++) { putchar('\t', GREY_COLOR); }
+
+    kprintf("%s: ", dentry->name);
+    
+    PrintVFS_Inode(dentry->inode);
 }
 
-void PrintVFSAttr(VFSAttr* attr) {
+void PrintVFS_Inode(vfs_inode_t* inode) {
     char type[10];
     memset(type, 0, sizeof(type));
     
-    switch (attr->type) {
+    switch (inode->type) {
         case VFS_FILE:
             cpystr("FILE", type);
             break;
         case VFS_DIRECTORY:
             cpystr("DIR", type);
             break;
+        case MOUNT_POINT:
+            cpystr("MOUNT", type);
     }
 
     kprintf("T: %s, S: %d, Perm: %d, OID: %d, GID: %d, LC: %d\n",
-          type, attr->size, attr->permissions, attr->owner_id,
-          attr->group_id, attr->link_count);
+          type, inode->size, inode->permissions, inode->owner_id,
+          inode->group_id, inode->link_count);
 }
 
-void AddVFSNode(VFSAttr* attr, char* name, char* parent_name) {
-    if (parent_name == NULL) {
-        kerror("Parent is NULL\n");
+vfs_dentry_t* VFS_Link(vfs_inode_t* inode, char* name, char* parent_name, vfs_dentry_t* start_dentry) {
+    if (parent_name == NULL || *parent_name == '\0') {
+        kerror("Parent doesn't exist\n");
     }
-    VFSNode* parent = FindNode(root, parent_name);
+    vfs_dentry_t* parent;
 
-    bool sti = check_interrupts();
-    CliHelper();
-    VFSNode* node = CreateNode(attr, name);
+    if (start_dentry == NULL) parent = FindDentry(root_dentry, parent_name);
+    else parent = FindDentry(start_dentry, parent_name);
 
+    if (parent->inode->type != VFS_DIRECTORY) {
+        kerror("%s Is not a directory!", parent->inode->type);
+    } 
+    
+    vfs_dentry_t* node = CreateDentry(inode, name);
+    AddDentryToParent(parent, node);
+    inode->link_count++; 
+    return node;
+}
+
+vfs_dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, vfs_dentry_t* start_dentry) {
+    if (parent_name == NULL || *parent_name == '\0') {
+        kerror("Parent doesn't exist\n");
+    }
+    vfs_dentry_t* parent;
+
+    if (start_dentry == NULL) parent = FindDentry(root_dentry, parent_name);
+    else parent = FindDentry(start_dentry, parent_name);
+     
+    if (parent->inode->type != VFS_DIRECTORY) kerror("%s Is a file, not a directory!", parent->name);
+
+    vfs_inode_t* new_inode = kmalloc(sizeof(vfs_inode_t));
+    *new_inode = (vfs_inode_t) {
+        .owner_id = 0, // Temp, needs to match the proccess calling
+        .group_id = 0, // Same here
+        .mutex = (mutex_t) {false, 0, 0},
+        .size = 0,
+        .permissions = 0, // Temp, needs to match the proccess calling
+        .type = type,
+        .link_count = 1
+    };
+    
+    vfs_dentry_t* node = CreateDentry(new_inode, name);
     node->parent = parent;
     node->children = NULL;
     node->next = NULL;
-    AddNodeToParent(parent, node);
-    if (sti) StiHelper();
+    AddDentryToParent(parent, node);
+    return node;
 }
 
-VFSNode* CreateNode(VFSAttr* attr, char* name) {
-    VFSNode* node = kmalloc(sizeof(VFSNode));
-    VFSAttr* node_attr = &node->attr;
-    node_attr->type = attr->type;
-    node_attr->size = attr->size;
-    node_attr->permissions = attr->permissions;
-    node_attr->owner_id = attr->owner_id;
-    node_attr->group_id = attr->group_id;
-    node_attr->link_count = attr->group_id;
-    node_attr->lock = attr->lock;
+vfs_dentry_t* VFS_Mount(char* name, char* parent_name, vfs_dentry_t* start_dentry, vfs_dentry_t* mounted_dir) {
+    if (mounted_dir->inode->type != VFS_DIRECTORY) kerror("Mounted target %s is not a directory!", mounted_dir->name);
 
+    vfs_dentry_t* mount_dentry = VFS_CreateDentry(name, parent_name, MOUNT_POINT, start_dentry);
+    if (mount_dentry == NULL) kerror("Mount Point not initilazed properly!");
+
+    mount_dentry->mount_root = mounted_dir;
+    return mount_dentry;
+}
+
+vfs_dentry_t* CreateDentry(vfs_inode_t* inode, char* name) {
+    vfs_dentry_t* node = kmalloc(sizeof(vfs_dentry_t));
+    node->inode = inode;
+    root_dentry->ops = &fat32_ops;
     node->name = name;
     return node;
 }
 
-void AddNodeToParent(VFSNode* parent, VFSNode* node) {
+void AddDentryToParent(vfs_dentry_t* parent, vfs_dentry_t* node) {
     char* node_name = node->name;
-    VFSNode* p = parent->children;
+    vfs_dentry_t* p = parent->children;
     if (p == NULL) {
         parent->children = node;
         node->next = NULL;
@@ -125,52 +170,70 @@ void AddNodeToParent(VFSNode* parent, VFSNode* node) {
     node->next = NULL;
 }
 
-VFSNode* FindNode(VFSNode* parent, char* name) {
-    char buffer[50];
-    int32_t len = strlen(name);
-    name = GetUntilSlash(name, buffer);
-    len -= strlen(buffer);
-    VFSNode* p = parent;
+vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, const char* path) {
+    if (!path) return NULL;
 
-    while (p != NULL) {
-        while (p != NULL) {
-            if (strcmp(buffer, p->name) == 0) {
+    vfs_dentry_t* current = (*path == '/') ? root_dentry : start_dentry;
+    
+    char segment[MAX_FILE_NAME_SIZE]; 
+    const char* step = path;
+
+    while ((step = (char*) GetNextSegment(step, segment, sizeof(segment))) != NULL) {
+        
+        if (strcmp(segment, ".") == 0) continue;
+
+        if (strcmp(segment, "..") == 0) {
+            if (current->parent != NULL) {
+                current = current->parent;
+            }
+            continue;
+        }
+
+        vfs_dentry_t* child = current->children;
+        vfs_dentry_t* found = NULL;
+
+        while (child != NULL) {
+            if (strcmp(child->name, segment) == 0) {
+                found = child;
                 break;
             }
-            p = p->next;   
+            child = child->next;
         }
-        if (len < 0) kerror("Oops, Something went wrong...");
 
-        if (p == NULL) {
-            kerror("Couldn't Find in the Current Directory");
+        if (!found) return NULL;
+
+        if (found->mount_root != NULL && found->inode->type == MOUNT_POINT) {
+            current = found->mount_root;
+        } else {
+            current = found;
         }
-        if (len == 0) return p;
-
-        name = GetUntilSlash(name, buffer);
-        len -= strlen(buffer);
-        int32_t isbufferroot = strcmp("/", buffer);
-        if ((isbufferroot == 1 || isbufferroot == -1) && len != 0) len -= 1;
-
-        if (p->attr.type == VFS_FILE) {
-            kerror("%s is a File, Not a Directory", p->name);
+        
+        
+        if (*step != '\0' && current->inode->type != VFS_DIRECTORY) {
+            kprintf("Error: %s is not a directory\n", current->name);
+            return NULL;
         }
-        p = p->children;
     }
-    kerror("Couldn't Find in the Current Directory");
-    return NULL;
+
+    return current;
 }
 
-char* GetUntilSlash(char* name, char* buffer) {
-    if (*name == '/') {
-        buffer[0] = '/';
-        buffer[1] = '\0';
-        return name + 1;
-    } 
+const char* GetNextSegment(const char* path, char* buffer, uint32_t max_len) {
+    while (*path == '/') path++;
+
+    if (*path == '\0') return NULL;
+
     uint32_t i = 0;
-    while (name[i] != '/' && name[i] != '\0') {
-        buffer[i] = name[i];
-        i++;
+    while (path[i] != '/' && path[i] != '\0') {
+        if (i < max_len - 1) {
+            buffer[i] = path[i];
+            i++;
+        } else {
+            break; 
+        }
     }
-    buffer[i] = '\0';
-    return &name[i] + 1;
+
+    buffer[i] = '\0'; 
+
+    return &path[i];
 }

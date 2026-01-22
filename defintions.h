@@ -2,7 +2,7 @@
 #include "includes.h"
 
 // Slab Definitions
-#define NUM_CACHE 3
+#define NUM_CACHE 4
 #define SLAB_GARBAGE_BYTE 0xAC
 // End Slab Definitions
 
@@ -105,4 +105,7 @@
 // VFS Definitons
 #define VFS_FILE 0
 #define VFS_DIRECTORY 1
+#define MOUNT_POINT 2
+
+#define MAX_FILE_NAME_SIZE 256
 // VFS Definitons

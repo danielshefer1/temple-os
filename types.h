@@ -1,17 +1,17 @@
 #pragma once
 #include "includes.h"
 
-typedef struct BuddyNode {
+typedef struct buddy_node_t {
     bool free;
     void* address;
     uint32_t order;
-    struct BuddyNode* next;
-} BuddyNode;
+    struct buddy_node_t* next;
+} buddy_node_t;
 
-typedef struct BuddyBin {
-    BuddyNode* head_free;
-    BuddyNode* head_used;
-} BuddyBin;
+typedef struct buddy_bin_t {
+    buddy_node_t* head_free;
+    buddy_node_t* head_used;
+} buddy_bin_t;
 
 typedef struct pte_t {
     uint32_t present    : 1;
@@ -41,55 +41,55 @@ typedef struct pde_t {
     uint32_t frame      : 20;
 } pde_t;
 
-typedef struct Slab
+typedef struct slab_t
 {
     void* start;
     uint32_t num_slots;
     uint32_t free_count;
-    struct Slab* next;
+    struct slab_t* next;
     uint32_t bitmap_size;
     uint32_t bitmap[];
-} Slab;
+} slab_t;
 
-typedef struct 
+typedef struct cache_t
 {
     uint32_t size;
-    Slab* full_slabs;
-    Slab* partial_slabs;
-    Slab* empty_slabs;
-} Cache;
+    slab_t* full_slabs;
+    slab_t* partial_slabs;
+    slab_t* empty_slabs;
+} cache_t;
 
-typedef struct E820Entry {
+typedef struct e820_entry_t {
     uint32_t base_low;    // Lower 32 bits of base
     uint32_t base_high;   // Upper 32 bits of base  
     uint32_t length_low;  // Lower 32 bits of length
     uint32_t length_high; // Upper 32 bits of length
     uint32_t type;
-} E820Entry;
+} e820_entry_t;
 
-typedef struct E820Info {
+typedef struct e820_info_t {
     uint32_t signature;
     uint32_t num_entries;
-    E820Entry* entries;
+    e820_entry_t* entries;
     uint32_t address;
-} E820Info;
+} e820_info_t;
 
-typedef struct Tuple {
+typedef struct tuple_t {
     uint32_t first;
     uint32_t second;
-} Tuple;
+} tuple_t;
 
-typedef struct intNode {
+typedef struct int_node_t {
     uint32_t val;
-    struct intNode* next;
-} intNode;
+    struct int_node_t* next;
+} int_node_t;
 
-typedef struct tupleNode {
-    Tuple val;
-    struct tupleNode* next;
-} tupleNode;
+typedef struct tuple_node_t {
+    tuple_t val;
+    struct tuple_node_t* next;
+} tuple_node_t;
 
-typedef struct gdt_entry {
+typedef struct gdt_entry_t {
     uint16_t limit_low;
     uint16_t base_low;
     uint8_t  base_middle;
@@ -110,23 +110,23 @@ typedef struct gdt_entry {
     uint8_t  granularity : 1;
     // ----------------
     uint8_t  base_high;
-} __attribute__((packed)) gdt_entry;
+} __attribute__((packed)) gdt_entry_t;
 
-typedef struct gdt_ptr {
+typedef struct gdt_ptr_t {
     uint16_t limit;
     uint32_t base;
-} __attribute__((packed)) gdt_ptr;
+} __attribute__((packed)) gdt_ptr_t;
 
-typedef struct interrupt_frame {
+typedef struct interrupt_frame_t {
     // Pushed by isr_common_stub
     uint32_t gs, fs, es, ds;
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;  // pusha
     uint32_t int_no, err_code;
     // Pushed by CPU
     uint32_t eip, cs, eflags, useresp, ss;
-} __attribute__((packed)) interrupt_frame;
+} __attribute__((packed)) interrupt_frame_t;
 
-typedef struct idt_entry {
+typedef struct idt_entry_t {
     uint16_t base_low;
     uint16_t sel;
     uint8_t reserved;
@@ -137,24 +137,24 @@ typedef struct idt_entry {
     uint8_t present : 1;
     // ----------------
     uint16_t base_high;
-} __attribute__((packed)) idt_entry;
+} __attribute__((packed)) idt_entry_t;
 
-typedef struct idt_ptr {
+typedef struct idt_ptr_t {
     uint16_t limit;
     uint32_t base;
-} __attribute__((packed)) idt_ptr;
+} __attribute__((packed)) idt_ptr_t;
 
-typedef struct InputBuffer {
-    struct TimedKey* buffer;
+typedef struct input_buffer_t {
+    struct timed_key_t* buffer;
     uint32_t size;
     uint32_t head;
     uint32_t tail;
-} InputBuffer;
+} input_buffer_t;
 
-typedef struct TimedKey {
+typedef struct timed_key_t {
     uint32_t time;
     char c;
-} TimedKey;
+} timed_key_t;
 
 struct tss_entry_struct {
     uint32_t prev_tss;   // Previous TSS (not used in software switching)
@@ -170,19 +170,41 @@ struct tss_entry_struct {
 
 typedef struct tss_entry_struct tss_entry_t;
 
-typedef struct VFSAttr {
+typedef struct mutex_t {
+    volatile bool locked;     
+    uint32_t owner_pcb;      
+    void* wait_queue;        
+} mutex_t;
+
+struct vfs_dentry_t;
+
+typedef struct vfs_ops_t {
+    uint32_t (*read)(struct vfs_dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
+    uint32_t (*write)(struct vfs_dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
+    struct vfs_dentry_t* (*finddir)(struct vfs_dentry_t* node, char* name);
+} vfs_ops_t;
+
+typedef struct vfs_inode_t {
     uint32_t type;
     uint32_t size;
     uint32_t permissions;
     uint32_t owner_id;
     uint32_t group_id;
     uint32_t link_count;
-    bool lock;
-} VFSAttr;
-typedef struct VFSNode {
-    VFSAttr attr;
+    mutex_t mutex;
+} vfs_inode_t;
+
+typedef struct vfs_dentry_t {
     char* name;
-    struct VFSNode* parent;
-    struct VFSNode* children;
-    struct VFSNode* next;
-} VFSNode;
+    vfs_inode_t* inode;
+    vfs_ops_t* ops;
+    void* driver_data;
+
+    struct vfs_dentry_t* parent;
+    struct vfs_dentry_t* children;
+    struct vfs_dentry_t* next;
+
+    struct vfs_dentry_t* mount_root;
+} vfs_dentry_t;
+
+

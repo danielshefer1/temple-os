@@ -1,7 +1,7 @@
 #include "set_idt.h"
 
-static idt_entry idt[256];
-static idt_ptr idtr;
+static idt_entry_t idt[256];
+static idt_ptr_t idtr;
 
 static void* handlers[] = {
     (void*)isr_stub_0,
@@ -40,7 +40,7 @@ static uint32_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
 static uint32_t num_handlers_idx = sizeof(handlers_idx) / sizeof(handlers_idx[0]);
 
 void SetIDTEntry(uint32_t offset, uint16_t sel, uint8_t present, uint8_t privilege, uint8_t type, uint32_t idx) {
-    idt_entry* entry = &idt[idx];
+    idt_entry_t* entry = &idt[idx];
 
     entry->base_low = offset & 0xFFFF;
     entry->sel = sel;
@@ -55,7 +55,7 @@ void SetIDTEntry(uint32_t offset, uint16_t sel, uint8_t present, uint8_t privile
 }
 
 void CheckIDT() {
-    idt_ptr current_idtr;
+    idt_ptr_t current_idtr;
     __asm__ volatile("sidt %0" : "=m"(current_idtr));
     
     kprintf("IDTR Base: %x\n", current_idtr.base);
