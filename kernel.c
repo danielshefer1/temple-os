@@ -31,8 +31,13 @@ void end() {
 void kmain() {
     start();
 
-    AddVFSNode(VFS_FILE, 0, 0, 0, "test1", "/");
-    PrintVFS();
+    VFSAttr test_attr = {VFS_DIRECTORY, 0, 0, 0, 0, 0, false};
+    AddVFSNode(&test_attr, "test1", "/");
+    VFSAttr test1_attr = {VFS_FILE, 0, 0, 0, 0, 0, false};
+    AddVFSNode(&test1_attr, "test2", "/test1");
+    VFSAttr test2_attr = {VFS_FILE, 0, 0, 0, 0, 0, false};
+    AddVFSNode(&test2_attr, "test3", "/");
+    PrintVFSRoot();
 
     end();
 }

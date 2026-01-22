@@ -9,6 +9,11 @@
 
 void InitVFS();
 void PrintVFSNode(VFSNode* node);
-void PrintVFS();
+void PrintVFSRoot();
 void PrintVFSAttr(VFSAttr* attr);
-void AddVFSNode(uint32_t type, uint32_t perm, uint32_t owner_id, uint32_t group_id, char* name, char* parent_name);
+void AddVFSNode(VFSAttr* attr, char* name, char* parent_name);
+VFSNode* FindNode(VFSNode* parent, char* name);
+VFSNode* CreateNode(VFSAttr* attr, char* name);
+void AddNodeToParent(VFSNode* parent, VFSNode* node);
+char* GetUntilSlash(char* name, char* buffer);
+void PrintVFSHelper(VFSNode* node);
