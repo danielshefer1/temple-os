@@ -31,12 +31,15 @@ void end() {
 void kmain() {
     start();
 
+    CliHelper();
     VFSAttr test_attr = {VFS_DIRECTORY, 0, 0, 0, 0, 0, false};
     AddVFSNode(&test_attr, "test1", "/");
-    VFSAttr test1_attr = {VFS_FILE, 0, 0, 0, 0, 0, false};
+    VFSAttr test1_attr = {VFS_DIRECTORY, 0, 0, 0, 0, 0, false};
     AddVFSNode(&test1_attr, "test2", "/test1");
     VFSAttr test2_attr = {VFS_FILE, 0, 0, 0, 0, 0, false};
     AddVFSNode(&test2_attr, "test3", "/");
+    VFSAttr test3_attr = {VFS_FILE, 0, 0, 0, 0, 0, false};
+    AddVFSNode(&test3_attr, "test4", "/test1/test2");
     PrintVFSRoot();
 
     end();

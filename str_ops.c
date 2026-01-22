@@ -99,3 +99,9 @@ int32_t strcmp(char* str1, char* str2) {
     if (str2[idx] != '\0') return -1;
     return 0;
 }
+
+uint32_t strlen(char* str) {
+    uint32_t idx = 0;
+    while (str[idx] != '\0') idx++;
+    return idx;
+}

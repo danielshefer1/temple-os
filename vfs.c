@@ -24,38 +24,51 @@ void InitVFS() {
 }
 
 void PrintVFSRoot() {
-    PrintVFSHelper(root);
+    PrintVFSHelper(root, 0);
 }
 
 void PrintVFSDirectory(VFSNode* node) {
     if (node->attr.type == VFS_FILE) {
         kerror("You passed a File to PrintVFSDirectory");
     }
-    PrintVFSHelper(node);
+    PrintVFSHelper(node, 0);
 }
 
-void PrintVFSHelper(VFSNode* node) {
+void PrintVFSHelper(VFSNode* node, uint32_t tab_number) {
     if (node == NULL) {
         return;
     }
-    PrintVFSNode(node);
+    PrintVFSNode(node, tab_number);
     VFSNode* p = node->children;
     while (p != NULL) {
-        PrintVFSHelper(p);
+        PrintVFSHelper(p, tab_number + 1);
         p = p->next;
     }
 
 }
 
-void PrintVFSNode(VFSNode* node) {
-    kprintf("Name: %s\n", node->name);
+void PrintVFSNode(VFSNode* node, uint32_t tab_number) {
+    for (uint32_t i = 0; i < tab_number; i++) { putchar('\t', GREY_COLOR); }
+    kprintf("Name: %s\t", node->name);
     PrintVFSAttr(&node->attr);
     node = node->next;
 }
 
 void PrintVFSAttr(VFSAttr* attr) {
-    kprintf("Type: %d\t Size: %d\t Permissions: %d\t Owner ID: %d\t Group ID: %d\t Link Count: %d\n",
-          attr->type, attr->size, attr->permissions, attr->owner_id,
+    char type[10];
+    memset(type, 0, sizeof(type));
+    
+    switch (attr->type) {
+        case VFS_FILE:
+            cpystr("FILE", type);
+            break;
+        case VFS_DIRECTORY:
+            cpystr("DIR", type);
+            break;
+    }
+
+    kprintf("T: %s, S: %d, Perm: %d, OID: %d, GID: %d, LC: %d\n",
+          type, attr->size, attr->permissions, attr->owner_id,
           attr->group_id, attr->link_count);
 }
 
@@ -114,24 +127,36 @@ void AddNodeToParent(VFSNode* parent, VFSNode* node) {
 
 VFSNode* FindNode(VFSNode* parent, char* name) {
     char buffer[50];
+    int32_t len = strlen(name);
     name = GetUntilSlash(name, buffer);
+    len -= strlen(buffer);
     VFSNode* p = parent;
-    while (buffer[0] != '\0') {
+
+    while (p != NULL) {
         while (p != NULL) {
             if (strcmp(buffer, p->name) == 0) {
-                return p;
+                break;
             }
             p = p->next;   
         }
+        if (len < 0) kerror("Oops, Something went wrong...");
+
         if (p == NULL) {
             kerror("Couldn't Find in the Current Directory");
         }
+        if (len == 0) return p;
+
         name = GetUntilSlash(name, buffer);
+        len -= strlen(buffer);
+        int32_t isbufferroot = strcmp("/", buffer);
+        if ((isbufferroot == 1 || isbufferroot == -1) && len != 0) len -= 1;
+
         if (p->attr.type == VFS_FILE) {
             kerror("%s is a File, Not a Directory", p->name);
         }
         p = p->children;
     }
+    kerror("Couldn't Find in the Current Directory");
     return NULL;
 }
 

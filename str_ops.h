@@ -11,3 +11,4 @@ uint32_t char_to_digit(char c);
 uint32_t atoi(char* str, uint32_t base);
 void cpystr(char* source, char* dst);
 int32_t strcmp(char* str1, char* str2);
+uint32_t strlen(char* str);
