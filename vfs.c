@@ -82,14 +82,14 @@ void PrintVFS_Inode(vfs_inode_t* inode) {
           inode->group_id, inode->link_count);
 }
 
-vfs_dentry_t* VFS_Link(vfs_inode_t* inode, char* name, char* parent_name, vfs_dentry_t* start_dentry) {
+vfs_dentry_t* VFS_Link(vfs_inode_t* inode, char* name, char* parent_name, vfs_dentry_t* cwd) {
     if (parent_name == NULL || *parent_name == '\0') {
         kerror("Parent doesn't exist\n");
     }
     vfs_dentry_t* parent;
 
-    if (start_dentry == NULL) parent = FindDentry(root_dentry, parent_name);
-    else parent = FindDentry(start_dentry, parent_name);
+    if (cwd == NULL) parent = FindDentry(root_dentry, parent_name);
+    else parent = FindDentry(cwd, parent_name);
 
     if (parent->inode->type != VFS_DIRECTORY) {
         kerror("%s Is not a directory!", parent->inode->type);
@@ -101,14 +101,14 @@ vfs_dentry_t* VFS_Link(vfs_inode_t* inode, char* name, char* parent_name, vfs_de
     return node;
 }
 
-vfs_dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, vfs_dentry_t* start_dentry) {
+vfs_dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, vfs_dentry_t* cwd) {
     if (parent_name == NULL || *parent_name == '\0') {
         kerror("Parent doesn't exist\n");
     }
     vfs_dentry_t* parent;
 
-    if (start_dentry == NULL) parent = FindDentry(root_dentry, parent_name);
-    else parent = FindDentry(start_dentry, parent_name);
+    if (cwd == NULL) parent = FindDentry(root_dentry, parent_name);
+    else parent = FindDentry(cwd, parent_name);
      
     if (parent->inode->type != VFS_DIRECTORY) kerror("%s Is a file, not a directory!", parent->name);
 
@@ -124,17 +124,16 @@ vfs_dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, vfs
     };
     
     vfs_dentry_t* node = CreateDentry(new_inode, name);
-    node->parent = parent;
     node->children = NULL;
     node->next = NULL;
     AddDentryToParent(parent, node);
     return node;
 }
 
-vfs_dentry_t* VFS_Mount(char* name, char* parent_name, vfs_dentry_t* start_dentry, vfs_dentry_t* mounted_dir) {
+vfs_dentry_t* VFS_Mount(char* name, char* parent_name, vfs_dentry_t* cwd, vfs_dentry_t* mounted_dir) {
     if (mounted_dir->inode->type != VFS_DIRECTORY) kerror("Mounted target %s is not a directory!", mounted_dir->name);
 
-    vfs_dentry_t* mount_dentry = VFS_CreateDentry(name, parent_name, MOUNT_POINT, start_dentry);
+    vfs_dentry_t* mount_dentry = VFS_CreateDentry(name, parent_name, MOUNT_POINT, cwd);
     if (mount_dentry == NULL) kerror("Mount Point not initilazed properly!");
 
     mount_dentry->mount_root = mounted_dir;
@@ -142,19 +141,30 @@ vfs_dentry_t* VFS_Mount(char* name, char* parent_name, vfs_dentry_t* start_dentr
 }
 
 vfs_dentry_t* CreateDentry(vfs_inode_t* inode, char* name) {
+    bool sti = check_interrupts();
+    CliHelper();
+
     vfs_dentry_t* node = kmalloc(sizeof(vfs_dentry_t));
     node->inode = inode;
     root_dentry->ops = &fat32_ops;
     node->name = name;
+    if (sti) StiHelper();
     return node;
 }
 
 void AddDentryToParent(vfs_dentry_t* parent, vfs_dentry_t* node) {
+    bool sti = check_interrupts();
+    CliHelper();
+
+    dCachePut(node);
+    node->parent = parent;
     char* node_name = node->name;
     vfs_dentry_t* p = parent->children;
+
     if (p == NULL) {
         parent->children = node;
         node->next = NULL;
+        if (sti) StiHelper();
         return;
     }
 
@@ -162,18 +172,20 @@ void AddDentryToParent(vfs_dentry_t* parent, vfs_dentry_t* node) {
         if (strcmp(node_name, p->next->name) < 0) {
             node->next = p->next;
             p->next = node;
+            if (sti) StiHelper();
             return;
         }
         p = p->next;
     }
     p->next = node;
     node->next = NULL;
+    if (sti) StiHelper();
 }
 
-vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, char* path) {
+vfs_dentry_t* FindDentry(vfs_dentry_t* cwd, char* path) {
     if (!path) return NULL;
 
-    vfs_dentry_t* current = (*path == '/') ? root_dentry : start_dentry;
+    vfs_dentry_t* current = (*path == '/') ? root_dentry : cwd;
     
     char segment[MAX_FILE_NAME_SIZE]; 
     const char* step = path;
@@ -200,6 +212,8 @@ vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, char* path) {
                 dCachePut(found);
             }
         }
+
+        if (found == NULL) kerror("Not found in current directory!");
 
         if (found->mount_root != NULL && found->inode->type == MOUNT_POINT) {
             current = found->mount_root;

@@ -4,7 +4,7 @@ OUTPUT_FORMAT(elf32-i386)
 SECTIONS
 {
     /* Stage 4 (on disk) */
-    . = 0x8A00;
+    . = 0x8E00;
     _start_of_kernel_file = .;
 
     .stage4 : {
@@ -38,7 +38,7 @@ SECTIONS
     }
 
     _text_start_V = .;
-    . = ALIGN(4);
+    . = ALIGN(32);
     _text_start_V_actual = .;
     /* Compute properly aligned text start */
     _text_start = _helpers_start + SIZEOF(.helpers) + _text_start_V_actual - _text_start_V;

@@ -31,10 +31,11 @@ void end() {
 void kmain() {
     start();
 
-    vfs_dentry_t *mount1, *folder1, *file1;
+    vfs_dentry_t *mount1, *folder1, *folder2, *file1;
     folder1 = VFS_CreateDentry("folder1", "/", VFS_DIRECTORY, NULL);
     mount1 = VFS_Mount("mount1", "/", NULL, folder1);
-    file1 = VFS_CreateDentry("file1", "/mount1", VFS_FILE, NULL);
+    folder2 = VFS_CreateDentry("folder2", "/mount1", VFS_DIRECTORY, NULL);
+    file1 = VFS_CreateDentry("file2", "folder2", VFS_FILE, folder1);
 
     PrintVFS_Root();
 
