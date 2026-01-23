@@ -170,7 +170,7 @@ void AddDentryToParent(vfs_dentry_t* parent, vfs_dentry_t* node) {
     node->next = NULL;
 }
 
-vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, const char* path) {
+vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, char* path) {
     if (!path) return NULL;
 
     vfs_dentry_t* current = (*path == '/') ? root_dentry : start_dentry;
@@ -189,18 +189,17 @@ vfs_dentry_t* FindDentry(vfs_dentry_t* start_dentry, const char* path) {
             continue;
         }
 
-        vfs_dentry_t* child = current->children;
         vfs_dentry_t* found = NULL;
 
-        while (child != NULL) {
-            if (strcmp(child->name, segment) == 0) {
-                found = child;
-                break;
-            }
-            child = child->next;
-        }
+        found = dCacheLookup(current, segment);
 
-        if (!found) return NULL;
+        if (!found) {
+            found = (vfs_dentry_t*) SearchChildren(current->children, segment);
+
+            if (found) {
+                dCachePut(found);
+            }
+        }
 
         if (found->mount_root != NULL && found->inode->type == MOUNT_POINT) {
             current = found->mount_root;
@@ -236,4 +235,14 @@ const char* GetNextSegment(const char* path, char* buffer, uint32_t max_len) {
     buffer[i] = '\0'; 
 
     return &path[i];
+}
+
+vfs_dentry_t* SearchChildren(vfs_dentry_t* child, char* segment) {
+    while (child != NULL) {
+        if (strcmp(child->name, segment) == 0) {
+            return child;
+        }
+        child = child->next;
+    }
+    return NULL;
 }

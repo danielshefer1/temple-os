@@ -208,3 +208,8 @@ typedef struct vfs_dentry_t {
 } vfs_dentry_t;
 
 
+typedef struct dcache_entry {
+    vfs_dentry_t* dentry;
+    struct dcache_entry* next;
+} dcache_entry_t;
+

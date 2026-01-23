@@ -1,19 +1,21 @@
 #include "slab_alloc.h"
 
-static cache_t caches[NUM_CACHE];
-static uint32_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(vfs_dentry_t), sizeof(vfs_inode_t)};
-static uint32_t slab_sizes[] = {1, 32, 2, 2};
+
+static uint32_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(vfs_dentry_t), sizeof(vfs_inode_t), sizeof(dcache_entry_t)};
+static uint32_t slab_sizes[] = {1, 32, 2, 2, 1};
+static cache_t caches[sizeof(sizes) / sizeof(sizes[0])];
 static uint32_t curr_addr;
+static uint32_t num_cache = sizeof(sizes) / sizeof(sizes[0]);
 
 void InitSlabAlloc(uint32_t start) {
     uint32_t start_addr;
     curr_addr = start;
     
-    if (sizeof(sizes) != sizeof(slab_sizes) || (sizeof(sizes) / sizeof(sizes[0]) != NUM_CACHE)) {
-        kerror("sizes, slab_sizes and NUM_CACHE don't line up!");
+    if (sizeof(sizes) != sizeof(slab_sizes)) {
+        kerror("sizes, slab_sizes don't line up!");
     }
 
-    for (uint32_t i = 0; i < NUM_CACHE; i++) {
+    for (uint32_t i = 0; i < num_cache; i++) {
         caches[i].size = sizes[i];
         start_addr = AddKernelPages(slab_sizes[i]);
         caches[i].empty_slabs = (slab_t*) curr_addr;
@@ -145,7 +147,7 @@ uint32_t GetBestCacheIndex(uint32_t size) {
     uint32_t best_idx = 0xFFFFFFF;
     uint32_t min_waste = 0xFFFFFFFF;
 
-    for (uint32_t i = 0; i < NUM_CACHE; i++) {
+    for (uint32_t i = 0; i < num_cache; i++) {
         if (caches[i].size >= size) {
             uint32_t waste = caches[i].size - size;
             

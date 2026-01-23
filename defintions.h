@@ -2,7 +2,6 @@
 #include "includes.h"
 
 // Slab Definitions
-#define NUM_CACHE 4
 #define SLAB_GARBAGE_BYTE 0xAC
 // End Slab Definitions
 
@@ -108,4 +107,9 @@
 #define MOUNT_POINT 2
 
 #define MAX_FILE_NAME_SIZE 256
-// VFS Definitons
+// End VFS Definitons
+
+// Dcache Definitions
+#define GOLDEN_RATIO_32 0x61C88647
+#define DCACHE_SIZE 1024
+// End Dcache Definitions
