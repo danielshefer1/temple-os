@@ -7,6 +7,6 @@
 #include "str_ops.h"
 #include "vga.h"
 
-void dCachePut(vfs_dentry_t* dentry);
-void dCacheRemove(vfs_dentry_t* dentry);
-vfs_dentry_t* dCacheLookup(vfs_dentry_t* parent, const char* name);
+void dCachePut(dentry_t* dentry);
+void dCacheRemove(dentry_t* dentry);
+dentry_t* dCacheLookup(dentry_t* parent, const char* name);

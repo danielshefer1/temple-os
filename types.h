@@ -176,15 +176,15 @@ typedef struct mutex_t {
     void* wait_queue;        
 } mutex_t;
 
-struct vfs_dentry_t;
+struct dentry_t;
 
 typedef struct vfs_ops_t {
-    uint32_t (*read)(struct vfs_dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
-    uint32_t (*write)(struct vfs_dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
-    struct vfs_dentry_t* (*finddir)(struct vfs_dentry_t* node, char* name);
+    uint32_t (*read)(struct dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
+    uint32_t (*write)(struct dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
+    struct dentry_t* (*finddir)(struct dentry_t* node, char* name);
 } vfs_ops_t;
 
-typedef struct vfs_inode_t {
+typedef struct inode_t {
     uint32_t type;
     uint32_t size;
     uint32_t permissions;
@@ -192,24 +192,25 @@ typedef struct vfs_inode_t {
     uint32_t group_id;
     uint32_t link_count;
     mutex_t mutex;
-} vfs_inode_t;
+} inode_t;
 
-typedef struct vfs_dentry_t {
+typedef struct dentry_t {
     char* name;
-    vfs_inode_t* inode;
+    char* syslink_name;
+    inode_t* inode;
     vfs_ops_t* ops;
     void* driver_data;
 
-    struct vfs_dentry_t* parent;
-    struct vfs_dentry_t* children;
-    struct vfs_dentry_t* next;
+    struct dentry_t* parent;
+    struct dentry_t* children;
+    struct dentry_t* next;
 
-    struct vfs_dentry_t* mount_root;
-} vfs_dentry_t;
+    struct dentry_t* mount_root;
+} dentry_t;
 
 
 typedef struct dcache_entry {
-    vfs_dentry_t* dentry;
+    dentry_t* dentry;
     struct dcache_entry* next;
 } dcache_entry_t;
 

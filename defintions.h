@@ -105,6 +105,7 @@
 #define VFS_FILE 0
 #define VFS_DIRECTORY 1
 #define MOUNT_POINT 2
+#define SYS_LINK 3
 
 #define MAX_FILE_NAME_SIZE 256
 // End VFS Definitons
