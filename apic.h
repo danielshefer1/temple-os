@@ -6,5 +6,7 @@
 #include "mem_ops.h"
 #include "vga.h"
 
-RSDP_descriptor* FindRsdp();
-void PrintRsdp(RSDP_descriptor* rsdp);
+void FindRsdp();
+void PrintRsdp();
+void FindRsdt();
+rsdt_t* GetRsdt();

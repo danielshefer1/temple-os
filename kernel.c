@@ -30,12 +30,11 @@ void kmain() {
 
     kprintf("MMIO_OFFSET: %x\n", MMIO_OFFSET);
 
-    RSDP_descriptor* rsdp = FindRsdp();
-    PrintRsdp(rsdp);
-
     FillPageDirectoryMMIO(MMIO_BASE, TABLE_SIZE);
 
-    pde_t* pd_main = PageDirAddrV();
-    pte_t* pt = ((pd_main[MMIO_FIRST_TABLE].frame << 12) + KERNEL_VIRTUAL);
+    FindRsdp();
+    PrintRsdp();
+    FindRsdt();
+    rsdt_t* rsdt_main = GetRsdt();
     end();
 }
