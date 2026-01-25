@@ -22,7 +22,7 @@ enable_paging:
     mov cr0, eax
     
     mov eax, [esp+4]
-    mov esp, 0x80000000
+    mov esp, 0xC0000000
     add esp, eax
     add esp, 0x2000
     add esp, 0x4FFF

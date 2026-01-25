@@ -165,10 +165,10 @@ void FreeBuddy(void* address) {
         if ((uint32_t)(1 << node->order) % PAGE_SIZE != 0) {
             page_count++;
         }
-        RemovePages(((uint32_t)address - KERNEL_VIRTUAL / 2) >> 21, (uint32_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
+        RemovePages(((uint32_t)address - USER_BASE) >> 21, (uint32_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
     }
     else {
-        RemovePageTables(((uint32_t)address - KERNEL_VIRTUAL / 2) >> 21, ((uint32_t)address + (1 << order) - KERNEL_VIRTUAL / 2) >> 21);
+        RemovePageTables(((uint32_t)address - USER_BASE) >> 21, ((uint32_t)address + (1 << order) - USER_BASE) >> 21);
     }
 
     bool merged = MergeBuddy(address, order);
@@ -207,7 +207,7 @@ void* RequestBuddy(uint32_t size) {
 
             void* ret = SplitNode(bins[current_order].head_free, order);
             if (ret != NULL) {
-                FillPageDirectory(ret, (1 << order));
+                FillPageDirectoryUser(ret, (1 << order));
                 if (org_int_state) StiHelper();
                 return ret;
             }

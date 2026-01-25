@@ -13,5 +13,6 @@
 #include "E820.h"
 #include "set_tss.h"
 #include "vfs.h"
+#include "apic.h"
 
 void kmain();

@@ -5,9 +5,9 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
+#include "mem_ops.h"
 
 slab_t* DeleteSlab(slab_t* head, slab_t* target);
-void memset(void* address, uint8_t value, uint32_t size);
 void InitSlabAlloc(uint32_t start);
 void* kmalloc(uint32_t size);
 void kfree(void* ptr, uint32_t size);

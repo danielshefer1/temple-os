@@ -245,19 +245,3 @@ void kfree(void* ptr, uint32_t size) {
     }
     if (org_int_state) StiHelper();
 }
-
-
-void memset(void* address, uint8_t value, uint32_t size) {
-    uint32_t reminder = size % 4;
-    size -= reminder;
-    size /= 4;
-    uint32_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
-
-    for(uint32_t i = 0; i < size; i++) {
-        ((uint32_t*) address)[i] = value_32;
-    }
-
-    for(uint32_t i = 0; i < reminder; i++) {
-        ((uint8_t*) address)[size * 4 +i] = value;
-    }
-}

@@ -49,7 +49,7 @@ void isr_handler(interrupt_frame_t* frame) {
         ExecptionHandler(frame);
     }
     else if (32 <= int_no && int_no < 48) {
-        IRQHandler(frame);
+        //IRQHandler(frame); (Place holder for APIC)
     }
 }
 
@@ -123,46 +123,6 @@ void ExecptionHandler(interrupt_frame_t* frame) {
     }
 }
 
-void IRQHandler(interrupt_frame_t* frame) {
-    uint32_t int_no = frame->int_no;
-
-    switch (int_no) {
-        case 32:
-            TimerHandler();
-            break;
-        case 33:
-            KeyboardHandler();
-            break;
-    }
-}
-
-void TimerHandler() {
-    timer_ticks++;
-}
-
-void KeyboardHandler() {
-    uint8_t scancode = inb(0x60);
-    uint8_t presscode = scancode & 0x7F;
-    bool is_release = scancode & 0x80;
-    char c = kbd_us[presscode];
-
-    if  (presscode == LEFT_SHIFT_MAKE_SCANCODE || presscode == RIGHT_SHIFT_MAKE_SCANCODE) {
-        shift_pressed = !is_release;
-        return;
-    }
-    if (c == 0) return;
-
-    if (!is_release) {
-        if (shift_pressed) {
-            if (c <= 'z' && c >= 'a') c -= 32;
-            else {
-                uint8_t special_idx = c - 48;
-                c = special_chars[special_idx];
-            }
-        }
-        PushKeyboardBuffer(&console_buffer, c);
-    }
-}
 
 void DivideByZeroHandler(interrupt_frame_t* frame) {
     kerror("Exception 0: Divide by Zero at EIP: %x\n", frame->eip);

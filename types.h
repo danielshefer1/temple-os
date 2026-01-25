@@ -214,3 +214,11 @@ typedef struct dcache_entry {
     struct dcache_entry* next;
 } dcache_entry_t;
 
+
+typedef struct RSDP_descriptor {
+    char signature[8];
+    uint8_t checksum;
+    char oem_id[6];
+    uint8_t revision;
+    uint32_t rsdt_address;
+} __attribute__((packed)) RSDP_descriptor;

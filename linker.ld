@@ -26,7 +26,7 @@ SECTIONS
     _bootstrap_size = SIZEOF(.bootstrap);
 
     /* Kernel VMA starts at 2GB + 1MB plus bootstrap size */
-    . = 0x80100000 + _bootstrap_size;
+    . = 0xC0100000 + _bootstrap_size;
     _kernel_VMA_start = .;
 
     . = ALIGN(4);

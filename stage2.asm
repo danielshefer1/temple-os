@@ -140,36 +140,32 @@ get_e820_memory_map:
 
 ; ----- PIC Remap -----
 remap_pic:
-    ; Remap PIC so IRQs don't conflict with CPU exceptions
-    ; IRQ 0-7 -> INT 32-39
-    ; IRQ 8-15 -> INT 40-47
-    
-    ; ICW1 - Start initialization
+
+
     mov al, 0x11
-    out 0x20, al                     ; Send to master PIC
-    out 0xA0, al                     ; Send to slave PIC
+    out 0x20, al                    
+    out 0xA0, al                     
     
-    ; ICW2 - Set interrupt vectors
-    mov al, 32                       ; Master PIC: IRQs start at INT 32
+
+    mov al, 32                      
     out 0x21, al
-    mov al, 40                       ; Slave PIC: IRQs start at INT 40
+    mov al, 40                       
     out 0xA1, al
     
-    ; ICW3 - Set up cascading
-    mov al, 4                        ; Master PIC: slave at IRQ2
+
+    mov al, 4                        
     out 0x21, al
-    mov al, 2                        ; Slave PIC: connected to IRQ2
-    out 0xA1, al
+    mov al, 2                       
     
-    ; ICW4 - Final configuration
+
     mov al, 1
     out 0x21, al
     out 0xA1, al
     
-    mov al, 0xFC                ; Mask all except IRQ0 (timer) and IRQ1 (keyboard)
-    out 0x21, al                     ; Master PIC
-    mov al, 0xFF                     ; Mask all on slave
-    out 0xA1, al                     ; Slave PIC
+    mov al, 0xFF              
+    out 0x21, al                     
+    mov al, 0xFF                     
+    out 0xA1, al                   
     
     ret
 
