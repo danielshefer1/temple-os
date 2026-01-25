@@ -18,7 +18,7 @@ dentry_t* CreateDentry(inode_t* inode, char* name);
 void AddDentryToParent(dentry_t* parent, dentry_t* node);
 const char* GetNextSegment(const char* path, char* buffer, uint32_t max_len);
 dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, dentry_t* cwd);
-dentry_t* VFS_HardLink(char* name, char* parent_name, dentry_t* cwd, inode_t* inode);
+dentry_t* VFS_HardLink(char* name, char* parent_name, dentry_t* cwd, inode_t* inode, char* inode_path);
 dentry_t* VFS_Mount(char* name, char* parent_name, dentry_t* cwd, dentry_t* mounted_dir);
 dentry_t* VFS_SysLink(char* name, char* parent_name, dentry_t* cwd, char* syslink_name);
 void VFS_RemoveDentry(dentry_t* dentry);

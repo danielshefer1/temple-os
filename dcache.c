@@ -8,7 +8,7 @@ uint32_t hash_dentry(dentry_t* parent, const char* name) {
 
     hash = hash * GOLDEN_RATIO_32; 
 
-    int c;
+    uint32_t c;
     while ((c = *name++)) {
         hash = ((hash << 5) + hash) + c; 
     }
@@ -17,8 +17,6 @@ uint32_t hash_dentry(dentry_t* parent, const char* name) {
 }
 
 void dCachePut(dentry_t* dentry) {
-    bool sti = check_interrupts();
-    CliHelper();
     dentry_t* parent = dentry->parent;
     char* name = dentry->name;
     uint32_t bucket = hash_dentry(parent, name);
@@ -28,7 +26,6 @@ void dCachePut(dentry_t* dentry) {
     
     entry->next = dcache_table[bucket];
     dcache_table[bucket] = entry;
-    if (sti) StiHelper();
 }
 
 void dCacheRemove(dentry_t* dentry) {

@@ -11,9 +11,7 @@ static vfs_ops_t fat32_ops = {
 
 void InitVFS() {
     inode_t* root_inode;
-
-    bool sti = check_interrupts();
-    CliHelper();
+    
     root_dentry = (dentry_t*) kmalloc(sizeof(dentry_t));
     root_inode = (inode_t*) kmalloc(sizeof(inode_t));
     root_dentry->inode = root_inode;
@@ -25,7 +23,6 @@ void InitVFS() {
     root_dentry->children = NULL;
     root_dentry->next = NULL;
     root_dentry->mount_root = NULL;
-    if (sti) StiHelper();
 }
 
 void PrintVFS_Root() {
@@ -111,11 +108,19 @@ void GetTypeString(uint32_t type_idx, char* type) {
     }
 }
 
-dentry_t* VFS_HardLink(char* name, char* parent_name, dentry_t* cwd, inode_t* inode) {
+dentry_t* VFS_HardLink(char* name, char* parent_name, dentry_t* cwd, inode_t* inode, char* inode_path) {
     if (parent_name == NULL || *parent_name == '\0') {
         kerror("Parent doesn't exist\n");
     }
-    dentry_t* parent;
+    dentry_t* parent, *p;
+
+    if (inode == NULL) {
+        p = FindDentry(cwd, inode_path);
+        if (p != NULL) inode = p->inode;
+        else return NULL;
+    }
+
+    if (inode->type != VFS_FILE) return NULL;
 
     if (cwd == NULL) parent = FindDentry(root_dentry, parent_name);
     else parent = FindDentry(cwd, parent_name);
@@ -151,9 +156,8 @@ dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, dentry_
 
     if (cwd == NULL) parent = FindDentry(root_dentry, parent_name);
     else parent = FindDentry(cwd, parent_name);
+
     
-    bool sti = check_interrupts();
-    CliHelper();
 
     if (parent == NULL) kerror("Parent not Found!");
     if (parent->inode == NULL) kerror("Parent inode not found!");
@@ -171,7 +175,6 @@ dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, dentry_
         .type = type,
         .link_count = 1
     };
-    if (sti) StiHelper();
     
     dentry_t* node = CreateDentry(new_inode, name);
     node->children = NULL;
@@ -190,22 +193,15 @@ dentry_t* VFS_Mount(char* name, char* parent_name, dentry_t* cwd, dentry_t* moun
     return mount_dentry;
 }
 
-dentry_t* CreateDentry(inode_t* inode, char* name) {
-    bool sti = check_interrupts();
-    CliHelper();
-
+dentry_t* CreateDentry(inode_t* inode, char* name)  {
     dentry_t* node = kmalloc(sizeof(dentry_t));
     node->inode = inode;
     node->ops = &fat32_ops;
     node->name = name;
-    if (sti) StiHelper();
     return node;
 }
 
 void AddDentryToParent(dentry_t* parent, dentry_t* node) {
-    bool sti = check_interrupts();
-    CliHelper();
-
     dCachePut(node);
     node->parent = parent;
     char* node_name = node->name;
@@ -214,7 +210,7 @@ void AddDentryToParent(dentry_t* parent, dentry_t* node) {
     if (p == NULL) {
         parent->children = node;
         node->next = NULL;
-        if (sti) StiHelper();
+
         return;
     }
 
@@ -222,14 +218,13 @@ void AddDentryToParent(dentry_t* parent, dentry_t* node) {
         if (strcmp(node_name, p->next->name) < 0) {
             node->next = p->next;
             p->next = node;
-            if (sti) StiHelper();
+    
             return;
         }
         p = p->next;
     }
     p->next = node;
     node->next = NULL;
-    if (sti) StiHelper();
 }
 
 void VFS_RemoveDentryH(dentry_t* dentry) {
@@ -257,12 +252,10 @@ void VFS_RemoveDentryH(dentry_t* dentry) {
 }
 
 void VFS_RemoveDentry(dentry_t* dentry) {
-    bool sti = check_interrupts();
-    CliHelper();
+    
     RemoveDentryFromParent(dentry);
 
     VFS_RemoveDentryH(dentry);
-    if (sti) StiHelper();
 }
 
 void RemoveDentryFromParent(dentry_t* dentry) {
@@ -273,23 +266,22 @@ void RemoveDentryFromParent(dentry_t* dentry) {
     dentry_t* p = parent_node->children;
 
     if (p == dentry) {
-        bool sti = check_interrupts();
-        CliHelper();
+        
         
         parent_node->children = p->next; 
         
-        if (sti) StiHelper();
+
         return;
     } 
 
     while (p->next != NULL) {
         if (p->next == dentry) {
-            bool sti = check_interrupts();
-            CliHelper();
+
+            
             
             p->next = p->next->next; 
             
-            if (sti) StiHelper();
+    
             return;
         }
         p = p->next;
@@ -306,9 +298,7 @@ dentry_t* FindDentry(dentry_t* cwd, char* path) {
     
     char segment[MAX_FILE_NAME_SIZE]; 
     const char* step = path;
-
-    bool sti = check_interrupts();
-    CliHelper();
+    
 
     while ((step = (char*) GetNextSegment(step, segment, sizeof(segment))) != NULL) {
         
@@ -352,7 +342,6 @@ dentry_t* FindDentry(dentry_t* cwd, char* path) {
     }
     if (IsValidSysLink(current)) current = FindDentry(NULL, current->syslink_name);
 
-    if (sti) StiHelper();
     return current;
 }
 

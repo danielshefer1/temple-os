@@ -203,22 +203,18 @@ isr_hardware_stub:
     push esp
     call isr_handler
     add esp, 4
+    
+    mov al, 0x20
+    out 0xA0, al      ; slave PIC
+    out 0x20, al      ; master PIC
+
     pop gs
     pop fs
     pop es
     pop ds
     popa
 
-    mov eax, [esp] ; get interrupt number
-    cmp eax, 40        ; check if it's a hardware interrupt
-    jl .no_slave
-    mov al, 0x20
-    out 0xA0, al      ; send EOI to slave PIC
-.no_slave:
-    mov al, 0x20
-    out 0x20, al      ; send EOI to master PIC
-
-    add esp, 8         ; clean up int num and error code
+    add esp, 8
     iret
 
 global isr_syscall_stub
