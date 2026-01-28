@@ -120,3 +120,10 @@
 #define GOLDEN_RATIO_32 0x61C88647
 #define DCACHE_SIZE 1024
 // End Dcache Definitions
+
+// RSDT Definitions
+#define RSDP_SIG_LENGTH 8
+#define OEM_ID_LENGTH 6
+#define ACPI_TABLE_SIG_LEGNTH 4
+#define BASE_ACPI_TABLE_LENGTH 36
+#define MMIO_PHYS_TO_VIRT(phys) ((uint32_t)phys + MMIO_OFFSET)

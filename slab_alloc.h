@@ -5,7 +5,7 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
-#include "mem_ops.h"
+#include "memory.h"
 
 slab_t* DeleteSlab(slab_t* head, slab_t* target);
 void InitSlabAlloc(uint32_t start);

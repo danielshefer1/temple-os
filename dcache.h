@@ -4,7 +4,7 @@
 #include "defintions.h"
 #include "types.h"
 #include "slab_alloc.h"
-#include "str_ops.h"
+#include "string.h"
 #include "vga.h"
 
 void dCachePut(dentry_t* dentry);

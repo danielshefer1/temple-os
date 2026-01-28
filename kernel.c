@@ -28,13 +28,7 @@ void end() {
 void kmain() {
     start();
 
-    kprintf("MMIO_OFFSET: %x\n", MMIO_OFFSET);
+    InitRsdt();
 
-    FillPageDirectoryMMIO(MMIO_BASE, TABLE_SIZE);
-
-    FindRsdp();
-    PrintRsdp();
-    FindRsdt();
-    rsdt_t* rsdt_main = GetRsdt();
     end();
 }

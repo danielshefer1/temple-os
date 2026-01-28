@@ -4,7 +4,7 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
-#include "math_ops.h"
+#include "math.h"
 #include "slab_alloc.h"
 #include "paging.h"
 

@@ -2,7 +2,7 @@
 #include "includes.h"
 #include "types.h"
 #include "defintions.h"
-#include "str_ops.h"
+#include "string.h"
 
 void deletechar();
 void putchar(char c, uint8_t color);

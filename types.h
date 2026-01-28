@@ -223,7 +223,7 @@ typedef struct rsdp_t {
     uint32_t rsdt_address;
 } __attribute__((packed)) rsdp_t;
 
-typedef struct rsdt_t{
+typedef struct acpi_header_t {
     char signature[4];      
     uint32_t length;
     uint8_t revision;
@@ -233,5 +233,9 @@ typedef struct rsdt_t{
     uint32_t oem_revision;
     uint32_t creator_id;
     uint32_t creator_revision;
-    uint32_t entry[];       
-} __attribute__((packed)) rsdt_t;
+} __attribute__((packed)) acpi_header_t;
+
+typedef struct acpi_table_t {
+    acpi_header_t header;
+    struct acpi_table_t** entry[];
+} __attribute__((packed)) acpi_table_t;

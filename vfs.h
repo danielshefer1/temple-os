@@ -5,7 +5,7 @@
 #include "defintions.h"
 #include "slab_alloc.h"
 #include "vga.h"
-#include "str_ops.h"
+#include "string.h"
 #include "dcache.h"
 
 void InitVFS();

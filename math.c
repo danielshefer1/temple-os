@@ -1,4 +1,4 @@
-#include "math_ops.h"
+#include "math.h"
 
 uint32_t pow(uint32_t base, uint32_t exp) {
     uint32_t result = 1;

@@ -30,9 +30,9 @@ QEMU_FLAGS   = -m 4096 -serial stdio -drive format=raw,file=$(BUILD_DIR)/os.img
 # ============================================================================
 
 C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
- slab_alloc.c paging.c math_ops.c buddy_alloc.c set_gdt.c isr_handler.c \
- set_idt.c timer.c keyboard.c global.c str_ops.c set_tss.c syscall_handler.c \
- vfs.c dcache.c apic.c mem_ops.c
+ slab_alloc.c paging.c math.c buddy_alloc.c set_gdt.c isr_handler.c \
+ set_idt.c timer.c keyboard.c global.c string.c set_tss.c syscall_handler.c \
+ vfs.c dcache.c acpi.c memory.c
 
 USER_C_SOURCES = user_app.c
 
