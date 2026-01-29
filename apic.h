@@ -4,9 +4,7 @@
 #include "types.h"
 #include "defintions.h"
 #include "memory.h"
+#include "string.h"
 #include "vga.h"
-#include "paging.h"
-#include "apic.h"
 
-void InitRsdt();
-void InitApic();
+void ParseMadt(madt_t* madt);

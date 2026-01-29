@@ -29,6 +29,7 @@ void kmain() {
     start();
 
     InitRsdt();
+    InitApic();
 
     end();
 }

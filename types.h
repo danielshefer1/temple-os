@@ -235,7 +235,48 @@ typedef struct acpi_header_t {
     uint32_t creator_revision;
 } __attribute__((packed)) acpi_header_t;
 
-typedef struct acpi_table_t {
+typedef struct rsdt_t {
     acpi_header_t header;
-    struct acpi_table_t** entry[];
-} __attribute__((packed)) acpi_table_t;
+    acpi_header_t** entries[];
+} __attribute__((packed)) rsdt_t;
+
+typedef struct madt_t {
+    acpi_header_t header;           
+    uint32_t local_apic_address;    
+    uint32_t flags;                 
+} __attribute__((packed)) madt_t;
+
+typedef struct madt_entry_header_t {
+    uint8_t type;
+    uint8_t length;
+} __attribute__((packed)) madt_entry_header_t;
+
+typedef struct local_apic_t {
+    madt_entry_header_t header;
+    uint8_t acpi_processor_id;  
+    uint8_t apic_id;
+    uint32_t flags;
+} __attribute__((packed)) local_apic_t;
+
+typedef struct io_apic_t {
+    madt_entry_header_t header;
+    uint8_t ioapic_id; 
+    uint8_t reserved;
+    uint32_t ioapic_address;
+    uint32_t global_system_interrupt_base;
+} __attribute__((packed)) io_apic_t;
+
+typedef struct int_override_t {
+    madt_entry_header_t header;
+    uint8_t bus_source; 
+    uint8_t irq_source;
+    uint32_t global_system_interrupt;
+    uint16_t flags;
+} __attribute__((packed)) int_override_t;
+
+typedef struct madt_local_apic_nmi_t {
+    madt_entry_header_t header;           
+    uint8_t acpi_processor_id; 
+    uint16_t flags;            
+    uint8_t lint;              
+} __attribute__((packed)) madt_local_apic_nmi_t;

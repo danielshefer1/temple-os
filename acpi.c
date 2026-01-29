@@ -1,7 +1,8 @@
 #include "acpi.h"
 
 static rsdp_t* rsdp;
-static acpi_table_t* rsdt;
+static rsdt_t* rsdt;
+static madt_t* madt;
 
 bool ValidateRsdp(void* addr) {
     if (memcmp((void*)addr, "RSD PTR ", RSDP_SIG_LENGTH) == 0) {
@@ -18,11 +19,12 @@ bool ValidateRsdp(void* addr) {
     return false;
 }
 
-bool ValidateACPITable(acpi_table_t* table) {
+bool ValidateACPIHeader(acpi_header_t* header) {
     uint8_t sum = 0;
-    uint8_t* bytes = (uint8_t*) table;
-    
-    for (uint32_t i = 0; i < table->header.length; i++) {
+    uint8_t* bytes = (uint8_t*) header;
+    uint32_t length = header->length;
+
+    for (uint32_t i = 0; i < length; i++) {
         sum += bytes[i];
     }
     
@@ -49,11 +51,11 @@ void PrintRsdp() {
 
 void FindRsdt() {
     uint32_t phy_addr = rsdp->rsdt_address, ver_addr = phy_addr + MMIO_OFFSET;
-    if (!ValidateACPITable((acpi_table_t*) ver_addr)) {
+    if (!ValidateACPIHeader((acpi_header_t*) ver_addr)) {
         kprintf("Table found is not valid!");
         return;
     }
-    rsdt = (acpi_table_t*) ver_addr;
+    rsdt = (rsdt_t*) ver_addr;
     if (strncmp(rsdt->header.signature, "RSDT", ACPI_TABLE_SIG_LEGNTH) != 0) {
         kprintf("Acpi table found is not RSDT, it's ");
         print_str_SYSCALL(rsdt->header.signature, GREY_COLOR, ACPI_TABLE_SIG_LEGNTH);
@@ -63,22 +65,22 @@ void FindRsdt() {
     kprintf("RSDT found!\n");
 }
 
-void SearchRsdt() {
-    if (rsdt == NULL) {
-        kprintf("Find RSDT first!");
-        return;
-    }
-    uint32_t num_entries = (rsdt->header.length - BASE_ACPI_TABLE_LENGTH) / sizeof(uint32_t);
-    acpi_table_t** entrys = rsdt->entry;
-    for (uint32_t i = 0; i < num_entries; i++) {
+void FindMadt(rsdt_t* rsdt) {
+    uint32_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
+    acpi_header_t* entry;
 
-        if (!ValidateACPITable(MMIO_PHYS_TO_VIRT(entrys[i]))) {
+    for (uint32_t i = 0; i < num_entries; i++) {
+        entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
+
+        if (!ValidateACPIHeader(entry)) {
             kprintf("Found an unvalid ACPI table");
             continue;
         }
-        kprintf("Found a valid ACPI table, Signature: ");
-        print_str_SYSCALL(MMIO_PHYS_TO_VIRT(entrys[i]->header.signature), GREY_COLOR, ACPI_TABLE_SIG_LEGNTH);
-        putchar('\n', GREY_COLOR);
+        if (strncmp(entry->signature, "APIC", ACPI_TABLE_SIG_LEGNTH) == 0) {
+            madt = (madt_t*)entry;
+            kprintf("Found MADT!\n");
+            return;
+        }
     }
 }
 
@@ -86,5 +88,9 @@ void InitRsdt() {
     FindRsdp();
     FillPageDirectoryMMIO((void*)MMIO_BASE, TABLE_SIZE);
     FindRsdt();
-    SearchRsdt();
+    FindMadt(rsdt);
+}
+
+void InitApic() {
+    ParseMadt(madt);
 }
