@@ -11,3 +11,5 @@ extern volatile uint32_t timer_ticks;
 extern volatile uint32_t* lapic;
 extern volatile uint32_t* ioapic;
 extern uint32_t cpu_count;
+extern int_override_t* overrides[16];
+extern volatile uint32_t overrides_length;

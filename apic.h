@@ -12,3 +12,4 @@
 
 void EnableLapic();
 void InitTimer(uint32_t ms);
+void InitKeyboard();

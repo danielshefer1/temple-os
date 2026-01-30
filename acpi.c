@@ -90,6 +90,7 @@ void FindMadt(rsdt_t* rsdt) {
 void ParseMadt(madt_t* madt) {
     madt_entry_header_t* entry = (madt_entry_header_t*)((uint32_t)madt + sizeof(madt_t));
     uint32_t end = madt->header.length + (uint32_t)madt;
+    uint32_t over_idx = 0;
 
     while ((uint32_t)entry < end) {
         switch (entry->type) {
@@ -103,6 +104,8 @@ void ParseMadt(madt_t* madt) {
                 break;
             case 2:
                 kprintf("Found Interrupts Override!\n");
+                overrides[over_idx] = (int_override_t*) entry;
+                over_idx++;
                 break;
             case 4:
                 kprintf("Found NMI!\n");
@@ -112,6 +115,7 @@ void ParseMadt(madt_t* madt) {
         }
         entry = (madt_entry_header_t*)((uint32_t)entry + entry->length);
     }
+    overrides_length = over_idx;
     kprintf("Finished parsing MADT succesfully!\n");
 }
 

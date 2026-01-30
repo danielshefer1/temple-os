@@ -4,8 +4,6 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
-#include "global.h"
-#include "keyboard.h"
 
 void isr_handler(interrupt_frame_t* frame);
 
@@ -35,7 +33,4 @@ void VirtualizationExceptionHandler(interrupt_frame_t* frame);
 void ControlProtectionExceptionHandler(interrupt_frame_t* frame);
 void UnknownExceptionHandler(interrupt_frame_t* frame);
 
-// IRQ Handlers
-void TimerHandler();
-void KeyboardHandler();
 

@@ -1,14 +1,12 @@
  #include "kernel.h"
 
-
-
-
 void kmain() {
     start();
 
-    kprintf("Waiting ten seconds...\n");
-    WaitSeconds(10);
-    kprintf("Finished waiting!");
+    uint32_t test;
+    kprintf("Just checking if kscanf is still working: ");
+    kscanf("%d", &test);
+    kprintf("Input was %d", test);
 
     end();
 }

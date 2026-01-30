@@ -8,3 +8,5 @@ volatile uint32_t* lapic;
 volatile uint32_t* ioapic;
 uint32_t cpu_count;
 
+int_override_t* overrides[16];
+volatile uint32_t overrides_length;

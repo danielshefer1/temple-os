@@ -71,7 +71,7 @@ uint32_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint32_t ma
                 tmp_idx++;
             }
             putchar(buffer->buffer[buffer->tail].c, GREY_COLOR);
-            buffer->tail++;
+            buffer->tail = (buffer->tail + 1) % buffer->size;
         }
     }
 }

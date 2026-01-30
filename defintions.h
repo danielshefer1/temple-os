@@ -97,6 +97,14 @@
 // Timer Definitions
 #define TIMER_TICK_PER_MS 1
 #define SEC 1000
+// End Timer Definitions
+
+// Apic Definitions
+#define IOAPIC_REG_INDEX    0x00
+#define IOAPIC_REG_DATA     0x10
+#define IOAPIC_REDTBL_BASE  0x10 
+// End Apic Definitions
+
 
 // Keyboard Definitions
 #define CONSOLE_BUFFER_SIZE 512
