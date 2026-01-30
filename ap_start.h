@@ -11,6 +11,6 @@
 #include "set_gdt.h"
 #include "apic.h"
 #include "paging_bootstrap.h"
+#include "ap_main.h"
 
-void ap_kmain();
 void BootCores();
