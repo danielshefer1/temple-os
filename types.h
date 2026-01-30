@@ -280,3 +280,7 @@ typedef struct madt_local_apic_nmi_t {
     uint16_t flags;            
     uint8_t lint;              
 } __attribute__((packed)) madt_local_apic_nmi_t;
+
+typedef struct spinlock_t {
+    volatile uint32_t locked;
+} spinlock_t;

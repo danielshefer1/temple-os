@@ -7,3 +7,4 @@
 
 void InitIDT();
 void ReplaceTimer();
+idt_ptr_t* getIdtPtr();

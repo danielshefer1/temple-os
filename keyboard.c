@@ -1,8 +1,9 @@
 #include "keyboard.h"
 
 void PushKeyboardBuffer(input_buffer_t* buffer, char c) {
+    uint32_t cpu_id = get_cpuid();
     buffer->buffer[buffer->head].c = c;
-    buffer->buffer[buffer->head].time = timer_ticks;
+    buffer->buffer[buffer->head].time = timer_ticks[cpu_id];
     buffer->head = (buffer->head + 1) % buffer->size;
 }
 
@@ -16,7 +17,8 @@ void FlushBuffer(input_buffer_t* buffer) {
 }
 
 uint32_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, tuple_t* keys) {
-    uint32_t curr_time = timer_ticks, idx = buffer->tail, tmp_idx = 0, end = buffer->head;
+    uint32_t cpu_id = get_cpuid();
+    uint32_t curr_time = timer_ticks[cpu_id], idx = buffer->tail, tmp_idx = 0, end = buffer->head;
 
     while (curr_time - ms_back > buffer->buffer[idx].time && idx != end) {
         idx = (idx + 1) % buffer->size; 

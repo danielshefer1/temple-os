@@ -12,8 +12,8 @@ stage4_entry:
     dd _bss_start
     dd _bss_end
 
-global enable_paging
-enable_paging:
+global enable_paging_bootstrap
+enable_paging_bootstrap:
     mov eax, [esp+4]      ; Get page_directory parameter
     mov cr3, eax          ; Load into CR3
     
@@ -32,6 +32,18 @@ enable_paging:
 
     cli
     hlt
+
+global enable_paging
+enable_paging:
+    mov eax, [esp+4]      ; Get page_directory parameter
+    mov cr3, eax          ; Load into CR3
+    
+    mov eax, cr0
+    or eax, 0x80000000    ; Set PG bit
+    mov cr0, eax
+
+    add esp, 0xC0000000
+    ret
 
 
 

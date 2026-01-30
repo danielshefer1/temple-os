@@ -12,5 +12,5 @@ void bootstrap_kmain() {
 
     InitPageDirectory(page_directory, pd_addr, kernel_pages, text_size);
 
-    enable_paging((uint32_t*) page_directory);
+    enable_paging_bootstrap((uint32_t*) page_directory);
 }

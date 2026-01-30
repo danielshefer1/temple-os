@@ -18,12 +18,12 @@ OBJCOPY = i686-elf-objcopy
 # ============================================================================
 # FLAGS
 # ============================================================================
-CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -fno-pic -fno-pie
+CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -fno-pic -fno-pie -mno-sse -mno-mmx -mno-80387
 ASFLAGS_BIN  = -f bin
 ASFLAGS_ELF  = -f elf32 -g
 LDFLAGS      = -m elf_i386 -T linker.ld
 USER_LDFLAGS = -m elf_i386 -T user_linker.ld
-QEMU_FLAGS   = -m 4096 -serial stdio -smp 4 -drive format=raw,file=$(BUILD_DIR)/os.img
+QEMU_FLAGS   = -m 4096 -serial stdio -smp cores=6,threads=2 -drive format=raw,file=$(BUILD_DIR)/os.img
 
 # ============================================================================
 # SOURCE FILES
@@ -32,14 +32,15 @@ QEMU_FLAGS   = -m 4096 -serial stdio -smp 4 -drive format=raw,file=$(BUILD_DIR)/
 C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
  slab_alloc.c paging.c math.c buddy_alloc.c set_gdt.c isr_handler.c \
  set_idt.c timer.c keyboard.c global.c string.c set_tss.c syscall_handler.c \
- vfs.c dcache.c acpi.c memory.c apic.c irq_handler.c utility.c
+ vfs.c dcache.c acpi.c memory.c apic.c irq_handler.c utility.c ap_start.c \
+ 
 
 USER_C_SOURCES = user_app.c
 
 C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
 USER_C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_C_SOURCES:.c=.o))
 
-ASM_SOURCES = stage4.asm helpers.asm
+ASM_SOURCES = stage4.asm helpers.asm trampoline_wrapper.asm
 USER_ASM_SOURCES = user_helpers.asm
 
 
@@ -55,12 +56,14 @@ USER_OBJECTS = $(USER_ASM_OBJECTS) $(USER_C_OBJECTS)
 STAGE1_BIN   = $(BUILD_DIR)/boot.bin
 STAGE2_BIN   = $(BUILD_DIR)/stage2.bin
 STAGE3_BIN	 = $(BUILD_DIR)/stage3.bin
+TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
 KERNEL_ELF   = $(BUILD_DIR)/kernel.elf
 DISK_IMG     = $(BUILD_DIR)/os.img
 PAYLOAD_BIN  = $(BUILD_DIR)/payload.bin
 USER_ELF = $(BUILD_DIR)/user.elf
 USER_BIN = $(BUILD_DIR)/user_payload.bin
 FULL_PAYLOAD = $(BUILD_DIR)/full_payload.bin
+
 
 # ============================================================================
 # BUILD RULES
@@ -87,8 +90,7 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	@echo "⚙️  Compiling $<..."
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# --- Assemble stage 3 (ELF) ---
-$(BUILD_DIR)/%.o: %.asm | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.asm $(TRAMPOLINE_BIN) | $(BUILD_DIR)
 	@echo "💻 Assembling $< (ELF)..."
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
@@ -107,10 +109,14 @@ $(STAGE1_BIN): boot.asm | $(BUILD_DIR)
 	@echo "💾 Assembling Stage 1 (MBR)..."
 	$(AS) $(ASFLAGS_BIN) $< -o $@
 
+$(TRAMPOLINE_BIN): trampoline.asm | $(BUILD_DIR)
+	@echo "💾 Assembling Trampoline (BIN)..."
+	$(AS) $(ASFLAGS_BIN) $< -o $@
+
 # --- Create disk image ---
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(TRAMPOLINE_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
 	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage4 -j .bootstrap -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
+	$(OBJCOPY) -O binary -j .stage4 -j .bootstrap -j .trampoline -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
 	$(OBJCOPY) -O binary -j .text -j .data -j .bss $(USER_ELF) $(USER_BIN)
 
 	truncate -s %512 $(PAYLOAD_BIN)
@@ -141,13 +147,15 @@ debug: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "set architecture i386" \
 		-ex "break kmain" \
 		-ex "layout src" \
-		-ex "continue"
+		-ex "continue" \
 
 debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
 	@echo "🐛 Starting QEMU with GDB server..."
 	qemu-system-i386 $(QEMU_FLAGS) -s -S &
 	gdb $(KERNEL_ELF) \
 		-tui \
+		-ex "set non-stop on" \
+		-ex "set target-async on" \
 		-ex "target remote localhost:1234" \
 		-ex "set architecture i386" \
 		-ex "break bootstrap_kmain" \

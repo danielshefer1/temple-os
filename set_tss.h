@@ -6,3 +6,4 @@
 #include "paging.h"
 
 void SetFirstTSS();
+void SetNewTss(uint8_t core_id);

@@ -17,3 +17,4 @@ void FillPageDirectoryMMIO(void* addr, uint32_t size);
 void FillPageDirectoryIdentityMapping(void* addr, uint32_t size);
 void RemovePages(uint32_t table_idx, uint32_t start_page, uint32_t num_pages);
 uint32_t AddStack();
+pde_t* getPageDirectory();

@@ -78,3 +78,7 @@ void SetGDT() {
 
     //CheckGDT();
 }
+
+gdt_ptr_t* getGdtPointer() {
+    return &gdtr;
+}

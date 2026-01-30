@@ -6,9 +6,11 @@
 // External symbols from linker
 extern uint32_t __total_pages;
 extern uint32_t _text_size;
+extern uint32_t trampoline_binary;
+extern uint32_t trampoline_size;
 
 // External functions
-extern void enable_paging(uint32_t *page_directory);
+extern void enable_paging_bootstrap(uint32_t *page_directory);
 extern void CliHelper();
 extern void StiHelper();
 extern void HltHelper();
@@ -21,6 +23,10 @@ extern bool check_interrupts();
 extern void load_tss();
 extern void switch_to_user_mode(uint32_t eip, uint32_t esp);
 extern uint8_t get_cpuid();
+extern void enable_paging(void* pd);
+extern void enable_sse();
+extern void spin_lock(void* spinlock_addr);
+extern void spin_unlock(void* spinlock_addr);
 
 // ISR stubs
 extern void isr_stub_0();

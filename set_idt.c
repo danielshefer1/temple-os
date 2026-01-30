@@ -99,3 +99,7 @@ void InitIDT() {
 
     //CheckIDT();
 }
+
+idt_ptr_t* getIdtPtr() {
+    return &idtr;
+}

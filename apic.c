@@ -1,5 +1,7 @@
 #include "apic.h"
 
+static uint32_t ticks_per_ms;
+
 void DisablePic() {
     outb(MASTER_PIC, 0xFF);
     outb(SLAVE_PIC, 0xFF);
@@ -57,11 +59,11 @@ void InitTimer(uint32_t ms) {
     // Mask Timer
     lapic[0x320 / 4] = (1 << 16);    
 
-    uint32_t ticks_per_ms = FindLapicTimerInitalCount();
+    if (ticks_per_ms == 0) ticks_per_ms = FindLapicTimerInitalCount();
 
     // Replace the timer func in IDT
-    ReplaceTimer();
-
+    uint32_t cpu_id = get_cpuid();
+    if (cpu_id == 0) ReplaceTimer();
     // Send dummy EOI
     lapic[0x0B0 / 4] = 0;
     // Set Timer divider to 16

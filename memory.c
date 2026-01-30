@@ -42,3 +42,25 @@ int32_t memcmp(const void* ptr1, const void* ptr2, uint32_t num) {
 
     return 0; 
 }
+
+void memcpy(void* dest, const void* src, uint32_t n) {
+    uint8_t* dest1 = (uint8_t*)dest;
+    const uint8_t* src1 = (const uint8_t*)src;
+
+    if (((uintptr_t)dest1 | (uintptr_t)src1 | n) % 4 == 0) {
+        uint32_t* p1_32 = (uint32_t*)dest1;
+        const uint32_t* p2_32 = (const uint32_t*)src1;
+        uint32_t words = n / 4;
+
+        for (uint32_t i = 0; i < words; i++) {
+            p1_32[i] = p2_32[i];
+        }
+        return;
+    }
+
+    for (uint32_t i = 0; i < n; i++) {
+        dest1[i] = src1[i];
+    }
+
+    return; 
+}

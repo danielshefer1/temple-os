@@ -95,6 +95,11 @@ void ParseMadt(madt_t* madt) {
     while ((uint32_t)entry < end) {
         switch (entry->type) {
             case 0:
+                
+                
+                local_apic_t* ptr = (local_apic_t*) entry;
+                kprintf("Cpu %d ID: %d\t", cpu_count, ptr->acpi_processor_id);
+                cpu_ids[cpu_count] = ptr->acpi_processor_id;;
                 cpu_count++;
                 break;
             case 1:
@@ -128,7 +133,7 @@ void InitRsdt() {
 void InitMadt() {
     FindMadt(rsdt);
     ParseMadt(madt);
-    kprintf("Found %d CPUs!", cpu_count);
+    kprintf("Found %d CPUs!\n", cpu_count);
     kprintf("Local APIC's address is: %x\n", (uint32_t)lapic);
     kprintf("I/O APIC's address is: %x\n", (uint32_t)ioapic);
     FillPageDirectoryIdentityMapping(lapic, PAGE_SIZE);

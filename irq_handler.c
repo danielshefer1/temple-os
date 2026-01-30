@@ -59,7 +59,8 @@ void irq_handler(interrupt_frame_t* frame) {
 }
 
 void TimerHandler() {
-    timer_ticks++;
+    uint8_t cpu_id = get_cpuid();
+    timer_ticks[cpu_id]++;
 }
 
 void KeyboardHandler() {

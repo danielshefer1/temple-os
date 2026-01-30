@@ -117,6 +117,42 @@ get_cpuid:
     mov eax, ebx
     ret
 
+global enable_sse
+enable_sse:
+    ; --- CR0 Setup ---
+    mov eax, cr0
+    and eax, ~0x4       ; Clear EM (bit 2)
+    or eax, 0x22        ; Set MP (bit 1) and NE (bit 5)
+    mov cr0, eax
+
+    ; --- CR4 Setup ---
+    mov eax, cr4
+    or eax, 0x600       ; 0x600 sets bits 9 and 10
+    mov cr4, eax
+
+    ret
+
+global spin_lock
+spin_lock:
+    mov edx, [esp + 4]      ; Get the address of the lock
+    mov eax, 1              ; We want to set the lock to 1
+
+.retry:
+    xchg eax, [edx]         ; Atomically swap EAX with the value at [edx]
+    test eax, eax           ; Was the old value 0?
+    jnz .pause_and_retry    ; If it was 1, someone else has the lock
+    ret                     ; If it was 0, we now own the lock (and it's now 1)
+
+.pause_and_retry:
+    pause                   ; Tell the Ryzen CPU we are in a spin-loop
+    jmp .retry
+
+global spin_unlock
+spin_unlock:
+    mov edx, [esp + 4]
+    mov dword [edx], 0      ; Atomic write of 0
+    ret
+
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1

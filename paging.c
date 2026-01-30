@@ -12,7 +12,6 @@ void InitPaging() {
     uint32_t pd_addr = PageDirAddrV();
     pd = (pde_t*) pd_addr;
     pt = (pte_t*)(KERNEL_VIRTUAL + (pd[HIGHER_HALF_IDX].frame << 12));
-    pd[0].present = 0;
     flush_tlb();
     uint32_t idx = 0;
     while (pt[idx].present == 1) {
@@ -21,6 +20,10 @@ void InitPaging() {
     curr_page = idx;
     curr_table = 0;
     AddGuardPage(HIGHER_HALF_IDX, curr_page - 8);
+}
+
+void DisableIdentityMapping() {
+    pd[0].present = 0;
 }
 uint32_t PageDirAddrV() {
     uint32_t kernel_pages = (uint32_t)&__total_pages;
@@ -336,4 +339,8 @@ void AddGuardPage(uint32_t Tidx, uint32_t Pidx) {
     pte_t* page_table = (pte_t*)(KERNEL_VIRTUAL + (pd[Tidx].frame << 12));
     page_table[Pidx].present = 0;
     flush_tlb();
+}
+
+pde_t* getPageDirectory() {
+    return pd;
 }

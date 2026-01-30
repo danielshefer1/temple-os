@@ -87,7 +87,7 @@ stage3_return2:
 
     mov edi, [current_user_loading_address]
     jmp .load_con
-.load_kernel
+.load_kernel:
     mov edi, [current_kernel_loading_address]
 .load_con:
     ; 2. Prepare pointers for copying

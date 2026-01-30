@@ -141,3 +141,8 @@
 #define RSDT_HEADER_LENGTH 36
 #define MADT_HEADER_LENGTH 44
 #define MMIO_PHYS_TO_VIRT(phys) ((uint32_t)phys + MMIO_OFFSET)
+// End RSDT Definitions
+
+// MultiCore Definitions
+#define TRAMPOLINE_ADDR 0xA000
+// End MultiCore Definitions

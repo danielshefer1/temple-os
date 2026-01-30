@@ -25,7 +25,7 @@ SECTIONS
     }
     _bootstrap_size = SIZEOF(.bootstrap);
 
-    /* Kernel VMA starts at 2GB + 1MB plus bootstrap size */
+    /* Kernel VMA starts at 3GB + 1MB plus bootstrap size */
     . = 0xC0100000 + _bootstrap_size;
     _kernel_VMA_start = .;
 
@@ -37,11 +37,16 @@ SECTIONS
         *(.helpers)
     }
 
+    _trampoline_start = _helpers_start + SIZEOF(.helpers);
+    .trampoline . : AT(_trampoline_start) {
+        *(.trampoline)
+    }
+
     _text_start_V = .;
     . = ALIGN(32);
     _text_start_V_actual = .;
     /* Compute properly aligned text start */
-    _text_start = _helpers_start + SIZEOF(.helpers) + _text_start_V_actual - _text_start_V;
+    _text_start = _trampoline_start + SIZEOF(.trampoline) + _text_start_V_actual - _text_start_V;
     .text : AT(_text_start) {
         *(.text)
         *(.rodata*)

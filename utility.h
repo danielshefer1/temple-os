@@ -14,6 +14,7 @@
 #include "vfs.h"
 #include "acpi.h"
 #include "apic.h"
+#include "ap_start.h"
 
 void start();
 void end();
