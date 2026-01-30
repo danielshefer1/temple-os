@@ -48,9 +48,13 @@ void isr_handler(interrupt_frame_t* frame) {
     if (int_no < 32) {
         ExecptionHandler(frame);
     }
-    else if (32 <= int_no && int_no < 48) {
-        //IRQHandler(frame); (Place holder for APIC)
+    else if (int_no == 32) {
+        PitTimer();
     }
+}
+
+void PitTimer() {
+    pit_timer_fired = true;
 }
 
 void ExecptionHandler(interrupt_frame_t* frame) {

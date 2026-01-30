@@ -14,6 +14,6 @@
 #include "vfs.h"
 #include "acpi.h"
 #include "apic.h"
-#include "utility.h"
 
-void kmain();
+void start();
+void end();

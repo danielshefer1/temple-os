@@ -6,4 +6,4 @@
 #include "vga.h"
 
 void InitIDT();
-void InitTimer(uint32_t frequency);
+void ReplaceTimer();

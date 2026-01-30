@@ -6,4 +6,8 @@
 
 extern input_buffer_t console_buffer;
 extern volatile bool shift_pressed;
+extern volatile bool pit_timer_fired;
 extern volatile uint32_t timer_ticks;
+extern volatile uint32_t* lapic;
+extern volatile uint32_t* ioapic;
+extern uint32_t cpu_count;

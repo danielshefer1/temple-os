@@ -6,5 +6,9 @@
 #include "memory.h"
 #include "string.h"
 #include "vga.h"
+#include "global.h"
+#include "set_idt.h"
+#include "utility.h"
 
-void ParseMadt(madt_t* madt);
+void EnableLapic();
+void InitTimer(uint32_t ms);

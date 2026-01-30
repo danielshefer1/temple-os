@@ -205,8 +205,7 @@ void kerror(const char* format, ...) {
     
     va_end(args);
 
-    CliHelper();
-    HltHelper();
+    end();
 }
 
 void InitVGA() {

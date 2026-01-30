@@ -25,15 +25,15 @@ static void* handlers[] = {
     (void*)isr_stub_19,
     (void*)isr_stub_20,
     (void*)isr_stub_21,
-    (void*)isr_stub_32,
-    (void*)isr_stub_33,
-    (void*)isr_stub_128
+    (void*)isr_pic_stub_32,
+    (void*)isr_stub_128,
+    (void*)isr_spurious
 };
 
 static uint32_t handlers_idx[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 16, 17, 18, 19, 20,
-    21, 32, 33, 128
+    21, 32, 128, 0xFF
 };
 
 static uint32_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
@@ -64,6 +64,14 @@ void CheckIDT() {
     kprintf("Expected Limit: %x\n", sizeof(idt) - 1);
 }
 
+void ReplaceTimer() {
+    CliHelper();
+    uint32_t apic_timer = (uint32_t)((void*) isr_apic_stub_32);
+    idt[TIMER_IDT].base_low = apic_timer & 0xFFFF;
+    idt[TIMER_IDT].base_high = (apic_timer >> 16) & 0xFFFF;
+    StiHelper();
+}
+
 void InitIDT() {
     if (num_handlers != num_handlers_idx) {
         kerror("Mismatch in handlers and handler indices count\n");
@@ -89,20 +97,4 @@ void InitIDT() {
     StiHelper();
 
     //CheckIDT();
-}
-
-void InitTimer(uint32_t frequency) {
-    // 1. Calculate our divisor
-    uint32_t divisor = 1193182 / frequency;
-
-    // 2. Send Command Byte (0x36)
-    // 0x36 = 00(Channel 0) 11(Lo/Hi Access) 011(Square Wave Mode) 0(16-bit Binary)
-    outb(0x43, 0x36);
-
-    // 3. Send Divisor (Split into two bytes)
-    uint8_t low  = (uint8_t)(divisor & 0xFF);
-    uint8_t high = (uint8_t)((divisor >> 8) & 0xFF);
-
-    outb(0x40, low);
-    outb(0x40, high);
 }

@@ -12,6 +12,7 @@ extern void enable_paging(uint32_t *page_directory);
 extern void CliHelper();
 extern void StiHelper();
 extern void HltHelper();
+extern void PauseHelper();
 extern void LoadGDTHelper();
 extern void LoadIDTHelper();
 extern uint8_t inb(uint8_t port);
@@ -19,6 +20,7 @@ extern void outb(uint8_t port, uint8_t value);
 extern bool check_interrupts();
 extern void load_tss();
 extern void switch_to_user_mode(uint32_t eip, uint32_t esp);
+extern uint8_t get_cpuid();
 
 // ISR stubs
 extern void isr_stub_0();
@@ -42,6 +44,7 @@ extern void isr_stub_18();
 extern void isr_stub_19();
 extern void isr_stub_20();
 extern void isr_stub_21();
-extern void isr_stub_32();
-extern void isr_stub_33();
+extern void isr_pic_stub_32();
+extern void isr_apic_stub_32();
 extern void isr_stub_128();
+extern void isr_spurious();

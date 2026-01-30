@@ -10,8 +10,7 @@
 void isr_handler(interrupt_frame_t* frame);
 
 void ExecptionHandler(interrupt_frame_t* frame);
-void IRQHandler(interrupt_frame_t* frame);
-
+void PitTimer();
 // Exception Handlers
 void DivideByZeroHandler(interrupt_frame_t* frame);
 void DebugHandler(interrupt_frame_t* frame);

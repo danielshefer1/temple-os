@@ -3,10 +3,8 @@
 #include "includes.h"
 #include "types.h"
 #include "defintions.h"
-#include "memory.h"
-#include "vga.h"
-#include "paging.h"
 #include "global.h"
+#include "vga.h"
 
-void InitRsdt();
-void InitMadt();
+extern void irq_handler(interrupt_frame_t* frame);
+void TimerHandler();

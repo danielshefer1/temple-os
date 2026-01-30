@@ -3,6 +3,7 @@
 #include "types.h"
 #include "defintions.h"
 #include "string.h"
+#include "utility.h"
 
 void deletechar();
 void putchar(char c, uint8_t color);

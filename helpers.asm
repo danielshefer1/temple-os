@@ -2,6 +2,8 @@
 
 extern isr_handler
 extern syscall_handler
+extern irq_handler
+extern lapic
 
 section .helpers
 
@@ -18,6 +20,11 @@ HltHelper:
 global StiHelper
 StiHelper:
     sti
+    ret
+
+global PauseHelper
+PauseHelper:
+    pause
     ret
 
 global LoadGDTHelper
@@ -102,6 +109,14 @@ switch_to_user_mode:
 
     iret ; Pop registers and drop to Ring 3
 
+global get_cpuid
+get_cpuid:
+    mov eax, 1
+    cpuid
+    shr ebx, 24
+    mov eax, ebx
+    ret
+
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1
@@ -118,12 +133,20 @@ isr_stub_%1:
     jmp isr_common_stub
 %endmacro
 
-%macro ISR_HARDWARE_STUB 1
-global isr_stub_%1
-isr_stub_%1:
+%macro ISR_PIC_STUB 1
+global isr_pic_stub_%1
+isr_pic_stub_%1:
     push dword 0        ; fake error code
     push dword %1       ; interrupt number
-    jmp isr_hardware_stub
+    jmp isr_pic_stub
+%endmacro
+
+%macro ISR_APIC_STUB 1
+global isr_apic_stub_%1
+isr_apic_stub_%1:
+    push dword 0        ; fake error code
+    push dword %1       ; interrupt number
+    jmp isr_apic_stub
 %endmacro
 
 %macro ISR_SYSCALL_STUB 1
@@ -133,6 +156,11 @@ isr_stub_%1:
     push dword %1       ; interrupt number
     jmp isr_syscall_stub
 %endmacro
+
+global isr_spurious
+isr_spurious:
+    iret
+    
 
 ISR_STUB_NO_ERROR 0
 ISR_STUB_NO_ERROR 1
@@ -155,8 +183,8 @@ ISR_STUB_NO_ERROR 18
 ISR_STUB_NO_ERROR 19
 ISR_STUB_NO_ERROR 20
 ISR_STUB_ERROR 21
-ISR_HARDWARE_STUB 32
-ISR_HARDWARE_STUB 33
+ISR_PIC_STUB 32
+ISR_APIC_STUB 32
 ISR_SYSCALL_STUB 128
 
 
@@ -186,8 +214,8 @@ isr_common_stub:
     add esp, 8         ; clean up int num and error code
     iret
 
-global isr_hardware_stub
-isr_hardware_stub:
+global isr_pic_stub
+isr_pic_stub:
     pusha
     push ds
     push es
@@ -203,7 +231,7 @@ isr_hardware_stub:
     push esp
     call isr_handler
     add esp, 4
-    
+
     mov al, 0x20
     out 0xA0, al      ; slave PIC
     out 0x20, al      ; master PIC
@@ -215,6 +243,35 @@ isr_hardware_stub:
     popa
 
     add esp, 8
+
+    iret
+
+global isr_apic_stub
+isr_apic_stub:
+    pusha
+    push ds
+    push es
+    push fs
+    push gs
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp
+    call irq_handler
+    add esp, 4
+
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
+
+    add esp, 8
+
     iret
 
 global isr_syscall_stub

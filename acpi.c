@@ -4,6 +4,7 @@ static rsdp_t* rsdp;
 static rsdt_t* rsdt;
 static madt_t* madt;
 
+
 bool ValidateRsdp(void* addr) {
     if (memcmp((void*)addr, "RSD PTR ", RSDP_SIG_LENGTH) == 0) {
         uint8_t sum = 0;
@@ -79,18 +80,53 @@ void FindMadt(rsdt_t* rsdt) {
         if (strncmp(entry->signature, "APIC", ACPI_TABLE_SIG_LEGNTH) == 0) {
             madt = (madt_t*)entry;
             kprintf("Found MADT!\n");
+            lapic = (volatile uint32_t*) madt->local_apic_address;
             return;
         }
     }
+    kerror("Didn't find MADT!");
+}
+
+void ParseMadt(madt_t* madt) {
+    madt_entry_header_t* entry = (madt_entry_header_t*)((uint32_t)madt + sizeof(madt_t));
+    uint32_t end = madt->header.length + (uint32_t)madt;
+
+    while ((uint32_t)entry < end) {
+        switch (entry->type) {
+            case 0:
+                cpu_count++;
+                break;
+            case 1:
+                kprintf("Found I/O APIC!\n");
+                io_apic_t* ioapic_obj = (io_apic_t*) entry;
+                ioapic = (volatile uint32_t*) ioapic_obj->ioapic_address;
+                break;
+            case 2:
+                kprintf("Found Interrupts Override!\n");
+                break;
+            case 4:
+                kprintf("Found NMI!\n");
+                break;
+            default:
+                kprintf("Unkown MADT type: %d\n", entry->type);
+        }
+        entry = (madt_entry_header_t*)((uint32_t)entry + entry->length);
+    }
+    kprintf("Finished parsing MADT succesfully!\n");
 }
 
 void InitRsdt() {
     FindRsdp();
     FillPageDirectoryMMIO((void*)MMIO_BASE, TABLE_SIZE);
     FindRsdt();
-    FindMadt(rsdt);
 }
 
-void InitApic() {
+void InitMadt() {
+    FindMadt(rsdt);
     ParseMadt(madt);
+    kprintf("Found %d CPUs!", cpu_count);
+    kprintf("Local APIC's address is: %x\n", (uint32_t)lapic);
+    kprintf("I/O APIC's address is: %x\n", (uint32_t)ioapic);
+    FillPageDirectoryIdentityMapping(lapic, PAGE_SIZE);
+    FillPageDirectoryIdentityMapping(ioapic, PAGE_SIZE);
 }

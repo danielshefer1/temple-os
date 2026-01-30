@@ -69,6 +69,7 @@
 #define IDT_TYPE_INTERRUPT_GATE 0xE
 #define IDT_TYPE_TRAP_GATE 0xF
 #define SYS_CALL 0x80
+#define TIMER_IDT 32
 // End IDT Definitions
 
 // System Calls Definitions
@@ -87,11 +88,15 @@
 #define RIGHT_SHIFT_BREAK_SCANCODE 0xB6
 // End Keyboard Definitions
 
+// PIC Definitions
+#define PIC_TIMER_FREQUENCY 100
+#define MASTER_PIC 0x21
+#define SLAVE_PIC 0xA1
+// End PIC Definitions
+
 // Timer Definitions
-#define TIMER_FREQUENCY 1000
-#define ONE_SEC 1000
-#define HALF_SEC 500
-// End Timer Definitions
+#define TIMER_TICK_PER_MS 1
+#define SEC 1000
 
 // Keyboard Definitions
 #define CONSOLE_BUFFER_SIZE 512

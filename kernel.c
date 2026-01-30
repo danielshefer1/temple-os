@@ -1,35 +1,14 @@
  #include "kernel.h"
 
 
-void start() {
-    SetGDT();
-    InitPaging();
-    SetFirstTSS();
-    InitIDT();
 
-
-    InitSlabAlloc(PageDirAddrV() + 7 * PAGE_SIZE);
-    InitBuddyAlloc((KERNEL_VIRTUAL >> 1) + PAGE_SIZE, KERNEL_VIRTUAL - 0x200000);
-
-    InitVGA();
-    InitConsoleBuffer();
-
-    InitVFS();
-
-    kprintf("Kernel Initialized Successfully\n");
-}
-
-
-void end() {
-    CliHelper();
-    HltHelper();
-}
 
 void kmain() {
     start();
 
-    InitRsdt();
-    InitApic();
+    kprintf("Waiting ten seconds...\n");
+    WaitSeconds(10);
+    kprintf("Finished waiting!");
 
     end();
 }
