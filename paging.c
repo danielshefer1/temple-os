@@ -106,7 +106,7 @@ void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pag
     }
 }
 
-void FillMMIOPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
+void FillMMIOPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages, uint32_t offset) {
     pte_t* mmio_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
     uint32_t idx = start_page, end = start_page + num_pages, test_addr;
 
@@ -122,7 +122,7 @@ void FillMMIOPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pag
         mmio_pt[idx].global = 1;
         test_addr = table_idx * TABLE_SIZE;
         test_addr += idx * PAGE_SIZE;
-        test_addr -= MMIO_OFFSET;
+        test_addr -= offset;
         test_addr = test_addr >> 12;
         mmio_pt[idx].frame = test_addr;
     }
@@ -211,7 +211,42 @@ void FillPageDirectoryMMIO(void* addr, uint32_t size) {
 
         // 5. Perform the mapping
         AddMMIOPageTable(pd_index); // Ensure the table exists
-        FillMMIOPageTable(pd_index, pt_index, pages_to_fill);
+        FillMMIOPageTable(pd_index, pt_index, pages_to_fill, MMIO_OFFSET);
+
+        // 6. Advance current_addr by the amount we just mapped
+        current_addr += pages_to_fill * PAGE_SIZE;
+    }
+    flush_tlb();
+}
+
+void FillPageDirectoryPCI(void* addr, uint32_t size) {
+
+    uint32_t current_addr = (uint32_t)addr;
+    uint32_t end_addr = current_addr + size;
+
+    while (current_addr < end_addr) {
+        uint32_t pd_index = (current_addr + PCI_OFFSET) >> 22; 
+        
+        // 2. Calculate the Page Table Index (0 to 1023)
+        // Shift right by 12, then mask the bottom 10 bits
+        uint32_t pt_index = ((current_addr + PCI_OFFSET) >> 12) & 0x3FF;
+
+        // 3. Calculate how many pages fit in THIS specific table
+        // The table ends at entry 1024. 
+        uint32_t pages_left_in_table = 1024 - pt_index;
+
+        // 4. Calculate how many pages we actually need to map right now
+        // It's the minimum of: what fits in the table vs. what we have left to map
+        uint32_t bytes_remaining = end_addr - current_addr;
+        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
+        
+        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
+                                 ? pages_remaining 
+                                 : pages_left_in_table;
+
+        // 5. Perform the mapping
+        AddMMIOPageTable(pd_index); // Ensure the table exists
+        FillMMIOPageTable(pd_index, pt_index, pages_to_fill, PCI_OFFSET);
 
         // 6. Advance current_addr by the amount we just mapped
         current_addr += pages_to_fill * PAGE_SIZE;

@@ -10,3 +10,4 @@
 
 void InitRsdt();
 void InitMadt();
+void InitMcfg();

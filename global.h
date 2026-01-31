@@ -15,3 +15,4 @@ extern int_override_t* overrides[16];
 extern volatile uint32_t overrides_length;
 extern uint8_t cpu_ids[UINT8_MAX];
 extern volatile uint32_t cpus_active;
+extern volatile pci_config_t* ecam_ptr;

@@ -3,7 +3,7 @@
 static rsdp_t* rsdp;
 static rsdt_t* rsdt;
 static madt_t* madt;
-
+static mcfg_t* mcfg;
 
 bool ValidateRsdp(void* addr) {
     if (memcmp((void*)addr, "RSD PTR ", RSDP_SIG_LENGTH) == 0) {
@@ -124,6 +124,28 @@ void ParseMadt(madt_t* madt) {
     kprintf("Finished parsing MADT succesfully!\n");
 }
 
+void FindMcfg(rsdt_t* rsdt) {
+    uint32_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
+    acpi_header_t* entry;
+
+    for (uint32_t i = 0; i < num_entries; i++) {
+        entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
+
+        if (!ValidateACPIHeader(entry)) {
+            kprintf("Found an unvalid ACPI table");
+            continue;
+        }
+        if (strncmp(entry->signature, "MCFG", ACPI_TABLE_SIG_LEGNTH) == 0) {
+            mcfg = (mcfg_t*)entry;
+            ecam_ptr = mcfg->entries[0].base_address;
+
+            kprintf("Found MCFG!\n");
+            return;
+        }
+    }
+    kerror("Didn't find MCFG!");
+}
+
 void InitRsdt() {
     FindRsdp();
     FillPageDirectoryMMIO((void*)MMIO_BASE, TABLE_SIZE);
@@ -138,4 +160,8 @@ void InitMadt() {
     kprintf("I/O APIC's address is: %x\n", (uint32_t)ioapic);
     FillPageDirectoryIdentityMapping(lapic, PAGE_SIZE);
     FillPageDirectoryIdentityMapping(ioapic, PAGE_SIZE);
+}
+
+void InitMcfg() {
+    FindMcfg(rsdt);
 }

@@ -13,3 +13,5 @@ volatile uint32_t overrides_length;
 
 uint8_t cpu_ids[UINT8_MAX];
 volatile uint32_t cpus_active = 1;
+
+volatile pci_config_t* ecam_ptr;

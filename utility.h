@@ -15,6 +15,7 @@
 #include "acpi.h"
 #include "apic.h"
 #include "ap_start.h"
+#include "pci.h"
 
 void start();
 void end();

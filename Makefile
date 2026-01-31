@@ -23,7 +23,7 @@ ASFLAGS_BIN  = -f bin
 ASFLAGS_ELF  = -f elf32 -g
 LDFLAGS      = -m elf_i386 -T linker.ld
 USER_LDFLAGS = -m elf_i386 -T user_linker.ld
-QEMU_FLAGS   = -m 4096 -serial stdio -smp cores=6,threads=2 -drive format=raw,file=$(BUILD_DIR)/os.img
+QEMU_FLAGS   = -m 4096 -smp cores=6,threads=2 -machine q35 -drive format=raw,file=$(BUILD_DIR)/os.img
 
 # ============================================================================
 # SOURCE FILES
@@ -33,7 +33,7 @@ C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
  slab_alloc.c paging.c math.c buddy_alloc.c set_gdt.c isr_handler.c \
  set_idt.c timer.c keyboard.c global.c string.c set_tss.c syscall_handler.c \
  vfs.c dcache.c acpi.c memory.c apic.c irq_handler.c utility.c ap_start.c \
- ap_main.c
+ ap_main.c pci.c
  
 
 USER_C_SOURCES = user_app.c
@@ -125,8 +125,10 @@ $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(TRAMPOLINE_BIN) $(KERNE
 
 	cat $(PAYLOAD_BIN) $(USER_BIN) > $(FULL_PAYLOAD)
 
+
+	dd if=/dev/zero of=$@ bs=1M count=20
     # Write to disk image
-	dd if=$(STAGE1_BIN) of=$@ bs=512 count=1 conv=notrunc 2>/dev/null
+	dd if=$(STAGE1_BIN) of=$@ bs=512 seek=0 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	dd if=$(STAGE3_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null
 	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=9 conv=notrunc
@@ -140,15 +142,14 @@ run: $(DISK_IMG)
 	qemu-system-i386 $(QEMU_FLAGS)
 
 debug: $(DISK_IMG) $(KERNEL_ELF)
-	@echo "🐛 Starting QEMU with GDB server..."
-	qemu-system-i386 $(QEMU_FLAGS) -s -S &
+	qemu-system-i386 $(QEMU_FLAGS) -s -S & 
 	gdb $(KERNEL_ELF) \
-		-tui \
 		-ex "target remote localhost:1234" \
+		-ex "set pagination off" \
 		-ex "set architecture i386" \
-		-ex "break kmain" \
 		-ex "layout src" \
-		-ex "continue" \
+		-ex "break kmain" \
+		-ex "continue"
 
 debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
 	@echo "🐛 Starting QEMU with GDB server..."

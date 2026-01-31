@@ -284,3 +284,52 @@ typedef struct madt_local_apic_nmi_t {
 typedef struct spinlock_t {
     volatile uint32_t locked;
 } spinlock_t;
+
+typedef struct mcfg_entry_t {
+    uint64_t base_address;     
+    uint16_t pci_segment_group;
+    uint8_t start_bus_number;
+    uint8_t end_bus_number;
+    uint32_t reserved;
+} __attribute__((packed)) mcfg_entry_t;
+
+typedef struct mcfg_t{
+    acpi_header_t header;
+    uint64_t reserved;
+    mcfg_entry_t entries[]; 
+} __attribute__((packed)) mcfg_t;
+
+#include <stdint.h>
+
+typedef struct pci_config_t{
+    // --- Standard PCI Header (First 64 bytes) ---
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint16_t command;
+    uint16_t status;
+    uint8_t  revision_id;
+    uint8_t  prog_if;
+    uint8_t  subclass;
+    uint8_t  class_code;
+    uint8_t  cache_line_size;
+    uint8_t  latency_timer;
+    uint8_t  header_type;
+    uint8_t  bist;
+
+    uint32_t bars[6];
+
+    uint32_t cardbus_cis_ptr;
+    uint16_t subsystem_vendor_id;
+    uint16_t subsystem_id;
+    uint32_t expansion_rom_base_addr;
+    uint8_t  capabilities_ptr; 
+    uint8_t  reserved0[3];
+    uint32_t reserved1;
+    uint8_t  interrupt_line;
+    uint8_t  interrupt_pin;
+    uint8_t  min_grant;
+    uint8_t  max_latency;
+
+    uint8_t  device_specific[4032]; 
+
+} __attribute__((packed)) pci_config_t;

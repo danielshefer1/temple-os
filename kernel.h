@@ -15,5 +15,6 @@
 #include "acpi.h"
 #include "apic.h"
 #include "utility.h"
+#include "pci.h"
 
 void kmain();

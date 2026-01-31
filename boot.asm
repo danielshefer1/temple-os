@@ -7,6 +7,7 @@ start:
     mov ds, ax
     mov es, ax
     sti
+    mov [boot_drive], dl    ; Save the drive ID passed by BIOS
 
     ; Load Stage 2 from disk
     mov ah, 0x02              ; BIOS read sector function
@@ -14,7 +15,7 @@ start:
     mov ch, 0                 ; Cylinder 0
     mov cl, 2                 ; Start at sector 2 (sector 1 is boot sector)
     mov dh, 0                 ; Head 0
-    mov dl, 0x80              ; Drive 0 (first hard drive)
+    mov dl, [boot_drive]
     mov bx, 0x7E00            ; Load to 0x7E00 (right after Stage 1)
     int 0x13                  ; BIOS disk interrupt
 
@@ -41,6 +42,8 @@ print_string:
     jmp print_string
 .done:
     ret
+
+boot_drive db 0
 
 times 510 - ($ - $$) db 0
 dw 0xAA55
