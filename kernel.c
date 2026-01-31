@@ -3,7 +3,8 @@
 void kmain() {
     start();
 
-    InitPci();
+    ParsePci();
+    kprintf("Finished parsing pci");
     
     end();
 }

@@ -6,4 +6,4 @@
 #include "paging.h"
 #include "vga.h"
 
-void InitPci();
+void ParsePci();

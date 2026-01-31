@@ -30,6 +30,39 @@ uint32_t PageDirAddrV() {
     return KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE;
 }
 
+void map_page_to_virt(uint32_t virt, uint32_t phy, uint32_t flags) {
+    uint32_t pd_index = virt >> 22; 
+    uint32_t pt_index = (virt >> 12) & 0x3FF;
+
+    if (!pd[pd_index].present) {
+        // Assuming kmalloc returns a virtual address in the kernel half
+        void* pt_virt = kmalloc(PAGE_SIZE);
+        memset(pt_virt, 0, PAGE_SIZE);
+
+        uint32_t pt_phys = (uint32_t)pt_virt - KERNEL_VIRTUAL;
+
+        pd[pd_index].frame = pt_phys >> 12;
+        pd[pd_index].rw = 1; // Usually keep PD entries writable
+        pd[pd_index].user = (flags >> USER_PAGE_BIT) & 1;
+        pd[pd_index].present = 1;
+        // Cache bits should usually match the PTE for consistency
+        pd[pd_index].cache_dis = (flags >> CACHE_DIS_PAGE_BIT) & 1;
+    }
+
+    // FIX: Shift LEFT to get physical address, then add virtual offset
+    pte_t* current_pt = (pte_t*) ((pd[pd_index].frame << 12) + KERNEL_VIRTUAL);
+
+    // FIX: Use pt_index here, not pd_index!
+    current_pt[pt_index].frame = phy >> 12;
+    current_pt[pt_index].rw = (flags >> RW_PAGE_BIT) & 1;
+    current_pt[pt_index].user = (flags >> USER_PAGE_BIT) & 1;
+    current_pt[pt_index].cache_dis = (flags >> CACHE_DIS_PAGE_BIT) & 1;
+    current_pt[pt_index].write_thru = (flags >> WRITE_THROUGH_PAGE_BIT) & 1;
+    current_pt[pt_index].present = 1;
+
+    asm volatile("invlpg (%0)" :: "r" (virt) : "memory");
+}
+
 uint32_t AddKernelPageTable() {
     uint32_t next_pt = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
     curr_table++;

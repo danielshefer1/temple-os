@@ -19,3 +19,6 @@ void FillPageDirectoryIdentityMapping(void* addr, uint32_t size);
 void RemovePages(uint32_t table_idx, uint32_t start_page, uint32_t num_pages);
 uint32_t AddStack();
 pde_t* getPageDirectory();
+void DisableIdentityMapping();
+
+void map_page_to_virt(uint32_t virt, uint32_t phy, uint32_t flags);
