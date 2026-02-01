@@ -179,3 +179,7 @@
 // MultiCore Definitions
 #define TRAMPOLINE_ADDR 0xA000
 // End MultiCore Definitions
+
+// PCI Defintions
+#define AHCI_CLASS 0x01
+#define AHCI_SUBCLASS 0x06
