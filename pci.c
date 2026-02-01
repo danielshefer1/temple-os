@@ -1,6 +1,6 @@
 #include "pci.h"
 
-void ParsePci() {
+void PciEnumeration() {
     for (uint32_t bus = 0; bus < 256; bus++) {
         for (uint32_t dev = 0; dev < 32; dev++) {
             for (uint32_t func = 0; func < 8; func++) {
