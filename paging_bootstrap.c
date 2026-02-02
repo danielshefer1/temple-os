@@ -1,13 +1,11 @@
 #include "paging_bootstrap.h"
 
-__attribute__((section(".bootstrap")))
 uint32_t page_dir_addr(void) {
-    uint32_t total_pages = (uint32_t)&__total_pages;
+    uint32_t total_pages = (uint32_t)&__bootstrap_pages;
     //kprintf("Kernel Base Address: 0x%x\n", KERNEL_BASE);
     return KERNEL_BASE + (total_pages * PAGE_SIZE);
 }
 
-__attribute__((section(".bootstrap")))
 void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_pages, uint32_t text_size) {
     
     uint32_t pt_addr = pd_addr;
@@ -48,7 +46,6 @@ void InitPageDirectory(pde_t* page_directory, uint32_t pd_addr, uint32_t kernel_
     }
 }
 
-__attribute__((section(".bootstrap")))
 void InitPageTable(pte_t* page_table, uint32_t kernel_pages, uint32_t text_size, bool is_global) {
     uint32_t low_mem_end = 0x100000;  // 1MB
     uint32_t kernel_size = kernel_pages * PAGE_SIZE;

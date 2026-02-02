@@ -74,7 +74,7 @@ void SetGDT() {
     gdtr.limit = sizeof(gdt) - 1;
     gdtr.base = (uint32_t)gdt;
 
-    LoadGDTHelper(&gdtr);
+    LoadGDTHelper((uintptr_t)&gdtr);
 
     //CheckGDT();
 }

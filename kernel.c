@@ -3,8 +3,8 @@
 void kmain() {
     start();
 
-    ParsePci();
-    kprintf("Finished parsing pci");
+    e820_info_t* info = init_E820(E820_ADDRESS);
+
     
     end();
 }

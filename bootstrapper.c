@@ -1,9 +1,6 @@
-#include "includes.h"
 #include "paging_bootstrap.h"
 #include "types.h"
-#include "kernel.h"
 
-__attribute__((section(".bootstrap")))
 void bootstrap_kmain() {
     uint32_t pd_addr = page_dir_addr();
     pde_t* page_directory = (pde_t*) pd_addr;

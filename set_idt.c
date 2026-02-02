@@ -94,7 +94,7 @@ void InitIDT() {
 
     idtr.limit = sizeof(idt) - 1;
     idtr.base = (uint32_t)&idt;
-    LoadIDTHelper(&idtr);
+    LoadIDTHelper((uintptr_t)&idtr);
     StiHelper();
 
     //CheckIDT();

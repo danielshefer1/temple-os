@@ -1,16 +1,16 @@
-extern __total_sectors
-extern _bss_start
-extern _bss_end
-extern kmain
-extern bootstrap_kmain
+%include "offsets.inc"
+extern _bootstrap_sectors
 
-section .text
+
+section .stage4
 
 global stage4_entry
 stage4_entry:
-    dd __total_sectors
-    dd _bss_start
-    dd _bss_end
+    dd _bootstrap_sectors
+    dd KERNEL_SECTORS
+    dq KERNEL_ENTRY_64
+    dq KERNEL_BSS_START
+    dq KERNEL_BSS_END
 
 global enable_paging_bootstrap
 enable_paging_bootstrap:

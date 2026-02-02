@@ -144,8 +144,8 @@ void GeneralProtectionFaultHandler(interrupt_frame_t* frame) {
 }
 
 void PageFaultHandler(interrupt_frame_t* frame) {
-    uint32_t faulting_addr;
-    __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
+    uint32_t faulting_addr = 0;
+    //__asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
     kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, EIP: %x\n", frame->err_code, faulting_addr, frame->eip);
 }
 

@@ -1,148 +1,126 @@
-# --- Makefile for x86 Bare-Metal OS using i686-elf- toolchain ---
-
-.PHONY: all clean run debug kill-qemu
+# ============================================================================
+# Toolchains
+# ============================================================================
+CC32 = i686-elf-gcc
+LD32 = i686-elf-ld
+CC64 = x86_64-elf-gcc
+LD64 = x86_64-elf-ld
+AS   = nasm
+OBJCOPY32 = i686-elf-objcopy
+OBJCOPY64 = x86_64-elf-objcopy
 
 # ============================================================================
-# DIRECTORY CONFIGURATION
+# Paths and Filenames
 # ============================================================================
 BUILD_DIR = build
+K_OBJ_DIR = $(BUILD_DIR)/kernel
+B_OBJ_DIR = $(BUILD_DIR)/bootstrap
+
+DISK_IMG  = $(BUILD_DIR)/os.img
+KERNEL_ELF = $(BUILD_DIR)/kernel.elf
+BOOTSTRAP_ELF = $(BUILD_DIR)/bootstrap.elf
+
+PAYLOAD = $(BUILD_DIR)/payload.bin
 
 # ============================================================================
-# TOOLCHAIN CONFIGURATION
+# Flags
 # ============================================================================
-CC      = i686-elf-gcc
-AS      = nasm
-LD      = i686-elf-ld
-OBJCOPY = i686-elf-objcopy
+# -mno-red-zone is mandatory for 64-bit kernels to prevent stack corruption
+COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
+K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone
+B_CFLAGS = $(COMMON_CFLAGS) -m32
 
-# ============================================================================
-# FLAGS
-# ============================================================================
-CFLAGS       = -m32 -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -I -fno-pic -fno-pie -mno-sse -mno-mmx -mno-80387
-ASFLAGS_BIN  = -f bin
-ASFLAGS_ELF  = -f elf32 -g
-LDFLAGS      = -m elf_i386 -T linker.ld
-USER_LDFLAGS = -m elf_i386 -T user_linker.ld
-QEMU_FLAGS   = -m 4096 -smp cores=6,threads=2 -machine q35 -drive format=raw,file=$(BUILD_DIR)/os.img
+K_LDFLAGS = -m elf_x86_64 -T linker64.ld
+B_LDFLAGS = -m elf_i386   -T linker32.ld
 
-# ============================================================================
-# SOURCE FILES
-# ============================================================================
+ASFLAGS_ELF32 = -f elf32
+ASFLAGS_ELF64 = -f elf64
+ASFLAGS_BIN   = -f bin
 
-C_SOURCES = bootstrapper.c paging_bootstrap.c E820.c vga.c kernel.c \
- slab_alloc.c paging.c math.c buddy_alloc.c set_gdt.c isr_handler.c \
- set_idt.c timer.c keyboard.c global.c string.c set_tss.c syscall_handler.c \
- vfs.c dcache.c acpi.c memory.c apic.c irq_handler.c utility.c ap_start.c \
- ap_main.c pci.c
- 
-
-USER_C_SOURCES = user_app.c
-
-C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
-USER_C_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_C_SOURCES:.c=.o))
-
-ASM_SOURCES = stage4.asm helpers.asm trampoline_wrapper.asm
-USER_ASM_SOURCES = user_helpers.asm
-
-
-ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.asm=.o))
-USER_ASM_OBJECTS = $(addprefix $(BUILD_DIR)/, $(USER_ASM_SOURCES:.asm=.o))
-# All object files needed for kernel
-KERNEL_OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
-USER_OBJECTS = $(USER_ASM_OBJECTS) $(USER_C_OBJECTS)
+QEMU_FLAGS = -m 16G -cpu host -accel kvm -smp cores=6,threads=2 -machine q35 \
+             -drive format=raw,file=$(DISK_IMG) -serial stdio
 
 # ============================================================================
-# OUTPUT FILES
+# Source & Object Definitions
 # ============================================================================
-STAGE1_BIN   = $(BUILD_DIR)/boot.bin
-STAGE2_BIN   = $(BUILD_DIR)/stage2.bin
-STAGE3_BIN	 = $(BUILD_DIR)/stage3.bin
-TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
-KERNEL_ELF   = $(BUILD_DIR)/kernel.elf
-DISK_IMG     = $(BUILD_DIR)/os.img
-PAYLOAD_BIN  = $(BUILD_DIR)/payload.bin
-USER_ELF = $(BUILD_DIR)/user.elf
-USER_BIN = $(BUILD_DIR)/user_payload.bin
-FULL_PAYLOAD = $(BUILD_DIR)/full_payload.bin
+KERNEL_C_SRCS = E820.c vga.c kernel.c slab_alloc.c paging.c math.c buddy_alloc.c \
+                set_gdt.c isr_handler.c set_idt.c timer.c keyboard.c global.c \
+                string.c set_tss.c syscall_handler.c vfs.c dcache.c acpi.c \
+                memory.c apic.c irq_handler.c utility.c ap_start.c ap_main.c pci.c
+KERNEL_ASM_SRCS = helpers.asm trampoline_wrapper.asm
 
+BOOTSTRAP_C_SRCS = bootstrapper.c paging_bootstrap.c
+BOOTSTRAP_ASM_SRCS = stage4.asm
+
+# Generate object paths
+K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
+B_OBJS = $(addprefix $(B_OBJ_DIR)/, $(BOOTSTRAP_C_SRCS:.c=.o) $(BOOTSTRAP_ASM_SRCS:.asm=.o))
 
 # ============================================================================
-# BUILD RULES
+# Build Rules
 # ============================================================================
 all: $(DISK_IMG)
 
-# Create build directory if it doesn't exist
-$(BUILD_DIR):
-	@mkdir -p $(BUILD_DIR)
+# --- Kernel Rules ---
+$(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
+	@echo "⚙️  [K64] Compiling $<"
+	@$(CC64) $(K_CFLAGS) -MMD -MP -c $< -o $@
 
-# --- Link kernel ELF ---
-$(KERNEL_ELF): $(KERNEL_OBJECTS) linker.ld | $(BUILD_DIR)
-	@echo "🔗 Linking $(KERNEL_ELF)..."
-	$(LD) $(LDFLAGS) -o $@ $(KERNEL_OBJECTS)
+$(K_OBJ_DIR)/%.o: %.asm | $(K_OBJ_DIR)
+	@echo "💻 [K64] Assembling $<"
+	@$(AS) $(ASFLAGS_ELF64) $< -o $@
 
-$(USER_ELF): $(USER_OBJECTS) user_linker.ld | $(BUILD_DIR)
-	@echo "🔗 Linking $(USER_ELF)..."
-	$(LD) $(USER_LDFLAGS) -o $@ $(USER_C_OBJECTS) $(USER_ASM_OBJECTS)
-# --- Compile C sources ---
--include $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.d))
+$(KERNEL_ELF): $(K_OBJS)
+	@echo "🔗 Linking Kernel ELF"
+	@$(LD64) $(K_LDFLAGS) -o $@ $(K_OBJS)
 
-# Generate dependency files alongside object files
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
-	@echo "⚙️  Compiling $<..."
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+# --- Bootstrap Rules ---
+$(B_OBJ_DIR)/%.o: %.c | $(B_OBJ_DIR)
+	@echo "⚙️  [B32] Compiling $<"
+	@$(CC32) $(B_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/%.o: %.asm $(TRAMPOLINE_BIN) | $(BUILD_DIR)
-	@echo "💻 Assembling $< (ELF)..."
-	$(AS) $(ASFLAGS_ELF) $< -o $@
+$(B_OBJ_DIR)/%.o: %.asm | $(B_OBJ_DIR) $(KERNEL_ELF)
+	@echo "💻 [B32] Assembling $<"
+	@$(AS) $(ASFLAGS_ELF32) $< -o $@
 
-# --- Assemble stage 2 (binary) ---
-$(STAGE2_BIN): stage2.asm | $(BUILD_DIR)
-	@echo "💾 Assembling Stage 2 (BIN)..."
-	$(AS) $(ASFLAGS_BIN) $< -o $@
+$(BOOTSTRAP_ELF): $(B_OBJS)
+	@echo "🔗 Linking Bootstrap ELF"
+	@$(LD32) $(B_LDFLAGS) -o $@ $(B_OBJS)
 
-# --- Assemble stage 3 (binary) ---
-$(STAGE3_BIN): stage3.asm | $(BUILD_DIR)
-	@echo "💾 Assembling Stage 3 (BIN)..."
-	$(AS) $(ASFLAGS_BIN) $< -o $@
+# --- Image Generation ---
+$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot.asm stage2.asm stage3.asm trampoline.asm | $(BUILD_DIR)
+	@echo "📦 Constructing Disk Image"
+	@$(AS) $(ASFLAGS_BIN) boot.asm -o $(BUILD_DIR)/boot.bin
+	@$(AS) $(ASFLAGS_BIN) stage2.asm -o $(BUILD_DIR)/stage2.bin
+	@$(AS) $(ASFLAGS_BIN) stage3.asm -o $(BUILD_DIR)/stage3.bin
+	@$(AS) $(ASFLAGS_BIN) trampoline.asm -o $(BUILD_DIR)/trampoline.bin
+	@$(OBJCOPY64) -O binary $(KERNEL_ELF) $(BUILD_DIR)/kernel.bin
+	@$(OBJCOPY32) -O binary $(BOOTSTRAP_ELF) $(BUILD_DIR)/bootstrap.bin
+	
 
-# --- Assemble stage 1 (MBR) ---
-$(STAGE1_BIN): boot.asm | $(BUILD_DIR)
-	@echo "💾 Assembling Stage 1 (MBR)..."
-	$(AS) $(ASFLAGS_BIN) $< -o $@
+	cat $(BUILD_DIR)/bootstrap.bin $(BUILD_DIR)/kernel.bin > $(PAYLOAD)
 
-$(TRAMPOLINE_BIN): trampoline.asm | $(BUILD_DIR)
-	@echo "💾 Assembling Trampoline (BIN)..."
-	$(AS) $(ASFLAGS_BIN) $< -o $@
+	dd if=/dev/zero of=$(DISK_IMG) bs=1M count=20
+	dd if=$(BUILD_DIR)/boot.bin of=$(DISK_IMG) bs=512 seek=0 conv=notrunc
+	dd if=$(BUILD_DIR)/stage2.bin of=$(DISK_IMG) bs=512 seek=1 conv=notrunc
+	dd if=$(BUILD_DIR)/stage3.bin of=$(DISK_IMG) bs=512 seek=5 conv=notrunc
+	dd if=$(PAYLOAD) of=$(DISK_IMG) bs=512 seek=9 conv=notrunc
 
-# --- Create disk image ---
-$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(STAGE3_BIN) $(TRAMPOLINE_BIN) $(KERNEL_ELF) $(USER_ELF) | $(BUILD_DIR)
-	@echo "📦 Creating disk image $(DISK_IMG)..."
-	$(OBJCOPY) -O binary -j .stage4 -j .bootstrap -j .trampoline -j .helpers -j .text -j .data $(KERNEL_ELF) $(PAYLOAD_BIN)
-	$(OBJCOPY) -O binary -j .text -j .data -j .bss $(USER_ELF) $(USER_BIN)
-
-	truncate -s %512 $(PAYLOAD_BIN)
-	truncate -s %4096 $(USER_BIN)
-
-	cat $(PAYLOAD_BIN) $(USER_BIN) > $(FULL_PAYLOAD)
-
-
-	dd if=/dev/zero of=$@ bs=1M count=20
-    # Write to disk image
-	dd if=$(STAGE1_BIN) of=$@ bs=512 seek=0 conv=notrunc 2>/dev/null
-	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
-	dd if=$(STAGE3_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null
-	dd if=$(FULL_PAYLOAD) of=$@ bs=512 seek=9 conv=notrunc
-	@echo "✅ Disk image created successfully!"
 
 # ============================================================================
-# RUN & DEBUG TARGETS
+# Utilities
 # ============================================================================
+$(BUILD_DIR) $(K_OBJ_DIR) $(B_OBJ_DIR):
+	@mkdir -p $@
+
+clean:
+	rm -rf $(BUILD_DIR)
+
 run: $(DISK_IMG)
-	@echo "▶️  Starting QEMU (i386)..."
-	qemu-system-i386 $(QEMU_FLAGS)
+	qemu-system-x86_64 $(QEMU_FLAGS)
 
 debug: $(DISK_IMG) $(KERNEL_ELF)
-	qemu-system-i386 $(QEMU_FLAGS) -s -S & 
+	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & 
 	gdb $(KERNEL_ELF) \
 		-ex "target remote localhost:1234" \
 		-ex "set pagination off" \
@@ -151,42 +129,16 @@ debug: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "break kmain" \
 		-ex "continue"
 
-debug-bootstrap: $(DISK_IMG) $(KERNEL_ELF)
-	@echo "🐛 Starting QEMU with GDB server..."
-	qemu-system-i386 $(QEMU_FLAGS) -s -S &
-	gdb $(KERNEL_ELF) \
-		-tui \
-		-ex "set non-stop on" \
-		-ex "set target-async on" \
+debug-bootstrap: $(DISK_IMG) $(BOOTSTRAP_ELF)
+	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & 
+	gdb $(BOOTSTRAP_ELF) \
 		-ex "target remote localhost:1234" \
+		-ex "set pagination off" \
 		-ex "set architecture i386" \
-		-ex "break bootstrap_kmain" \
 		-ex "layout src" \
+		-ex "break bootstrap_kmain" \
 		-ex "continue"
 
-debug-user: $(DISK_IMG) $(USER_ELF)
-	@echo "🐛 Starting QEMU with GDB server..."
-	qemu-system-i386 $(QEMU_FLAGS) -s -S &
-	gdb $(USER_ELF) \
-		-tui \
-		-ex "target remote localhost:1234" \
-		-ex "set architecture i386" \
-		-ex "break main" \
-		-ex "continue"
-
-kill-qemu:
-	@echo "🔪 Killing QEMU..."
-	@pkill -9 qemu-system-i386 || true
-
-# ============================================================================
-# CLEAN
-# ============================================================================
-clean:
-	@echo "🧹 Cleaning up..."
-	rm -rf $(BUILD_DIR)
-	@echo "✅ Clean complete."
-
-# ============================================================================
-# DEPENDENCIES (auto-generated header dependencies)
-# ============================================================================
-# Include auto-generated dependency files if they exist
+# Include dependencies
+-include $(K_OBJS:.o=.d)
+-include $(B_OBJS:.o=.d)

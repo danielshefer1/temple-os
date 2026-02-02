@@ -1,8 +1,8 @@
 #pragma once
 
-#include "includes.h"
 #include "types.h"
 #include "defintions.h"
+#include "bootstrap_includes.h"
 
 // Function declarations
 uint32_t page_dir_addr(void);

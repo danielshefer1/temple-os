@@ -6,7 +6,7 @@ static uint32_t curr_page;
 static uint32_t curr_table;
 
 void flush_tlb() {
-    __asm__ volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" ::: "eax");
+
 }
 void InitPaging() {
     uint32_t pd_addr = PageDirAddrV();
@@ -60,7 +60,6 @@ void map_page_to_virt(uint32_t virt, uint32_t phy, uint32_t flags) {
     current_pt[pt_index].write_thru = (flags >> WRITE_THROUGH_PAGE_BIT) & 1;
     current_pt[pt_index].present = 1;
 
-    asm volatile("invlpg (%0)" :: "r" (virt) : "memory");
 }
 
 uint32_t AddKernelPageTable() {
