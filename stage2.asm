@@ -211,6 +211,16 @@ gdt_start:
     ; 4. 16-bit Data (0x20) - For returning to Real Mode
     dw 0xFFFF, 0x0000
     db 0x00, 10010010b, 00001111b, 0x00 
+
+    ; 0x28: 64-bit Code (The "Golden" Selector)
+    ; Base: 0, Limit: 0 (ignored), Access: 0x9A, Flags: 0x2 (L-bit set)
+    dw 0x0000, 0x0000
+    db 0x00, 10011010b, 00100000b, 0x00 
+
+    ; 0x30: 64-bit Data
+    ; Base: 0, Limit: 0, Access: 0x92, Flags: 0x0
+    dw 0x0000, 0x0000
+    db 0x00, 10010010b, 00000000b, 0x00
 gdt_end:
 
 gdt_descriptor:

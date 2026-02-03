@@ -4,5 +4,5 @@
 #include "isr_handler.h"
 #include "global.h"
 
-void sleep(uint32_t ms);
-void WaitSeconds(uint32_t seconds);
+void sleep(uint64_t ms);
+void WaitSeconds(uint64_t seconds);

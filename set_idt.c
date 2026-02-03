@@ -31,16 +31,16 @@ static void* handlers[] = {
     (void*)isr_spurious
 };
 
-static uint32_t handlers_idx[] = {
+static uint64_t handlers_idx[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 16, 17, 18, 19, 20,
     21, 32, 33, 128, 0xFF
 };
 
-static uint32_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
-static uint32_t num_handlers_idx = sizeof(handlers_idx) / sizeof(handlers_idx[0]);
+static uint64_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
+static uint64_t num_handlers_idx = sizeof(handlers_idx) / sizeof(handlers_idx[0]);
 
-void SetIDTEntry(uint32_t offset, uint16_t sel, uint8_t present, uint8_t privilege, uint8_t type, uint32_t idx) {
+void SetIDTEntry(uint64_t offset, uint16_t sel, uint8_t present, uint8_t privilege, uint8_t type, uint64_t idx) {
     idt_entry_t* entry = &idt[idx];
 
     entry->base_low = offset & 0xFFFF;
@@ -61,13 +61,13 @@ void CheckIDT() {
     
     kprintf("IDTR Base: %x\n", current_idtr.base);
     kprintf("IDTR Limit: %x\n", current_idtr.limit);
-    kprintf("Expected Base: %x\n", (uint32_t)&idt);  // or physical if needed
+    kprintf("Expected Base: %x\n", (uint64_t)&idt);  // or physical if needed
     kprintf("Expected Limit: %x\n", sizeof(idt) - 1);
 }
 
 void ReplaceTimer() {
     CliHelper();
-    uint32_t apic_timer = (uint32_t)((void*) isr_apic_stub_32);
+    uint64_t apic_timer = (uint64_t)((void*) isr_apic_stub_32);
     idt[TIMER_IDT].base_low = apic_timer & 0xFFFF;
     idt[TIMER_IDT].base_high = (apic_timer >> 16) & 0xFFFF;
     StiHelper();
@@ -79,21 +79,21 @@ void InitIDT() {
         return;
     }
 
-    for (uint32_t i = 0; i < num_handlers; i++) {
+    for (uint64_t i = 0; i < num_handlers; i++) {
         if (handlers[i] == 0) {
             kerror("Handler %d is NULL\n", i);    
         }
         if (handlers_idx[i] == 128) {
-            SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
+            SetIDTEntry((uint64_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
                 PRIVILEGE_USER, IDT_TYPE_TRAP_GATE, handlers_idx[i]);
             continue;
         }
-        SetIDTEntry((uint32_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
+        SetIDTEntry((uint64_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
          PRIVILEGE_USER, IDT_TYPE_INTERRUPT_GATE, handlers_idx[i]);
     }
 
     idtr.limit = sizeof(idt) - 1;
-    idtr.base = (uint32_t)&idt;
+    idtr.base = (uint64_t)&idt;
     LoadIDTHelper((uintptr_t)&idtr);
     StiHelper();
 

@@ -2,7 +2,7 @@
 
 __attribute__((section(".text.entry")))
 void main() {
-    uint32_t test;
+    uint64_t test;
     char test1[20];
     printf("Input a number and phrase: ");
     scanf("%d %s", &test, test1);
@@ -15,14 +15,14 @@ void printf(const char* format, ...) {
     va_list args;
     va_start(args, format);
     char str[20], c;
-    uint32_t num;
+    uint64_t num;
     
     while (*format != '\0') {
         if (*format == '%') {
             format++;
             
             // Check for width specifier FIRST
-            uint32_t min_width = 0;
+            uint64_t min_width = 0;
             while (*format >= '0' && *format <= '9') {
                 min_width = min_width * 10 + (*format - '0');
                 format++;
@@ -32,7 +32,7 @@ void printf(const char* format, ...) {
             
             switch (*format) {
             case 'c':
-                c = (char)va_arg(args, uint32_t);
+                c = (char)va_arg(args, uint64_t);
                 write(&c, 1);
                 break;
             case 's':
@@ -40,12 +40,12 @@ void printf(const char* format, ...) {
                 write(pointer, UINT32_MAX);
                 break;
             case 'd':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 itoa(num, str, 10, min_width);
                 write(str, UINT32_MAX);
                 break;
             case 'x':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 str[0] = '0';
                 str[1] = 'x';
                 itoa(num, &str[2], 16, min_width);
@@ -67,9 +67,9 @@ void printf(const char* format, ...) {
     va_end(args);
 }
 
-void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
+void itoa(uint64_t value, char* str, uint64_t base, uint64_t min_width) {
     char* ptr = str;
-    uint32_t tmp_value, count = 0;
+    uint64_t tmp_value, count = 0;
 
     if (value == 0) {
         *ptr++ = '0';
@@ -125,15 +125,15 @@ bool islowercasealpha(char c) {
     return true;
 }
 
-uint32_t char_to_digit(char c) {
+uint64_t char_to_digit(char c) {
     if (isdigit(c)) return c - '0';
     if (islowercasealpha(c)) return c - 'a' + 10;
     if (isuppercasealpha(c)) return c - 'A' + 10;
     return 0xFF;
 }
 
-uint32_t atoi(char* str, uint32_t base) {
-    uint32_t result = 0, digit;
+uint64_t atoi(char* str, uint64_t base) {
+    uint64_t result = 0, digit;
     char* ptr = str;
 
     while (*ptr != '\0') {
@@ -151,7 +151,7 @@ void scanf(const char *format, ...) {
     va_start(args, format);
     char nums_buffer[20];
     char* p1;
-    uint32_t* p2;
+    uint64_t* p2;
     tuple_t num_triggers;
     num_triggers.first = ' ';
     num_triggers.second = '\n';
@@ -176,13 +176,13 @@ void scanf(const char *format, ...) {
                 read(p1, &str_triggers, UINT32_MAX);
                 break;
             case 'd':
-                p2 = va_arg(args, uint32_t*);
+                p2 = va_arg(args, uint64_t*);
                 read(nums_buffer, &num_triggers, 20);
                 *p2 = atoi(nums_buffer, 10);
                 memset(nums_buffer, 0, sizeof(nums_buffer));
                 break;
             case 'x':
-                p2 = va_arg(args, uint32_t*);
+                p2 = va_arg(args, uint64_t*);
                 read(nums_buffer, &num_triggers, 20);
                 *p2 = atoi(nums_buffer, 16);
                 memset(nums_buffer, 0, sizeof(nums_buffer));
@@ -197,17 +197,17 @@ void scanf(const char *format, ...) {
     va_end(args);
 }
 
-void memset(void* address, uint8_t value, uint32_t size) {
-    uint32_t reminder = size % 4;
+void memset(void* address, uint8_t value, uint64_t size) {
+    uint64_t reminder = size % 4;
     size -= reminder;
     size /= 4;
-    uint32_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
+    uint64_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
 
-    for(uint32_t i = 0; i < size; i++) {
-        ((uint32_t*) address)[i] = value_32;
+    for(uint64_t i = 0; i < size; i++) {
+        ((uint64_t*) address)[i] = value_32;
     }
 
-    for(uint32_t i = 0; i < reminder; i++) {
+    for(uint64_t i = 0; i < reminder; i++) {
         ((uint8_t*) address)[size * 4 +i] = value;
     }
 }

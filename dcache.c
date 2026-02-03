@@ -2,13 +2,13 @@
 
 static dcache_entry_t* dcache_table[DCACHE_SIZE];
 
-uint32_t hash_dentry(dentry_t* parent, const char* name) {
-    uint32_t hash = (uint32_t)parent;
+uint64_t hash_dentry(dentry_t* parent, const char* name) {
+    uint64_t hash = (uint64_t)parent;
     
 
     hash = hash * GOLDEN_RATIO_32; 
 
-    uint32_t c;
+    uint64_t c;
     while ((c = *name++)) {
         hash = ((hash << 5) + hash) + c; 
     }
@@ -19,7 +19,7 @@ uint32_t hash_dentry(dentry_t* parent, const char* name) {
 void dCachePut(dentry_t* dentry) {
     dentry_t* parent = dentry->parent;
     char* name = dentry->name;
-    uint32_t bucket = hash_dentry(parent, name);
+    uint64_t bucket = hash_dentry(parent, name);
     
     dcache_entry_t* entry = kmalloc(sizeof(dcache_entry_t));
     entry->dentry = dentry;
@@ -31,7 +31,7 @@ void dCachePut(dentry_t* dentry) {
 void dCacheRemove(dentry_t* dentry) {
     dentry_t* parent = dentry->parent;
     char* name = dentry->name;
-    uint32_t bucket = hash_dentry(parent, name);
+    uint64_t bucket = hash_dentry(parent, name);
 
     dcache_entry_t* p = dcache_table[bucket];
     if (p == NULL) return;
@@ -55,7 +55,7 @@ void dCacheRemove(dentry_t* dentry) {
 }
 
 dentry_t* dCacheLookup(dentry_t* parent, const char* name) {
-    uint32_t bucket = hash_dentry(parent, name);
+    uint64_t bucket = hash_dentry(parent, name);
     dcache_entry_t* current = dcache_table[bucket];
 
     while (current) {

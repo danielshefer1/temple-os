@@ -2,9 +2,9 @@
 
 static tss_entry_t tss[UINT8_MAX];
 
-void WriteTSS(uint16_t ss0, uint32_t esp0, uint8_t core_id) {
-    uint32_t base = (uint32_t)&tss;
-    uint32_t limit = sizeof(tss) - 1;
+void WriteTSS(uint16_t ss0, uint64_t esp0, uint8_t core_id) {
+    uint64_t base = (uint64_t)&tss;
+    uint64_t limit = sizeof(tss) - 1;
 
     memset(&tss, 0, sizeof(tss));
     tss[core_id].ss0 = ss0;     
@@ -16,13 +16,13 @@ void WriteTSS(uint16_t ss0, uint32_t esp0, uint8_t core_id) {
 }
 
 void SetFirstTSS() {
-    uint32_t esp0 = AddStack();
+    uint64_t esp0 = AddStack();
     WriteTSS(0x10, esp0, 0);
     load_tss();
 }
 
 void SetNewTss(uint8_t core_id) {
-    uint32_t esp0 = AddStack();
+    uint64_t esp0 = AddStack();
     WriteTSS(0x10, esp0, core_id);
     load_tss();
 }

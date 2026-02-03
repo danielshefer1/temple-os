@@ -1,8 +1,8 @@
 #include "ap_main.h"
 
 void ap_kmain() {
-    LoadGDTHelper(getGdtPointer());
-    LoadIDTHelper(getIdtPtr());
+    LoadGDTHelper((uint64_t)getGdtPointer());
+    LoadIDTHelper((uint64_t)getIdtPtr());
     uint8_t cpu_id = get_cpuid();
     SetNewTss(cpu_id);
     EnableLapic();

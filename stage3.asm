@@ -52,16 +52,24 @@ stage3_return1:
 fetch_stage4_data:
     push eax
 
-    ; Debug: Try to print a known value first
-    
-    mov eax, [STAGE4_BASE]
+    mov eax, [STAGE4_BASE] ; bootstrap sectors
+    mov [bootstrap_sectors_left], eax    
+    call print_dd_hexa
+
+
+    mov eax, [STAGE4_BASE + 4] ; kernel sectors
     mov [sectors_left], eax
+    mov [kernel_sectors], eax
+    call print_dd_hexa
 
-    mov eax, [STAGE4_BASE + 4]
+    mov eax, [STAGE4_BASE + 8] ; bss start
     mov [bss_start], eax
+    call print_dd_hexa
 
-    mov eax, [STAGE4_BASE + 8]
+    mov eax, [STAGE4_BASE + 12] ; bss end
     mov [bss_end], eax
+    call print_dd_hexa
+
 
     pop eax
     ret
@@ -75,23 +83,21 @@ stage3_return2:
     mov ss, eax
 
     ; 1. Calculate bytes loaded: ECX = sectors_loaded * 512
-    mov eax, [sectors_loaded]
+    mov eax, [bootstrap_sectors_loaded]
     ;call print_dd_hexa
     imul ecx, eax, 512      ; Use imul for 3-operand math
     test ecx, ecx           ; If we somehow loaded 0 bytes, skip
     jz .check_finished
 
-    mov ebx, [user_sectors_left]
-    cmp ebx, USER_SECTORS
-    jz .load_kernel
+    mov ebx, [sectors_left]
+    cmp ebx, [kernel_sectors]
+    jnz .load_kernel
 
-    mov edi, [current_user_loading_address]
+    mov edi, [current_bootstrap_loading_address]
     jmp .load_con
 .load_kernel:
     mov edi, [current_kernel_loading_address]
 .load_con:
-    ; 2. Prepare pointers for copying
-
     mov esi, 0xA000         ; Source: Temporary Buffer
     
     ; 3. Copy data correctly
@@ -107,11 +113,11 @@ stage3_return2:
 
     ; 4. Update the global loading pointer for the next track
     pop ecx                 ; Restore total byte count
-    mov ebx, [user_sectors_left]
-    cmp ebx, USER_SECTORS
-    jz .append_kernel
-.append_user:
-    add [current_user_loading_address], ecx
+    mov ebx, [sectors_left]
+    cmp ebx, [kernel_sectors]
+    jnz .append_kernel
+.append_bootstrap:
+    add [current_bootstrap_loading_address], ecx
     jmp .append_con
 .append_kernel:
     add [current_kernel_loading_address], ecx
@@ -121,13 +127,13 @@ stage3_return2:
     
 
     ; 5. Clean up the temporary buffer
-    ;mov edi, 0xA000
-    ;mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
-    ;xor eax, eax
-    ;rep stosd               ; Zero out the temporary buffer
+    mov edi, 0xA000
+    mov ecx, 16 * 512 / 4   ; Clear max possible buffer size (using /4 for speed)
+    xor eax, eax
+    rep stosd               ; Zero out the temporary buffer
 
 .check_finished:
-    mov eax, [user_sectors_left]
+    mov eax, [sectors_left]
     test eax, eax
     jz .done                ; If no sectors left, we are finished!
 
@@ -148,10 +154,10 @@ stage3_return2:
     rep stosb               ; Zero the BSS memory at 1MB+
 
 .launch:
-    cli
-    mov esp, 0x90000
+    mov eax, 0xDEADBEEF
+    call print_dd_hexa
     ; 6. Jump to the Kernel Entry Point at 1MB
-    jmp KERNEL_LOADING_ADDRESS
+    jmp (STAGE4_BASE + 16)
 
 
 print_string_protected:
@@ -281,7 +287,7 @@ real_entry:
     jmp switch_to_protected_mode1
 .loading:
     ; We just came back from fetching metadata or copying a chunk
-    mov eax, [user_sectors_left]
+    mov eax, [sectors_left]
     test eax, eax
     jz .all_done                ; If 0, we are finished loading
 
@@ -344,8 +350,6 @@ load_section:
     xor eax, eax
     mov es, ax
 
-    mov [sectors_loaded], eax
-
     
     mov eax, [start_sector]     ; Load 32-bit LBA
     xor edx, edx                ; CLEAR EDX (Critical for 32-bit div!)
@@ -368,18 +372,18 @@ load_section:
 
 .limit_calculated:
     movzx ecx, cx
-    mov ebx, [sectors_left]
+    mov ebx, [bootstrap_sectors_left]
     test ebx, ebx
-    jz .user_sub
+    jz .kernel_sub
     cmp ebx, ecx
     jge .con
 
-.kernel_end:
+.bootstrap_end:
     mov ecx, ebx
     jmp .con
 
-.user_sub:
-    mov ebx, [user_sectors_left]
+.kernel_sub:
+    mov ebx, [sectors_left]
     cmp ebx, ecx
     jge .con
     mov ecx, ebx
@@ -400,9 +404,11 @@ load_section:
     mov dl, ah                  ; Get Cylinder High bits
     shl dl, 6                   ; Shift to top position
     
-    mov bx, [current_sector_val]
-    or dl, bl                   ; Combine High Cyl bits with Sector
-    mov cl, dl                  
+    mov cl, [current_sector_val] ; Sector (1-63)
+    and cl, 0x3F                 ; Ensure only 6 bits
+    mov al, ch                   ; Get Cylinder low byte
+    mov ch, al                   ; This is already correct
+    ; If you have > 1024 cylinders, you'd move high bits of Cyl to CL bits 6-7 here                
     
     pop ax                      
     mov ah, 0x02                
@@ -415,15 +421,15 @@ load_section:
 
     movzx eax, al               ; Zero-extend AL to 32-bit
     add [start_sector], eax     
-    mov [sectors_loaded], eax
-    mov ebx, [sectors_left]
-    cmp ebx, 0
-    jz .sub_from_user
-    sub [sectors_left], eax 
+    mov [bootstrap_sectors_loaded], eax
+    mov ebx, [bootstrap_sectors_left]
+    test ebx, ebx
+    jz .sub_from_kernel
+    sub [bootstrap_sectors_left], eax 
     jmp .end_of_func
 
-.sub_from_user:
-    sub [user_sectors_left], eax
+.sub_from_kernel:
+    sub [sectors_left], eax
 
 .end_of_func:
 
@@ -439,7 +445,6 @@ load_section:
     cli
     hlt
 
-; Temporary storage for the calculated sector (since we need registers for division)
 current_sector_val dw 0
 
 ; Function: get_drive_geometry
@@ -567,26 +572,26 @@ print_hex_digit:
 
 ; ----- Define Section -----
 
-USER_LOADING_ADDRESS equ 0x40001000
-KERNEL_LOADING_ADDRESS equ 0x100000
+BOOTSTRAP_LOADING_ADDRESS equ 0x100000
+KERNEL_LOADING_ADDRESS equ 0x200000
 BOOT_DRIVE equ 0x85F0
 STAGE4_SECTOR equ 10
 START_SECTOR equ 11
 STAGE4_BASE equ 0x8E00
 VGA_TEXT equ 0xB8000
-USER_SECTORS equ 8
 
 ; ----- Data Section -----
 
 sectors_left dd 0
-user_sectors_left dd 8
+kernel_sectors dd 0
+bootstrap_sectors_left dd 0
 start_sector dd START_SECTOR
 boot_drive db 0
 sectors_loaded dd 0
-user_sectors_loaded dd 0
+bootstrap_sectors_loaded dd 0
 
 current_kernel_loading_address dd KERNEL_LOADING_ADDRESS
-current_user_loading_address dd USER_LOADING_ADDRESS
+current_bootstrap_loading_address dd BOOTSTRAP_LOADING_ADDRESS
 
 MAX_SECTOR dw 0
 MAX_HEAD dw 0

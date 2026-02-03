@@ -23,9 +23,9 @@ bool ValidateRsdp(void* addr) {
 bool ValidateACPIHeader(acpi_header_t* header) {
     uint8_t sum = 0;
     uint8_t* bytes = (uint8_t*) header;
-    uint32_t length = header->length;
+    uint64_t length = header->length;
 
-    for (uint32_t i = 0; i < length; i++) {
+    for (uint64_t i = 0; i < length; i++) {
         sum += bytes[i];
     }
     
@@ -33,7 +33,7 @@ bool ValidateACPIHeader(acpi_header_t* header) {
 }
 
 void FindRsdp() {
-    for (uint32_t addr = 0xE0000 + KERNEL_VIRTUAL; addr < 0x100000 + KERNEL_VIRTUAL; addr += 16) {
+    for (uint64_t addr = 0xE0000 + KERNEL_VIRTUAL; addr < 0x100000 + KERNEL_VIRTUAL; addr += 16) {
         if (ValidateRsdp((void*) addr)) {
             rsdp = (rsdp_t*) addr;
             return;
@@ -51,7 +51,7 @@ void PrintRsdp() {
 }
 
 void FindRsdt() {
-    uint32_t phy_addr = rsdp->rsdt_address, ver_addr = phy_addr + MMIO_OFFSET;
+    uint64_t phy_addr = rsdp->rsdt_address, ver_addr = phy_addr + MMIO_OFFSET;
     if (!ValidateACPIHeader((acpi_header_t*) ver_addr)) {
         kprintf("Table found is not valid!");
         return;
@@ -67,10 +67,10 @@ void FindRsdt() {
 }
 
 void FindMadt(rsdt_t* rsdt) {
-    uint32_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
+    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint64_t);
     acpi_header_t* entry;
 
-    for (uint32_t i = 0; i < num_entries; i++) {
+    for (uint64_t i = 0; i < num_entries; i++) {
         entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
 
         if (!ValidateACPIHeader(entry)) {
@@ -80,7 +80,7 @@ void FindMadt(rsdt_t* rsdt) {
         if (strncmp(entry->signature, "APIC", ACPI_TABLE_SIG_LEGNTH) == 0) {
             madt = (madt_t*)entry;
             kprintf("Found MADT!\n");
-            lapic = (volatile uint32_t*) madt->local_apic_address;
+            lapic = (volatile uint64_t*) madt->local_apic_address;
             return;
         }
     }
@@ -88,11 +88,11 @@ void FindMadt(rsdt_t* rsdt) {
 }
 
 void ParseMadt(madt_t* madt) {
-    madt_entry_header_t* entry = (madt_entry_header_t*)((uint32_t)madt + sizeof(madt_t));
-    uint32_t end = madt->header.length + (uint32_t)madt;
-    uint32_t over_idx = 0;
+    madt_entry_header_t* entry = (madt_entry_header_t*)((uint64_t)madt + sizeof(madt_t));
+    uint64_t end = madt->header.length + (uint64_t)madt;
+    uint64_t over_idx = 0;
 
-    while ((uint32_t)entry < end) {
+    while ((uint64_t)entry < end) {
         switch (entry->type) {
             case 0:
                 
@@ -105,7 +105,7 @@ void ParseMadt(madt_t* madt) {
             case 1:
                 kprintf("Found I/O APIC!\n");
                 io_apic_t* ioapic_obj = (io_apic_t*) entry;
-                ioapic = (volatile uint32_t*) ioapic_obj->ioapic_address;
+                ioapic = (volatile uint64_t*) ioapic_obj->ioapic_address;
                 break;
             case 2:
                 kprintf("Found Interrupts Override!\n");
@@ -118,17 +118,17 @@ void ParseMadt(madt_t* madt) {
             default:
                 kprintf("Unkown MADT type: %d\n", entry->type);
         }
-        entry = (madt_entry_header_t*)((uint32_t)entry + entry->length);
+        entry = (madt_entry_header_t*)((uint64_t)entry + entry->length);
     }
     overrides_length = over_idx;
     kprintf("Finished parsing MADT succesfully!\n");
 }
 
 void FindMcfg(rsdt_t* rsdt) {
-    uint32_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
+    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint64_t);
     acpi_header_t* entry;
 
-    for (uint32_t i = 0; i < num_entries; i++) {
+    for (uint64_t i = 0; i < num_entries; i++) {
         entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
 
         if (!ValidateACPIHeader(entry)) {
@@ -137,7 +137,7 @@ void FindMcfg(rsdt_t* rsdt) {
         }
         if (strncmp(entry->signature, "MCFG", ACPI_TABLE_SIG_LEGNTH) == 0) {
             mcfg = (mcfg_t*)entry;
-            ecam_ptr = mcfg->entries[0].base_address;
+            ecam_ptr = (pci_config_t*) mcfg->entries[0].base_address;
 
             kprintf("Found MCFG!\n");
             return;
@@ -156,8 +156,8 @@ void InitMadt() {
     FindMadt(rsdt);
     ParseMadt(madt);
     kprintf("Found %d CPUs!\n", cpu_count);
-    kprintf("Local APIC's address is: %x\n", (uint32_t)lapic);
-    kprintf("I/O APIC's address is: %x\n", (uint32_t)ioapic);
+    kprintf("Local APIC's address is: %x\n", (uint64_t)lapic);
+    kprintf("I/O APIC's address is: %x\n", (uint64_t)ioapic);
     FillPageDirectoryIdentityMapping(lapic, PAGE_SIZE);
     FillPageDirectoryIdentityMapping(ioapic, PAGE_SIZE);
 }

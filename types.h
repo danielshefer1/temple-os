@@ -4,7 +4,7 @@
 typedef struct buddy_node_t {
     bool free;
     void* address;
-    uint32_t order;
+    uint64_t order;
     struct buddy_node_t* next;
 } buddy_node_t;
 
@@ -13,47 +13,35 @@ typedef struct buddy_bin_t {
     buddy_node_t* head_used;
 } buddy_bin_t;
 
-typedef struct pte_t {
-    uint32_t present    : 1;
-    uint32_t rw         : 1;
-    uint32_t user       : 1;
-    uint32_t write_thru : 1;
-    uint32_t cache_dis  : 1;
-    uint32_t accessed   : 1;
-    uint32_t dirty      : 1;
-    uint32_t pat        : 1;
-    uint32_t global     : 1;
-    uint32_t avail      : 3;
-    uint32_t frame      : 20;
-} pte_t;
-
-typedef struct pde_t {
-    uint32_t present    : 1;
-    uint32_t rw         : 1;
-    uint32_t user       : 1;
-    uint32_t write_thru : 1;
-    uint32_t cache_dis  : 1;
-    uint32_t accessed   : 1;
-    uint32_t dirty      : 1;
-    uint32_t pat        : 1;
-    uint32_t global     : 1;
-    uint32_t avail      : 3;
-    uint32_t frame      : 20;
-} pde_t;
+typedef struct {
+    uint64_t present    : 1;
+    uint64_t writable   : 1;
+    uint64_t user       : 1;
+    uint64_t pwt        : 1;
+    uint64_t pcd        : 1;
+    uint64_t accessed   : 1;
+    uint64_t dirty      : 1;
+    uint64_t page_size  : 1; 
+    uint64_t global     : 1;
+    uint64_t available  : 3;
+    uint64_t address    : 40; 
+    uint64_t reserved   : 11;
+    uint64_t no_execute : 1;
+} __attribute__((packed)) page_entry_t;
 
 typedef struct slab_t
 {
     void* start;
-    uint32_t num_slots;
-    uint32_t free_count;
+    uint64_t num_slots;
+    uint64_t free_count;
     struct slab_t* next;
-    uint32_t bitmap_size;
-    uint32_t bitmap[];
+    uint64_t bitmap_size;
+    uint64_t bitmap[];
 } slab_t;
 
 typedef struct cache_t
 {
-    uint32_t size;
+    uint64_t size;
     slab_t* full_slabs;
     slab_t* partial_slabs;
     slab_t* empty_slabs;
@@ -75,12 +63,12 @@ typedef struct e820_info_t {
 } e820_info_t;
 
 typedef struct tuple_t {
-    uint32_t first;
-    uint32_t second;
+    uint64_t first;
+    uint64_t second;
 } tuple_t;
 
 typedef struct int_node_t {
-    uint32_t val;
+    uint64_t val;
     struct int_node_t* next;
 } int_node_t;
 
@@ -114,16 +102,16 @@ typedef struct gdt_entry_t {
 
 typedef struct gdt_ptr_t {
     uint16_t limit;
-    uint32_t base;
+    uint64_t base;
 } __attribute__((packed)) gdt_ptr_t;
 
 typedef struct interrupt_frame_t {
     // Pushed by isr_common_stub
-    uint32_t gs, fs, es, ds;
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;  // pusha
-    uint32_t int_no, err_code;
+    uint64_t gs, fs, es, ds;
+    uint64_t edi, esi, ebp, esp, ebx, edx, ecx, eax;  // pusha
+    uint64_t int_no, err_code;
     // Pushed by CPU
-    uint32_t eip, cs, eflags, useresp, ss;
+    uint64_t eip, cs, eflags, useresp, ss;
 } __attribute__((packed)) interrupt_frame_t;
 
 typedef struct idt_entry_t {
@@ -141,56 +129,56 @@ typedef struct idt_entry_t {
 
 typedef struct idt_ptr_t {
     uint16_t limit;
-    uint32_t base;
+    uint64_t base;
 } __attribute__((packed)) idt_ptr_t;
 
 typedef struct input_buffer_t {
     struct timed_key_t* buffer;
-    uint32_t size;
-    uint32_t head;
-    uint32_t tail;
+    uint64_t size;
+    uint64_t head;
+    uint64_t tail;
 } input_buffer_t;
 
 typedef struct timed_key_t {
-    uint32_t time;
+    uint64_t time;
     char c;
 } timed_key_t;
 
 struct tss_entry_struct {
-    uint32_t prev_tss;   // Previous TSS (not used in software switching)
-    uint32_t esp0;       // The stack pointer to load when switching to Ring 0
-    uint32_t ss0;        // The stack segment to load when switching to Ring 0
-    uint32_t esp1; uint32_t ss1; uint32_t esp2; uint32_t ss2; // Not used
-    uint32_t cr3; uint32_t eip; uint32_t eflags;
-    uint32_t eax; uint32_t ecx; uint32_t edx; uint32_t ebx;
-    uint32_t esp; uint32_t ebp; uint32_t esi; uint32_t edi;
-    uint32_t es; uint32_t cs; uint32_t ss; uint32_t ds; uint32_t fs; uint32_t gs;
-    uint32_t ldt; uint16_t trap; uint16_t iomap_base;
+    uint64_t prev_tss;   // Previous TSS (not used in software switching)
+    uint64_t esp0;       // The stack pointer to load when switching to Ring 0
+    uint64_t ss0;        // The stack segment to load when switching to Ring 0
+    uint64_t esp1; uint64_t ss1; uint64_t esp2; uint64_t ss2; // Not used
+    uint64_t cr3; uint64_t eip; uint64_t eflags;
+    uint64_t eax; uint64_t ecx; uint64_t edx; uint64_t ebx;
+    uint64_t esp; uint64_t ebp; uint64_t esi; uint64_t edi;
+    uint64_t es; uint64_t cs; uint64_t ss; uint64_t ds; uint64_t fs; uint64_t gs;
+    uint64_t ldt; uint16_t trap; uint16_t iomap_base;
 } __attribute__((packed));
 
 typedef struct tss_entry_struct tss_entry_t;
 
 typedef struct mutex_t {
     volatile bool locked;     
-    uint32_t owner_pcb;      
+    uint64_t owner_pcb;      
     void* wait_queue;        
 } mutex_t;
 
 struct dentry_t;
 
 typedef struct vfs_ops_t {
-    uint32_t (*read)(struct dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
-    uint32_t (*write)(struct dentry_t* node, uint32_t offset, uint32_t size, char* buffer);
+    uint64_t (*read)(struct dentry_t* node, uint64_t offset, uint64_t size, char* buffer);
+    uint64_t (*write)(struct dentry_t* node, uint64_t offset, uint64_t size, char* buffer);
     struct dentry_t* (*finddir)(struct dentry_t* node, char* name);
 } vfs_ops_t;
 
 typedef struct inode_t {
-    uint32_t type;
-    uint32_t size;
-    uint32_t permissions;
-    uint32_t owner_id;
-    uint32_t group_id;
-    uint32_t link_count;
+    uint64_t type;
+    uint64_t size;
+    uint64_t permissions;
+    uint64_t owner_id;
+    uint64_t group_id;
+    uint64_t link_count;
     mutex_t mutex;
 } inode_t;
 
@@ -220,19 +208,19 @@ typedef struct rsdp_t {
     uint8_t checksum;
     char oem_id[6];
     uint8_t revision;
-    uint32_t rsdt_address;
+    uint64_t rsdt_address;
 } __attribute__((packed)) rsdp_t;
 
 typedef struct acpi_header_t {
     char signature[4];      
-    uint32_t length;
+    uint64_t length;
     uint8_t revision;
     uint8_t checksum;
     char oem_id[6];
     char oem_table_id[8];
-    uint32_t oem_revision;
-    uint32_t creator_id;
-    uint32_t creator_revision;
+    uint64_t oem_revision;
+    uint64_t creator_id;
+    uint64_t creator_revision;
 } __attribute__((packed)) acpi_header_t;
 
 typedef struct rsdt_t {
@@ -242,8 +230,8 @@ typedef struct rsdt_t {
 
 typedef struct madt_t {
     acpi_header_t header;           
-    uint32_t local_apic_address;    
-    uint32_t flags;                 
+    uint64_t local_apic_address;    
+    uint64_t flags;                 
 } __attribute__((packed)) madt_t;
 
 typedef struct madt_entry_header_t {
@@ -255,22 +243,22 @@ typedef struct local_apic_t {
     madt_entry_header_t header;
     uint8_t acpi_processor_id;  
     uint8_t apic_id;
-    uint32_t flags;
+    uint64_t flags;
 } __attribute__((packed)) local_apic_t;
 
 typedef struct io_apic_t {
     madt_entry_header_t header;
     uint8_t ioapic_id; 
     uint8_t reserved;
-    uint32_t ioapic_address;
-    uint32_t global_system_interrupt_base;
+    uint64_t ioapic_address;
+    uint64_t global_system_interrupt_base;
 } __attribute__((packed)) io_apic_t;
 
 typedef struct int_override_t {
     madt_entry_header_t header;
     uint8_t bus_source; 
     uint8_t irq_source;
-    uint32_t global_system_interrupt;
+    uint64_t global_system_interrupt;
     uint16_t flags;
 } __attribute__((packed)) int_override_t;
 
@@ -282,7 +270,7 @@ typedef struct madt_local_apic_nmi_t {
 } __attribute__((packed)) madt_local_apic_nmi_t;
 
 typedef struct spinlock_t {
-    volatile uint32_t locked;
+    volatile uint64_t locked;
 } spinlock_t;
 
 typedef struct mcfg_entry_t {
@@ -290,7 +278,7 @@ typedef struct mcfg_entry_t {
     uint16_t pci_segment_group;
     uint8_t start_bus_number;
     uint8_t end_bus_number;
-    uint32_t reserved;
+    uint64_t reserved;
 } __attribute__((packed)) mcfg_entry_t;
 
 typedef struct mcfg_t{
@@ -316,15 +304,15 @@ typedef struct pci_config_t{
     uint8_t  header_type;
     uint8_t  bist;
 
-    uint32_t bars[6];
+    uint64_t bars[6];
 
-    uint32_t cardbus_cis_ptr;
+    uint64_t cardbus_cis_ptr;
     uint16_t subsystem_vendor_id;
     uint16_t subsystem_id;
-    uint32_t expansion_rom_base_addr;
+    uint64_t expansion_rom_base_addr;
     uint8_t  capabilities_ptr; 
     uint8_t  reserved0[3];
-    uint32_t reserved1;
+    uint64_t reserved1;
     uint8_t  interrupt_line;
     uint8_t  interrupt_pin;
     uint8_t  min_grant;

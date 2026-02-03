@@ -1,38 +1,51 @@
 ENTRY(kmain)
-OUTPUT_FORMAT(elf64-i386)
+OUTPUT_FORMAT(elf64-x86-64)
 
 SECTIONS
 {
-    _kernel_LMA_start = 0x200000 /* 2MB - Physical Address */
+    _kernel_LMA_start = 0x200000;
     . = 0xFFFFFFFF80000000;
     _kernel_VMA_start = .;
 
-    .helpers { *(.helpers) }
+    /* Map .helpers at the very start of the LMA */
+    .helpers : AT(_kernel_LMA_start) {
+        *(.helpers)
+    }
 
-    .trampoline { *(.trampoline) }
+    /* For every subsequent section, calculate LMA based on its VMA offset */
+    /* LMA = Start_LMA + (Current_VMA - Start_VMA) */
 
-    
-    .text : ALIGN(4)  {
+    .trampoline : AT(_kernel_LMA_start + (ADDR(.trampoline) - _kernel_VMA_start)) {
+        *(.trampoline)
+    }
+
+    .text : AT(_kernel_LMA_start + (ADDR(.text) - _kernel_VMA_start)) {
         *(.text)
         *(.rodata*)
+        *(.eh_frame) /* Explicitly handle this to avoid overlaps */
     }
 
-    .data : ALIGN(4K) { *(.data) }
+    /* Use ALIGN inside the section definition so VMA and LMA both move */
+    .data : AT(_kernel_LMA_start + (ADDR(.data) - _kernel_VMA_start)) {
+        . = ALIGN(4K); 
+        *(.data)
+    }
 
-    __end_of_file_phys = .;
+    /* Use a symbol to mark the end of the data to be loaded into RAM */
+    __end_of_file_vma = .;
+    __end_of_file_phys = _kernel_LMA_start + (__end_of_file_vma - _kernel_VMA_start);
 
-
-    _bss_start = . - _kernel_VMA_start + _kernel_LMA_start;
-    .bss {
+    .bss : AT(__end_of_file_phys) {
+        _bss_start = . - _kernel_VMA_start + _kernel_LMA_start;
         *(.bss)
         *(COMMON)
+        . = ALIGN(4K);
+        _bss_end = . - _kernel_VMA_start + _kernel_LMA_start;
     }
-    _bss_end = _bss_start + SIZEOF(.bss);
     _kernel_VMA_end = .;
 }
 
-
-__file_size_bytes = __end_of_file_phys - _kernel_VMA_start;
+__file_size_bytes = __end_of_file_phys - _kernel_LMA_start;
 __kernel_size_bytes = _kernel_VMA_end - _kernel_VMA_start;
 
 __sector_size = 512;

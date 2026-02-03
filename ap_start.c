@@ -2,10 +2,10 @@
 
 void CopyTrampoline() {
     void* trampoline_binary_addr = (void*)&trampoline_binary;
-    memcpy(TRAMPOLINE_ADDR + KERNEL_VIRTUAL, trampoline_binary_addr, trampoline_size);
+    memcpy((void*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL), trampoline_binary_addr, trampoline_size);
 }
 
-void lapic_write_icr(uint32_t high, uint32_t low) {
+void lapic_write_icr(uint64_t high, uint64_t low) {
     // High must be written first!
     lapic[0x310 / 4] = high;
     // Writing to the low register actually triggers the interrupt
@@ -18,7 +18,7 @@ void lapic_write_icr(uint32_t high, uint32_t low) {
     }
 }
 
-void SendInitIPI(uint32_t apic_id) {
+void SendInitIPI(uint64_t apic_id) {
     // 0x0000C500 breaks down as:
     // Bits 8-10: 101 (INIT)
     // Bit 14: 1 (Assert)
@@ -26,7 +26,7 @@ void SendInitIPI(uint32_t apic_id) {
     lapic_write_icr(apic_id << 24, 0x0000C500);
 }
 
-void SendStartupIPI(uint32_t apic_id, uint8_t vector) {
+void SendStartupIPI(uint64_t apic_id, uint8_t vector) {
     // 0x00000600 | vector
     // Bits 8-10: 110 (Startup)
     lapic_write_icr(apic_id << 24, 0x00000600 | vector);
@@ -35,7 +35,7 @@ void SendStartupIPI(uint32_t apic_id, uint8_t vector) {
 void BootCore(uint8_t cpu_id, bool trampoline_set) {
     bool found_cpu = false;
 
-    for (uint32_t i = 1; i < cpu_count; i++) {
+    for (uint64_t i = 1; i < cpu_count; i++) {
         if (cpu_ids[i] == cpu_id) {
             found_cpu = true;
             break;
@@ -47,10 +47,10 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     }
     if (!trampoline_set) CopyTrampoline();
 
-    uint32_t* inputs = TRAMPOLINE_ADDR + KERNEL_VIRTUAL + trampoline_size;
+    uint64_t* inputs = (uint64_t*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL + trampoline_size);
     inputs[0] = (AddStack() - KERNEL_VIRTUAL); // this cpu's stack, identity mapped
-    inputs[1] = (void*)ap_kmain; 
-    inputs[2] = ((uint32_t) PageDirAddrV()) - KERNEL_VIRTUAL;
+    inputs[1] = (uint64_t)((void*)ap_kmain); 
+    inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 
     //CliHelper();
 
@@ -61,7 +61,7 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
     
 
-    for(volatile uint32_t i = 0; i < 10000; i++) {
+    for(volatile uint64_t i = 0; i < 10000; i++) {
         PauseHelper();
     }
 
@@ -74,8 +74,8 @@ void BootCores() {
     if (cpu_count == 1) return;
     BootCore(cpu_ids[1], false);
     while (cpus_active == 1) PauseHelper();
-    for (uint32_t i = 2; i < cpu_count; i++) {
-        uint32_t current_cpus_active = cpus_active;
+    for (uint64_t i = 2; i < cpu_count; i++) {
+        uint64_t current_cpus_active = cpus_active;
         BootCore(cpu_ids[i], true);
         while (current_cpus_active == cpus_active) PauseHelper();
     }

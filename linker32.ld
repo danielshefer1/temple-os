@@ -3,11 +3,11 @@ OUTPUT_FORMAT(elf32-i386)
 
 SECTIONS {
     . = 0x8E00;
-    .stage4 { *(.stage4) }
+    .stage4 : AT(0x8E00) { *(.stage4) }
 
     . = ALIGN(4);
     _bootstrap_LMA_start = .;
-    . = 0x100000 /* Bootstrap code is at 1MB */
+    . = 0x100000; /* Bootstrap code is at 1MB */
     _bootstrap_VMA_start = .;
 
     .text : AT(_bootstrap_LMA_start) { 
@@ -16,7 +16,7 @@ SECTIONS {
     }
     _text_end = .;
     . = ALIGN(4);
-    _data_start .;
+    _data_start = .;
 
     _data_phy_start = _bootstrap_LMA_start + SIZEOF(.text) + _data_start - _text_end;
     .data : AT(_data_phy_start) { *(.data) }

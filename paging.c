@@ -1,413 +1,91 @@
 #include "paging.h"
 
-static pde_t* pd;
-static pte_t* pt;
-static uint32_t curr_page;
-static uint32_t curr_table;
+static uintptr_t* pd;
+static uintptr_t* pt;
+static uint64_t curr_page;
+static uint64_t curr_table;
 
 void flush_tlb() {
 
 }
 void InitPaging() {
-    uint32_t pd_addr = PageDirAddrV();
-    pd = (pde_t*) pd_addr;
-    pt = (pte_t*)(KERNEL_VIRTUAL + (pd[HIGHER_HALF_IDX].frame << 12));
-    flush_tlb();
-    uint32_t idx = 0;
-    while (pt[idx].present == 1) {
-        idx++;
-    }
-    curr_page = idx;
-    curr_table = 0;
-    AddGuardPage(HIGHER_HALF_IDX, curr_page - 8);
+
 }
 
 void DisableIdentityMapping() {
-    pd[0].present = 0;
+
 }
-uint32_t PageDirAddrV() {
-    uint32_t kernel_pages = (uint32_t)&__total_pages;
-    return KERNEL_VIRTUAL + KERNEL_BASE + kernel_pages * PAGE_SIZE;
+uint64_t PageDirAddrV() {
+    return 0;
 }
 
-void map_page_to_virt(uint32_t virt, uint32_t phy, uint32_t flags) {
-    uint32_t pd_index = virt >> 22; 
-    uint32_t pt_index = (virt >> 12) & 0x3FF;
+void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags) {
 
-    if (!pd[pd_index].present) {
-        // Assuming kmalloc returns a virtual address in the kernel half
-        void* pt_virt = kmalloc(PAGE_SIZE);
-        memset(pt_virt, 0, PAGE_SIZE);
-
-        uint32_t pt_phys = (uint32_t)pt_virt - KERNEL_VIRTUAL;
-
-        pd[pd_index].frame = pt_phys >> 12;
-        pd[pd_index].rw = 1; // Usually keep PD entries writable
-        pd[pd_index].user = (flags >> USER_PAGE_BIT) & 1;
-        pd[pd_index].present = 1;
-        // Cache bits should usually match the PTE for consistency
-        pd[pd_index].cache_dis = (flags >> CACHE_DIS_PAGE_BIT) & 1;
-    }
-
-    // FIX: Shift LEFT to get physical address, then add virtual offset
-    pte_t* current_pt = (pte_t*) ((pd[pd_index].frame << 12) + KERNEL_VIRTUAL);
-
-    // FIX: Use pt_index here, not pd_index!
-    current_pt[pt_index].frame = phy >> 12;
-    current_pt[pt_index].rw = (flags >> RW_PAGE_BIT) & 1;
-    current_pt[pt_index].user = (flags >> USER_PAGE_BIT) & 1;
-    current_pt[pt_index].cache_dis = (flags >> CACHE_DIS_PAGE_BIT) & 1;
-    current_pt[pt_index].write_thru = (flags >> WRITE_THROUGH_PAGE_BIT) & 1;
-    current_pt[pt_index].present = 1;
 
 }
 
-uint32_t AddKernelPageTable() {
-    uint32_t next_pt = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
-    curr_table++;
-    pd[curr_table].present = 1;
-    pd[curr_table].rw = 1;
-    pd[curr_table].user = 0;
-    pd[curr_table].write_thru = 0;
-    pd[curr_table].cache_dis = 0;
-    pd[curr_table].accessed = 0;
-    pd[curr_table].dirty = 0;
-    pd[curr_table].pat = 0;
-    pd[curr_table].global = 1;
-    pd[curr_table].frame = (next_pt - KERNEL_VIRTUAL) >> 12;
-    
-    flush_tlb();
-
-    return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
+uint64_t AddKernelPageTable() {
+    return 0;
 }
-uint32_t AddUserPageTable(uint32_t table_idx) {
-    if (pd[table_idx].present == 1) {
-        return KERNEL_VIRTUAL + table_idx * TABLE_SIZE;
-    }
-    uint32_t pt_addr = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
-    pd[table_idx].present = 1;
-    pd[table_idx].rw = 1;
-    pd[table_idx].user = 1;
-    pd[table_idx].write_thru = 0;
-    pd[table_idx].cache_dis = 0;
-    pd[table_idx].accessed = 0;
-    pd[table_idx].dirty = 0;
-    pd[table_idx].pat = 0;
-    pd[table_idx].global = 0;
-    pd[table_idx].frame = (pt_addr - KERNEL_VIRTUAL) >> 12;
-
-    return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
+uint64_t AddUserPageTable(uint64_t table_idx) {
+    return 0;
 }
 
-uint32_t AddMMIOPageTable(uint32_t table_idx) {
-    if (pd[table_idx].present == 1) {
-        return KERNEL_VIRTUAL + table_idx * TABLE_SIZE;
-    }
-    uint32_t pt_addr = (uint32_t) kmalloc(sizeof(pte_t) * 1024);
-    pd[table_idx].present = 1;
-    pd[table_idx].rw = 1;
-    pd[table_idx].user = 0;
-    pd[table_idx].write_thru = 1;
-    pd[table_idx].cache_dis = 1;
-    pd[table_idx].accessed = 0;
-    pd[table_idx].dirty = 0;
-    pd[table_idx].pat = 0;
-    pd[table_idx].global = 1;
-    pd[table_idx].frame = (pt_addr - KERNEL_VIRTUAL) >> 12;
-
-    return KERNEL_VIRTUAL + curr_table * TABLE_SIZE;
+uint64_t AddMMIOPageTable(uint64_t table_idx) {
+    return 0;
 }
 
 
 
-void FillUserPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
-    pte_t* user_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
-    uint32_t idx = start_page, end = start_page + num_pages;
+void FillUserPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages) {
 
-    for (; idx < end; idx++) {
-        user_pt[idx].present = 1;
-        user_pt[idx].rw = 1;
-        user_pt[idx].user = 1;
-        user_pt[idx].write_thru = 0;
-        user_pt[idx].cache_dis = 0;
-        user_pt[idx].accessed = 0;
-        user_pt[idx].dirty = 0;
-        user_pt[idx].pat = 0;
-        user_pt[idx].global = 0;
-        user_pt[idx].frame = (table_idx * TABLE_SIZE + idx * PAGE_SIZE + USER_BASE) >> 12;
-    }
 }
 
-void FillMMIOPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages, uint32_t offset) {
-    pte_t* mmio_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
-    uint32_t idx = start_page, end = start_page + num_pages, test_addr;
+void FillMMIOPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages, uint64_t offset) {
 
-    for (; idx < end; idx++) {
-        mmio_pt[idx].present = 1;
-        mmio_pt[idx].rw = 1;
-        mmio_pt[idx].user = 0;
-        mmio_pt[idx].write_thru = 1;
-        mmio_pt[idx].cache_dis = 1;
-        mmio_pt[idx].accessed = 0;
-        mmio_pt[idx].dirty = 0;
-        mmio_pt[idx].pat = 0;
-        mmio_pt[idx].global = 1;
-        test_addr = table_idx * TABLE_SIZE;
-        test_addr += idx * PAGE_SIZE;
-        test_addr -= offset;
-        test_addr = test_addr >> 12;
-        mmio_pt[idx].frame = test_addr;
-    }
 }
 
-void FillIdentityPageTable(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
-    pte_t* mmio_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
-    uint32_t idx = start_page, end = start_page + num_pages, test_addr;
+void FillIdentityPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages) {
 
-    for (; idx < end; idx++) {
-        mmio_pt[idx].present = 1;
-        mmio_pt[idx].rw = 1;
-        mmio_pt[idx].user = 0;
-        mmio_pt[idx].write_thru = 1;
-        mmio_pt[idx].cache_dis = 1;
-        mmio_pt[idx].accessed = 0;
-        mmio_pt[idx].dirty = 0;
-        mmio_pt[idx].pat = 0;
-        mmio_pt[idx].global = 1;
-        test_addr = table_idx * TABLE_SIZE;
-        test_addr += idx * PAGE_SIZE;
-        test_addr = test_addr >> 12;
-        mmio_pt[idx].frame = test_addr;
-    }
 }
 
-void FillPageDirectoryUser(void* addr, uint32_t size) {
+void FillPageDirectoryUser(void* addr, uint64_t size) {
 
-    uint32_t current_addr = (uint32_t)addr;
-    uint32_t end_addr = current_addr + size;
-
-    while (current_addr < end_addr) {
-        uint32_t pd_index = (current_addr - USER_BASE) >> 22; 
-        
-        // 2. Calculate the Page Table Index (0 to 1023)
-        // Shift right by 12, then mask the bottom 10 bits
-        uint32_t pt_index = (current_addr >> 12) & 0x3FF;
-
-        // 3. Calculate how many pages fit in THIS specific table
-        // The table ends at entry 1024. 
-        uint32_t pages_left_in_table = 1024 - pt_index;
-
-        // 4. Calculate how many pages we actually need to map right now
-        // It's the minimum of: what fits in the table vs. what we have left to map
-        uint32_t bytes_remaining = end_addr - current_addr;
-        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
-        
-        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
-                                 ? pages_remaining 
-                                 : pages_left_in_table;
-
-        // 5. Perform the mapping
-        AddUserPageTable(pd_index); // Ensure the table exists
-        FillUserPageTable(pd_index, pt_index, pages_to_fill);
-
-        // 6. Advance current_addr by the amount we just mapped
-        current_addr += pages_to_fill * PAGE_SIZE;
-    }
-    flush_tlb();
 }
 
-void FillPageDirectoryMMIO(void* addr, uint32_t size) {
+void FillPageDirectoryMMIO(void* addr, uint64_t size) {
 
-    uint32_t current_addr = (uint32_t)addr;
-    uint32_t end_addr = current_addr + size;
-
-    while (current_addr < end_addr) {
-        uint32_t pd_index = (current_addr + MMIO_OFFSET) >> 22; 
-        
-        // 2. Calculate the Page Table Index (0 to 1023)
-        // Shift right by 12, then mask the bottom 10 bits
-        uint32_t pt_index = ((current_addr + MMIO_OFFSET) >> 12) & 0x3FF;
-
-        // 3. Calculate how many pages fit in THIS specific table
-        // The table ends at entry 1024. 
-        uint32_t pages_left_in_table = 1024 - pt_index;
-
-        // 4. Calculate how many pages we actually need to map right now
-        // It's the minimum of: what fits in the table vs. what we have left to map
-        uint32_t bytes_remaining = end_addr - current_addr;
-        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
-        
-        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
-                                 ? pages_remaining 
-                                 : pages_left_in_table;
-
-        // 5. Perform the mapping
-        AddMMIOPageTable(pd_index); // Ensure the table exists
-        FillMMIOPageTable(pd_index, pt_index, pages_to_fill, MMIO_OFFSET);
-
-        // 6. Advance current_addr by the amount we just mapped
-        current_addr += pages_to_fill * PAGE_SIZE;
-    }
-    flush_tlb();
 }
 
-void FillPageDirectoryPCI(void* addr, uint32_t size) {
+void FillPageDirectoryPCI(void* addr, uint64_t size) {
 
-    uint32_t current_addr = (uint32_t)addr;
-    uint32_t end_addr = current_addr + size;
-
-    while (current_addr < end_addr) {
-        uint32_t pd_index = (current_addr + PCI_OFFSET) >> 22; 
-        
-        // 2. Calculate the Page Table Index (0 to 1023)
-        // Shift right by 12, then mask the bottom 10 bits
-        uint32_t pt_index = ((current_addr + PCI_OFFSET) >> 12) & 0x3FF;
-
-        // 3. Calculate how many pages fit in THIS specific table
-        // The table ends at entry 1024. 
-        uint32_t pages_left_in_table = 1024 - pt_index;
-
-        // 4. Calculate how many pages we actually need to map right now
-        // It's the minimum of: what fits in the table vs. what we have left to map
-        uint32_t bytes_remaining = end_addr - current_addr;
-        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
-        
-        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
-                                 ? pages_remaining 
-                                 : pages_left_in_table;
-
-        // 5. Perform the mapping
-        AddMMIOPageTable(pd_index); // Ensure the table exists
-        FillMMIOPageTable(pd_index, pt_index, pages_to_fill, PCI_OFFSET);
-
-        // 6. Advance current_addr by the amount we just mapped
-        current_addr += pages_to_fill * PAGE_SIZE;
-    }
-    flush_tlb();
 }
 
-void FillPageDirectoryIdentityMapping(void* addr, uint32_t size) {
-    
-    uint32_t current_addr = (uint32_t)addr;
-    uint32_t end_addr = current_addr + size;
+void FillPageDirectoryIdentityMapping(void* addr, uint64_t size) {
 
-    while (current_addr < end_addr) {
-        uint32_t pd_index = (current_addr) >> 22; 
-        
-        // 2. Calculate the Page Table Index (0 to 1023)
-        // Shift right by 12, then mask the bottom 10 bits
-        uint32_t pt_index = ((current_addr >> 12) & 0x3FF);
-
-        // 3. Calculate how many pages fit in THIS specific table
-        // The table ends at entry 1024. 
-        uint32_t pages_left_in_table = 1024 - pt_index;
-
-        // 4. Calculate how many pages we actually need to map right now
-        // It's the minimum of: what fits in the table vs. what we have left to map
-        uint32_t bytes_remaining = end_addr - current_addr;
-        uint32_t pages_remaining = (bytes_remaining + PAGE_SIZE - 1) / PAGE_SIZE; 
-        
-        uint32_t pages_to_fill = (pages_remaining < pages_left_in_table) 
-                                 ? pages_remaining 
-                                 : pages_left_in_table;
-
-        // 5. Perform the mapping
-        AddMMIOPageTable(pd_index); // Ensure the table exists
-        FillIdentityPageTable(pd_index, pt_index, pages_to_fill);
-
-        // 6. Advance current_addr by the amount we just mapped
-        current_addr += pages_to_fill * PAGE_SIZE;
-    }
-    flush_tlb();
 }
 
 
-void RemovePageTables(uint32_t start_table, uint32_t end_table) {
-    for (uint32_t t = start_table; t < end_table; t++) {
-        if (pd[t].present == 1) {
-            pd[t].present = 0;
-            kfree((void*)(KERNEL_VIRTUAL + (pd[t].frame << 12)), sizeof(pte_t) * 1024);
-        }
-    }
-    flush_tlb();
+void RemovePageTables(uint64_t start_table, uint64_t end_table) {
+
 }
 
-void RemovePages(uint32_t table_idx, uint32_t start_page, uint32_t num_pages) {
-    pte_t* user_pt = (pte_t*)(KERNEL_VIRTUAL + (pd[table_idx].frame << 12));
-    uint32_t idx = start_page, end = start_page + num_pages;
+void RemovePages(uint64_t table_idx, uint64_t start_page, uint64_t num_pages) {
 
-    for (; idx < end; idx++) {
-        user_pt[idx].present = 0;
-    }
-    flush_tlb();
 }
 
-uint32_t AddKernelPages(uint32_t num_pages) {
-    if (curr_page + num_pages >= 1024) AddKernelPageTable();
-    uint32_t idx = curr_page, ret = KERNEL_VIRTUAL + idx * PAGE_SIZE + curr_table * TABLE_SIZE, end = idx + num_pages;
-
-    for(; idx < end; idx++) {
-        if (curr_page == 1024) {
-            curr_page = 0;
-            curr_table++;
-            pt = (pte_t*)(KERNEL_VIRTUAL + (pd[curr_table].frame << 12));
-        }
-        pt[curr_page].present = 1;
-        pt[curr_page].rw = 1;
-        pt[curr_page].user = 0;
-        pt[curr_page].write_thru = 0;
-        pt[curr_page].cache_dis = 0;
-        pt[curr_page].accessed = 0;
-        pt[curr_page].dirty = 0;
-        pt[curr_page].pat = 0;
-        pt[curr_page].global = 1;
-        pt[curr_page].frame = (curr_table * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
-        curr_page++;
-    }
-    flush_tlb();
-    return ret;
+uint64_t AddKernelPages(uint64_t num_pages) {
+    return 0;
 }
 
-uint32_t AddStack() {
-    if (curr_page + STACK_PAGES >= 1024) AddKernelPageTable();
-    uint32_t idx = curr_page, end = idx + STACK_PAGES;
-
-    pt[curr_page].present = 0;
-    idx++;
-    curr_page++;
-
-    for(; idx < end; idx++) {
-        if (curr_page == 1024) {
-            curr_page = 0;
-            curr_table++;
-            pt = (pte_t*)(KERNEL_VIRTUAL + (pd[curr_table].frame << 12));
-        }
-        pt[curr_page].present = 1;
-        pt[curr_page].rw = 1;
-        pt[curr_page].user = 0;
-        pt[curr_page].write_thru = 0;
-        pt[curr_page].cache_dis = 0;
-        pt[curr_page].accessed = 0;
-        pt[curr_page].dirty = 0;
-        pt[curr_page].pat = 0;
-        pt[curr_page].global = 1;
-        pt[curr_page].frame = (curr_table * TABLE_SIZE + idx * PAGE_SIZE) >> 12;
-        curr_page++;
-    }
-    flush_tlb();
-
-    return KERNEL_VIRTUAL + curr_page * PAGE_SIZE + curr_table * TABLE_SIZE - 4;
+uint64_t AddStack() {
+    return 0;
 }
 
-void AddGuardPage(uint32_t Tidx, uint32_t Pidx) {
-    if (pd[Tidx].present == 0) {
-        return;
-    }
-    pte_t* page_table = (pte_t*)(KERNEL_VIRTUAL + (pd[Tidx].frame << 12));
-    page_table[Pidx].present = 0;
-    flush_tlb();
+void AddGuardPage(uint64_t Tidx, uint64_t Pidx) {
+
 }
 
-pde_t* getPageDirectory() {
-    return pd;
+uintptr_t getPageDirectory() {
+    return 0;
 }

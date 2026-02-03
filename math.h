@@ -2,6 +2,6 @@
 
 #include "includes.h"
 
-uint32_t pow(uint32_t base, uint32_t exp);
-uint32_t BiggestBit(uint32_t num);
-bool IsPowerOfTwo(uint32_t num);
+uint64_t pow(uint64_t base, uint64_t exp);
+uint64_t BiggestBit(uint64_t num);
+bool IsPowerOfTwo(uint64_t num);

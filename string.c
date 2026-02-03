@@ -1,8 +1,8 @@
 #include "string.h"
 
-void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width) {
+void itoa(uint64_t value, char* str, uint64_t base, uint64_t min_width) {
     char* ptr = str;
-    uint32_t tmp_value, count = 0;
+    uint64_t tmp_value, count = 0;
 
     if (value == 0) {
         *ptr++ = '0';
@@ -58,15 +58,15 @@ bool islowercasealpha(char c) {
     return true;
 }
 
-uint32_t char_to_digit(char c) {
+uint64_t char_to_digit(char c) {
     if (isdigit(c)) return c - '0';
     if (islowercasealpha(c)) return c - 'a' + 10;
     if (isuppercasealpha(c)) return c - 'A' + 10;
     return 0xFF;
 }
 
-uint32_t atoi(char* str, uint32_t base) {
-    uint32_t result = 0, digit;
+uint64_t atoi(char* str, uint64_t base) {
+    uint64_t result = 0, digit;
     char* ptr = str;
 
     while (*ptr != '\0') {
@@ -80,7 +80,7 @@ uint32_t atoi(char* str, uint32_t base) {
 }
 
 void cpystr(char* source, char* dst) {
-    uint32_t idx = 0;
+    uint64_t idx = 0;
     while (source[idx] != '\0') {
         dst[idx] = source[idx];
         idx++;
@@ -89,7 +89,7 @@ void cpystr(char* source, char* dst) {
 }
 
 int32_t strcmp(char* str1, char* str2) {
-    uint32_t idx = 0;
+    uint64_t idx = 0;
     while (str1[idx] != '\0' && str2[idx] != '\0') {
         if (str1[idx] > str2[idx]) return 1;
         if (str1[idx] < str2[idx]) return -1;
@@ -100,8 +100,8 @@ int32_t strcmp(char* str1, char* str2) {
     return 0;
 }
 
-int32_t strncmp(char* str1, char* str2, uint32_t n) {
-    uint32_t idx = 0;
+int32_t strncmp(char* str1, char* str2, uint64_t n) {
+    uint64_t idx = 0;
     while (str1[idx] != '\0' && str2[idx] != '\0' && idx < n) {
         if (str1[idx] > str2[idx]) return 1;
         if (str1[idx] < str2[idx]) return -1;
@@ -113,8 +113,8 @@ int32_t strncmp(char* str1, char* str2, uint32_t n) {
     return 0;
 }
 
-uint32_t strlen(char* str) {
-    uint32_t idx = 0;
+uint64_t strlen(char* str) {
+    uint64_t idx = 0;
     while (str[idx] != '\0') idx++;
     return idx;
 }

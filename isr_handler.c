@@ -3,7 +3,7 @@
 
 
 void isr_handler(interrupt_frame_t* frame) {
-    uint32_t int_no = frame->int_no;
+    uint64_t int_no = frame->int_no;
     if (int_no < 32) {
         ExecptionHandler(frame);
     }
@@ -17,7 +17,7 @@ void PitTimer() {
 }
 
 void ExecptionHandler(interrupt_frame_t* frame) {
-    uint32_t int_no = frame->int_no;
+    uint64_t int_no = frame->int_no;
 
     switch (int_no) {
         case 0:
@@ -144,7 +144,7 @@ void GeneralProtectionFaultHandler(interrupt_frame_t* frame) {
 }
 
 void PageFaultHandler(interrupt_frame_t* frame) {
-    uint32_t faulting_addr = 0;
+    uint64_t faulting_addr = 0;
     //__asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
     kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, EIP: %x\n", frame->err_code, faulting_addr, frame->eip);
 }

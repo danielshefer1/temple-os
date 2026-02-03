@@ -12,11 +12,11 @@
 
 // Paging Definitions 
 #define PAGE_SIZE 4096
-#define KERNEL_VIRTUAL 0xC0000000
-#define KERNEL_BASE 0x100000
-#define USER_BASE 0x40000000
-#define TABLE_SIZE (PAGE_SIZE * 1024)
-#define HIGHER_HALF_IDX 768
+#define MB 0x100000
+#define KERNEL_VIRTUAL 0xFFFFFFFF80000000
+#define KERNEL_BASE 0x200000
+#define USER_BASE 0
+#define TABLE_SIZE (PAGE_SIZE * 512)
 #define PAGE_SIZE_LOG2 12
 #define STACK_PAGES 8
 
@@ -27,6 +27,11 @@
 #define PCI_SCAN_VIRTUAL 0xFD000000 
 #define PCI_SCAN_BASE 0xB0000000
 #define PCI_OFFSET (PCI_SCAN_VIRTUAL - PCI_SCAN_BASE)
+
+#define PML4_IDX(addr) (((uint64_t)(addr) >> 39) & 0x1FF)
+#define PDPT_IDX(addr) (((uint64_t)(addr) >> 30) & 0x1FF)
+#define PD_IDX(addr)   (((uint64_t)(addr) >> 21) & 0x1FF)
+#define PT_IDX(addr)   (((uint64_t)(addr) >> 12) & 0x1FF)
 // End Paging Definitions 
 
 // Paging Flags Definitions
@@ -65,7 +70,7 @@
 // End E820 Definitions
 
 // VGA Definitions
-#define VGA_BUFFER ((volatile char*)(uint32_t) KERNEL_VIRTUAL + 0xB8000)
+#define VGA_BUFFER ((volatile char*)(uint64_t) KERNEL_VIRTUAL + 0xB8000)
 #define GREY_COLOR 0x07
 #define RED_COLOR 0x04
 #define CURSOR_START 14
@@ -173,7 +178,7 @@
 #define ACPI_TABLE_SIG_LEGNTH 4
 #define RSDT_HEADER_LENGTH 36
 #define MADT_HEADER_LENGTH 44
-#define MMIO_PHYS_TO_VIRT(phys) ((uint32_t)phys + MMIO_OFFSET)
+#define MMIO_PHYS_TO_VIRT(phys) ((uint64_t)phys + MMIO_OFFSET)
 // End RSDT Definitions
 
 // MultiCore Definitions

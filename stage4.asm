@@ -1,49 +1,71 @@
-%include "offsets.inc"
-extern _bootstrap_sectors
-
+%include "./build/offsets.inc"
+extern __bootstrap_sectors
+extern bootstrap_kmain
 
 section .stage4
 
 global stage4_entry
+global kernel_sectors
 stage4_entry:
-    dd _bootstrap_sectors
-    dd KERNEL_SECTORS
-    dq KERNEL_ENTRY_64
-    dq KERNEL_BSS_START
-    dq KERNEL_BSS_END
+    dd __bootstrap_sectors
+    kernel_sectors dd KERNEL_SECTORS
+    dd KERNEL_BSS_START
+    dd KERNEL_BSS_END
 
-global enable_paging_bootstrap
-enable_paging_bootstrap:
-    mov eax, [esp+4]      ; Get page_directory parameter
-    mov cr3, eax          ; Load into CR3
-    
-    mov eax, cr0
-    or eax, 0x80000000    ; Set PG bit
-    mov cr0, eax
-    
-    mov eax, [esp+4]
-    mov esp, 0xC0000000
-    add esp, eax
-    add esp, 0x2000
-    add esp, 0x4FFF
+    mov eax, bootstrap_kmain
+    call print_dd_hexa
 
-    mov eax, kmain
     jmp eax
 
-    cli
-    hlt
+print_dd_hexa:
+    push eax
+    push ecx
+    push edx
+    mov edx, eax        ; Keep original value in EDX
+    mov ecx, 8          ; 8 nibbles in a 32-bit doubleword
 
-global enable_paging
-enable_paging:
-    mov eax, [esp+4]      ; Get page_directory parameter
-    mov cr3, eax          ; Load into CR3
-    
-    mov eax, cr0
-    or eax, 0x80000000    ; Set PG bit
-    mov cr0, eax
+.loop1:
+    rol edx, 4          ; Rotate left 4 bits (brings the highest nibble to the bottom)
+    mov eax, edx        ; Copy to EAX
+    and al, 0x0F        ; Isolate the lowest 4 bits (the nibble)
+    call print_byte_hexa
+    loop .loop1
+    mov edx, [curr_place]
+    add edx, 4
+    mov [curr_place], edx
 
-    add esp, 0xC0000000
+    pop edx
+    pop ecx
+    pop eax
     ret
+
+print_byte_hexa:
+    push eax
+    push edx
+    cmp al, 10
+    jl .digit
+    add al, 'A' - 10
+    jmp .print
+
+.digit:
+    add al, '0'
+.print:
+    mov edx, [curr_place]
+    mov byte [edx], al
+    inc edx
+    mov byte [edx], 0x07 ; Attribute byte (light grey on black)
+    inc edx
+    mov [curr_place], edx
+
+    pop edx
+    pop eax
+    ret
+
+curr_place dd 0xB8000
+
+global enable_long_mode_and_jump
+enable_long_mode_and_jump:
+    incbin "./build/long_mode_init.bin"
 
 
 

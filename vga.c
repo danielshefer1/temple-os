@@ -1,9 +1,9 @@
 #include "vga.h"
 
-static uint32_t cursor_x = 0; // Column (0-79)
-static uint32_t cursor_y = 0; // Row (0-24)
-const uint32_t MAX_COLS = 80;
-const uint32_t MAX_ROWS = 25;
+static uint64_t cursor_x = 0; // Column (0-79)
+static uint64_t cursor_y = 0; // Row (0-24)
+const uint64_t MAX_COLS = 80;
+const uint64_t MAX_ROWS = 25;
 
 static spinlock_t vga_spinlock = {0};
 
@@ -23,7 +23,7 @@ void deletechar() {
 void internal_insert_tab() {
     cursor_x += 4;
     if (cursor_x >= MAX_COLS) {
-        uint32_t reminder = cursor_x % 4;
+        uint64_t reminder = cursor_x % 4;
         newline();
         cursor_x = reminder;
     }
@@ -80,14 +80,14 @@ void putchar(char c, uint8_t color) {
     spin_unlock(&vga_spinlock);
 }
 
-uint32_t str_len(const char* str) {
-    uint32_t count = 0;
+uint64_t str_len(const char* str) {
+    uint64_t count = 0;
     while (str[count] != '\0') count++;
     return count;
 }
 
 void internal_print_str(const char* str, uint8_t color) {
-    uint32_t len = str_len(str);
+    uint64_t len = str_len(str);
     if (cursor_x + len >= MAX_COLS) newline();
 
     while (*str && *str != '\0') {
@@ -97,7 +97,7 @@ void internal_print_str(const char* str, uint8_t color) {
 
 void print_str(const char* str, uint8_t color) {
     spin_lock(&vga_spinlock);
-    uint32_t len = str_len(str);
+    uint64_t len = str_len(str);
     if (cursor_x + len >= MAX_COLS) newline();
 
     while (*str && *str != '\0') {
@@ -106,9 +106,9 @@ void print_str(const char* str, uint8_t color) {
     spin_unlock(&vga_spinlock);
 }
 
-uint32_t print_str_SYSCALL(const char* str, uint8_t color, uint32_t length) {
+uint64_t print_str_SYSCALL(const char* str, uint8_t color, uint64_t length) {
     spin_lock(&vga_spinlock);
-    uint32_t idx = 0;
+    uint64_t idx = 0;
     while (str[idx] != '\0' && idx < length) {
         internal_putchar(str[idx], color);
         idx++;
@@ -119,7 +119,7 @@ uint32_t print_str_SYSCALL(const char* str, uint8_t color, uint32_t length) {
 
 void clear_screen() {
     spin_lock(&vga_spinlock);
-    for (uint32_t i = 0; i < MAX_COLS * MAX_ROWS; i++) {
+    for (uint64_t i = 0; i < MAX_COLS * MAX_ROWS; i++) {
         VGA_BUFFER[i * 2] = 0;         // Space character
         VGA_BUFFER[i * 2 + 1] = 0x07;    // Light gray on Black
     }
@@ -133,8 +133,8 @@ void newline() {
         cursor_y++;
         cursor_x = 0;
     } else {
-        for (uint32_t row = 1; row < MAX_ROWS; row++) {
-            for (uint32_t col = 0; col < MAX_COLS; col++) {
+        for (uint64_t row = 1; row < MAX_ROWS; row++) {
+            for (uint64_t col = 0; col < MAX_COLS; col++) {
                 VGA_BUFFER[((row - 1) * MAX_COLS + col) * 2] = 
                     VGA_BUFFER[(row * MAX_COLS + col) * 2];
                 VGA_BUFFER[((row - 1) * MAX_COLS + col) * 2 + 1] = 
@@ -142,7 +142,7 @@ void newline() {
             }
         }
         // Clear the last line
-        for (uint32_t col = 0; col < MAX_COLS; col++) {
+        for (uint64_t col = 0; col < MAX_COLS; col++) {
             VGA_BUFFER[((MAX_ROWS - 1) * MAX_COLS + col) * 2] = ' ';
             VGA_BUFFER[((MAX_ROWS - 1) * MAX_COLS + col) * 2 + 1] = 0x07;
         }
@@ -154,7 +154,7 @@ void newline() {
 
 void insert_tab() {
     spin_lock(&vga_spinlock);
-    for (uint32_t i = 0; i < 4; i++) {
+    for (uint64_t i = 0; i < 4; i++) {
         internal_putchar(' ', GREY_COLOR);
     }
     spin_unlock(&vga_spinlock);
@@ -172,29 +172,29 @@ void kprintf(const char* format, ...) {
             format++;
             
             // Check for width specifier FIRST
-            uint32_t min_width = 0;
+            uint64_t min_width = 0;
             while (*format >= '0' && *format <= '9') {
                 min_width = min_width * 10 + (*format - '0');
                 format++;
             }
             
             char str[20];
-            uint32_t num;
+            uint64_t num;
             
             switch (*format) {
             case 'c':
-                internal_putchar((char)va_arg(args, uint32_t), GREY_COLOR);
+                internal_putchar((char)va_arg(args, uint64_t), GREY_COLOR);
                 break;
             case 's':
                 internal_print_str(va_arg(args, char*), GREY_COLOR);
                 break;
             case 'd':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 itoa(num, str, 10, min_width);
                 internal_print_str(str, GREY_COLOR);
                 break;
             case 'x':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 str[0] = '0';
                 str[1] = 'x';
                 itoa(num, &str[2], 16, min_width);
@@ -228,29 +228,29 @@ void kerror(const char* format, ...) {
             format++;
             
             // Check for width specifier FIRST
-            uint32_t min_width = 0;
+            uint64_t min_width = 0;
             while (*format >= '0' && *format <= '9') {
                 min_width = min_width * 10 + (*format - '0');
                 format++;
             }
             
             char str[20];
-            uint32_t num;
+            uint64_t num;
             
             switch (*format) {
             case 'c':
-                internal_putchar((char)va_arg(args, uint32_t), RED_COLOR);
+                internal_putchar((char)va_arg(args, uint64_t), RED_COLOR);
                 break;
             case 's':
                 internal_print_str(va_arg(args, char*), RED_COLOR);
                 break;
             case 'd':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 itoa(num, str, 10, min_width);
                 internal_print_str(str, RED_COLOR);
                 break;
             case 'x':
-                num = va_arg(args, uint32_t);
+                num = va_arg(args, uint64_t);
                 str[0] = '0';
                 str[1] = 'x';
                 itoa(num, &str[2], 16, min_width);

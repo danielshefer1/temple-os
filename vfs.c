@@ -89,7 +89,7 @@ void PrintVFS_Inode(inode_t* inode) {
           inode->group_id, inode->link_count);
 }
 
-void GetTypeString(uint32_t type_idx, char* type) {
+void GetTypeString(uint64_t type_idx, char* type) {
     switch (type_idx) {
         case VFS_FILE:
             cpystr("FILE", type);
@@ -148,7 +148,7 @@ dentry_t* VFS_SysLink(char* name, char* parent_name, dentry_t* cwd, char* syslin
     return dentry;
 }
 
-dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint32_t type, dentry_t* cwd) {
+dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint64_t type, dentry_t* cwd) {
     if (parent_name == NULL || *parent_name == '\0') {
         kerror("Parent doesn't exist\n");
     }
@@ -359,12 +359,12 @@ bool IsValidSysLink(dentry_t* dentry) {
     return true;
 }
 
-const char* GetNextSegment(const char* path, char* buffer, uint32_t max_len) {
+const char* GetNextSegment(const char* path, char* buffer, uint64_t max_len) {
     while (*path == '/') path++;
 
     if (*path == '\0') return NULL;
 
-    uint32_t i = 0;
+    uint64_t i = 0;
     while (path[i] != '/' && path[i] != '\0') {
         if (i < max_len - 1) {
             buffer[i] = path[i];

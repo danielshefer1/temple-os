@@ -1,13 +1,13 @@
 #include "keyboard.h"
 
 void PushKeyboardBuffer(input_buffer_t* buffer, char c) {
-    uint32_t cpu_id = get_cpuid();
+    uint64_t cpu_id = get_cpuid();
     buffer->buffer[buffer->head].c = c;
     buffer->buffer[buffer->head].time = timer_ticks[cpu_id];
     buffer->head = (buffer->head + 1) % buffer->size;
 }
 
-bool isInTuple(tuple_t* tuple, uint32_t value) {
+bool isInTuple(tuple_t* tuple, uint64_t value) {
     return (value == tuple->first || value == tuple->second);
 }
 
@@ -16,9 +16,9 @@ void FlushBuffer(input_buffer_t* buffer) {
     buffer->tail = 0;
 }
 
-uint32_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, tuple_t* keys) {
-    uint32_t cpu_id = get_cpuid();
-    uint32_t curr_time = timer_ticks[cpu_id], idx = buffer->tail, tmp_idx = 0, end = buffer->head;
+uint64_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint64_t max_read, uint64_t ms_back, tuple_t* keys) {
+    uint64_t cpu_id = get_cpuid();
+    uint64_t curr_time = timer_ticks[cpu_id], idx = buffer->tail, tmp_idx = 0, end = buffer->head;
 
     while (curr_time - ms_back > buffer->buffer[idx].time && idx != end) {
         idx = (idx + 1) % buffer->size; 
@@ -83,7 +83,7 @@ void kscanf(const char *format, ...) {
     va_start(args, format);
     char nums_buffer[20];
     char* p1;
-    uint32_t* p2;
+    uint64_t* p2;
     tuple_t num_triggers;
     num_triggers.first = ' ';
     num_triggers.second = '\n';
@@ -108,13 +108,13 @@ void kscanf(const char *format, ...) {
                 GetInputUntilKey(&console_buffer, p1, -1, KEYBOARD_MS_BACK, &str_triggers);
                 break;
             case 'd':
-                p2 = va_arg(args, uint32_t*);
+                p2 = va_arg(args, uint64_t*);
                 GetInputUntilKey(&console_buffer, nums_buffer, sizeof(nums_buffer) / sizeof(nums_buffer[0]), KEYBOARD_MS_BACK, &num_triggers);
                 *p2 = atoi(nums_buffer, 10);
                 memset(nums_buffer, 0, sizeof(nums_buffer));
                 break;
             case 'x':
-                p2 = va_arg(args, uint32_t*);
+                p2 = va_arg(args, uint64_t*);
                 GetInputUntilKey(&console_buffer, nums_buffer, sizeof(nums_buffer) / sizeof(nums_buffer[0]), KEYBOARD_MS_BACK, &num_triggers);
                 *p2 = atoi(nums_buffer, 10);
                 memset(nums_buffer, 0, sizeof(nums_buffer));

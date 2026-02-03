@@ -11,5 +11,5 @@
 #include "utility.h"
 
 void EnableLapic();
-void InitTimer(uint32_t ms);
+void InitTimer(uint64_t ms);
 void InitKeyboard();

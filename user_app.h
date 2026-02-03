@@ -5,20 +5,20 @@
 #include <stdbool.h>
 
 typedef struct tuple_t {
-    uint32_t first;
-    uint32_t second;
+    uint64_t first;
+    uint64_t second;
 } tuple_t;
 
-extern uint32_t write(const char* str, uint32_t length);
-extern uint32_t read(const char* buffer, tuple_t* triggers, uint32_t max_read);
-extern uint32_t mmap(uint32_t size);
-extern uint32_t munmap(void* addr);
-extern uint32_t flush_consle_buffer();
+extern uint64_t write(const char* str, uint64_t length);
+extern uint64_t read(const char* buffer, tuple_t* triggers, uint64_t max_read);
+extern uint64_t mmap(uint64_t size);
+extern uint64_t munmap(void* addr);
+extern uint64_t flush_consle_buffer();
 extern void exit();
 
 void main();
 void printf(const char* format, ...);
 void scanf(const char *format, ...);
 void flip_str(char* str);
-void itoa(uint32_t value, char* str, uint32_t base, uint32_t min_width);
-void memset(void* address, uint8_t value, uint32_t size);
+void itoa(uint64_t value, char* str, uint64_t base, uint64_t min_width);
+void memset(void* address, uint8_t value, uint64_t size);

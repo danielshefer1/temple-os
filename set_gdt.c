@@ -3,9 +3,9 @@
 static gdt_entry_t gdt[6];
 static gdt_ptr_t gdtr;
 
-void SetGDTEntry(uint32_t base, uint32_t limit, uint8_t present, uint8_t privilege, uint8_t type,
+void SetGDTEntry(uint64_t base, uint64_t limit, uint8_t present, uint8_t privilege, uint8_t type,
      uint8_t exec, uint8_t dir_conf, uint8_t wr, uint8_t access, uint8_t reserved,
-     uint8_t long_mode, uint8_t default_big, uint8_t granularity, uint32_t idx) {
+     uint8_t long_mode, uint8_t default_big, uint8_t granularity, uint64_t idx) {
     gdt_entry_t* entry = &gdt[idx];
 
     entry->limit_low = (limit & 0xFFFF);
@@ -35,12 +35,12 @@ void CheckGDT() {
     
     __asm__ volatile("sgdt %0" : "=m"(current_gdtr));
     
-    uint32_t virtual_base = current_gdtr.base + KERNEL_VIRTUAL;
+    uint64_t virtual_base = current_gdtr.base + KERNEL_VIRTUAL;
     
     kprintf("GDTR Base (Physical): 0x%x\n", current_gdtr.base);
     kprintf("GDTR Base (Virtual): 0x%x\n", virtual_base);
     kprintf("GDTR Limit: 0x%x\n", current_gdtr.limit);
-    kprintf("Expected Base (Physical): 0x%x\n", (uint32_t)&gdt - KERNEL_VIRTUAL);
+    kprintf("Expected Base (Physical): 0x%x\n", (uint64_t)&gdt - KERNEL_VIRTUAL);
     kprintf("Expected Limit: 0x%x\n", sizeof(gdt) - 1);
 }
 
@@ -72,7 +72,7 @@ void SetGDT() {
                 TYPE_ACCESSSED, RESERVED, LONG_MODE_32BIT, DEFAULT_BIG_32BIT, GRANULARITY_4KB, 4);
     
     gdtr.limit = sizeof(gdt) - 1;
-    gdtr.base = (uint32_t)gdt;
+    gdtr.base = (uint64_t)gdt;
 
     LoadGDTHelper((uintptr_t)&gdtr);
 

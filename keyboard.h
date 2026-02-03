@@ -10,4 +10,4 @@ void PushKeyboardBuffer(input_buffer_t* buffer, char c);
 void InitConsoleBuffer();
 void kscanf(const char *format, ...);
 void FlushBuffer(input_buffer_t* buffer);
-uint32_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint32_t max_read, uint32_t ms_back, tuple_t* keys);
+uint64_t GetInputUntilKey(input_buffer_t* buffer, char* user_buffer, uint64_t max_read, uint64_t ms_back, tuple_t* keys);

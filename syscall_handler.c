@@ -1,10 +1,10 @@
 #include "syscall_handler.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
-    uint32_t cs = frame->cs;
+    uint64_t cs = frame->cs;
     if (cs == 0x08) return;
 
-    uint32_t syscall_id = frame->eax, ret;
+    uint64_t syscall_id = frame->eax, ret;
 
     switch (syscall_id) {
         case EXIT_SYSCALL:

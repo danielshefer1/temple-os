@@ -1,11 +1,11 @@
 #include "pci.h"
 
 void PciEnumeration() {
-    for (uint32_t bus = 0; bus < 256; bus++) {
-        for (uint32_t dev = 0; dev < 32; dev++) {
-            for (uint32_t func = 0; func < 8; func++) {
+    for (uint64_t bus = 0; bus < 256; bus++) {
+        for (uint64_t dev = 0; dev < 32; dev++) {
+            for (uint64_t func = 0; func < 8; func++) {
                 
-                uint32_t device_phys = (uint32_t)ecam_ptr + ((bus << 20) | (dev << 15) | (func << 12));
+                uint64_t device_phys = (uint64_t)ecam_ptr + ((bus << 20) | (dev << 15) | (func << 12));
 
 
                 map_page_to_virt(PCI_SCAN_VIRTUAL, device_phys, RW_MMIO);
