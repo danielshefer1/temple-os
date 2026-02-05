@@ -1,6 +1,7 @@
 #pragma once
 
 #include "includes.h"
+#include "extern.h"
 #include "defintions.h"
 #include "types.h"
 #include "slab_alloc.h"

@@ -1,5 +1,6 @@
 #pragma once
 #include "includes.h"
+#include "extern.h"
 #include "defintions.h"
 #include "isr_handler.h"
 #include "global.h"

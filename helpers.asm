@@ -29,6 +29,20 @@ PauseHelper:
 
 global LoadGDTHelper
 LoadGDTHelper:
+    lgdt [rdi]
+    push 0x08
+    lea rax, [rel flush_cs]
+    push rax
+    retfq
+
+flush_cs:
+    mov ax, 0x10       ; load kernel data selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    ret 
 
 global LoadIDTHelper
 LoadIDTHelper:
@@ -63,11 +77,25 @@ enable_sse:
 
 
 global spin_lock
-spin_lock:
+spin_lock:    
+    mov rax, 1              
+
+.retry:
+    xchg rax, [rdi]      
+    test rax, rax           
+    jnz .pause_and_retry   
+    ret                     
+
+.pause_and_retry:
+    pause                   
+    jmp .retry
 
 
 global spin_unlock
 spin_unlock:
+    mov rdx, rdi
+    mov dword [rdi], 0      ; Atomic write of 0
+    ret
 
 ; Macro to create ISR stub without error code
 %macro ISR_STUB_NO_ERROR 1

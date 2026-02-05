@@ -2,9 +2,9 @@
 [BITS 32]
 enable_long_mode_and_jump:
     mov eax, [esp + 4]        ; Get PML4 physical address from parameter
-    mov cr3, eax              ; Load PML4 into CR3
+    mov cr3, eax              
 
-    ; 1. Enable PAE (Physical Address Extension) - Mandatory for 64-bit
+    ; 1. Enable PAE 
     mov eax, cr4
     or eax, 1 << 5            ; Set bit 5
     mov cr4, eax
@@ -14,18 +14,19 @@ enable_long_mode_and_jump:
     rdmsr                     ; Read Model Specific Register into EDX:EAX
     or eax, 1 << 8            ; Set LME (Long Mode Enable) bit
     wrmsr                     ; Write it back
-
+    
     ; 3. Enable Paging (The actual transition)
     mov eax, cr0
     or eax, 1 << 31           ; Set PG (Paging) bit
     mov cr0, eax
 
-    ; --- At this point, you are in "Compatibility Mode" (32-bit code, 64-bit paging) ---
+    call .get_eip
+.get_eip:
+    pop eax                      ; EAX now holds the *actual* address of .get_eip
+    add eax, (long_mode_entry - .get_eip) ; Add the relative distance to the label
 
-    ; 4. Far Jump to enter true 64-bit Long Mode
-    ; We must use a 64-bit Global Descriptor Table (GDT) entry
     push 0x28                 
-    push long_mode_entry   
+    push eax
     retf
 
 [BITS 64]
@@ -37,9 +38,17 @@ long_mode_entry:
     mov gs, rax
     mov ss, rax
 
-    mov rsp, 0xFFFFFFFF80400000 
+    mov rax, KERNEL_BSS_END
+    add rax, 0xFFFFFFFF80000000
+    sub rax, 0x200000
+    add rax, 0xFFF           
+    and rax, 0xFFFFFFFFFFFFF000 
+    add rax, 0x4000
 
-    ; 6. Jump to your Kernel
+    mov rsp, rax
+
+    mov qword [0xB8000], 0x0720072007200720  ; Print spaces
+
     mov rax, KERNEL_ENTRY_64
     jmp rax
 

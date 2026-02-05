@@ -5,7 +5,6 @@ extern bootstrap_kmain
 section .stage4
 
 global stage4_entry
-global kernel_sectors
 stage4_entry:
     dd __bootstrap_sectors
     kernel_sectors dd KERNEL_SECTORS
@@ -16,6 +15,10 @@ stage4_entry:
     call print_dd_hexa
 
     jmp eax
+
+global enable_long_mode_and_jump
+enable_long_mode_and_jump:
+    incbin "./build/long_mode_init.bin"
 
 print_dd_hexa:
     push eax
@@ -63,9 +66,7 @@ print_byte_hexa:
 
 curr_place dd 0xB8000
 
-global enable_long_mode_and_jump
-enable_long_mode_and_jump:
-    incbin "./build/long_mode_init.bin"
+
 
 
 

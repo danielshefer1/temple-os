@@ -4,7 +4,7 @@ OUTPUT_FORMAT(elf64-x86-64)
 SECTIONS
 {
     _kernel_LMA_start = 0x200000;
-    . = 0xFFFFFFFF80000000;
+    . = 0xFFFFFFFF80200000;
     _kernel_VMA_start = .;
 
     /* Map .helpers at the very start of the LMA */

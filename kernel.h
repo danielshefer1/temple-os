@@ -1,6 +1,7 @@
 #pragma once
 
 #include "includes.h"
+#include "extern.h"
 #include "vga.h"
 #include "paging.h"
 #include "buddy_alloc.h"
@@ -10,7 +11,6 @@
 #include "timer.h"
 #include "keyboard.h"
 #include "E820.h"
-#include "set_tss.h"
 #include "vfs.h"
 #include "acpi.h"
 #include "apic.h"

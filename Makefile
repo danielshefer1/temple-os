@@ -47,7 +47,7 @@ QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machin
 # ============================================================================
 KERNEL_C_SRCS = E820.c vga.c kernel.c slab_alloc.c paging.c math.c buddy_alloc.c \
                 set_gdt.c isr_handler.c set_idt.c timer.c keyboard.c global.c \
-                string.c set_tss.c syscall_handler.c vfs.c dcache.c acpi.c \
+                string.c syscall_handler.c vfs.c dcache.c acpi.c \
                 memory.c apic.c irq_handler.c utility.c ap_start.c ap_main.c pci.c
 KERNEL_ASM_SRCS = helpers.asm trampoline_wrapper.asm
 
@@ -144,7 +144,7 @@ debug: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "set pagination off" \
 		-ex "set architecture x86-64" \
 		-ex "layout src" \
-		-ex "break kmain" \
+		-ex "hbreak kmain" \
 		-ex "continue"
 
 debug-bootstrap: $(DISK_IMG) $(BOOTSTRAP_ELF)

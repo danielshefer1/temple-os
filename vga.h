@@ -1,5 +1,6 @@
 #pragma once
 #include "includes.h"
+#include "extern.h"
 #include "types.h"
 #include "defintions.h"
 #include "string.h"

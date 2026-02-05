@@ -13,7 +13,7 @@
 // Paging Definitions 
 #define PAGE_SIZE 4096
 #define MB 0x100000
-#define KERNEL_VIRTUAL 0xFFFFFFFF80000000
+#define KERNEL_VIRTUAL 0xFFFFFFFF80000000ULL
 #define KERNEL_BASE 0x200000
 #define USER_BASE 0
 #define TABLE_SIZE (PAGE_SIZE * 512)
@@ -66,11 +66,11 @@
 
 // E820 Definitions
 #define E820_SIGNATURE 0x534D4150
-#define E820_ADDRESS  KERNEL_VIRTUAL + 0x500
+#define E820_ADDRESS  (KERNEL_VIRTUAL + 0x500)
 // End E820 Definitions
 
 // VGA Definitions
-#define VGA_BUFFER ((volatile char*)(uint64_t) KERNEL_VIRTUAL + 0xB8000)
+#define VGA_BUFFER ((volatile char*)((uint64_t)KERNEL_VIRTUAL + 0xB8000))
 #define GREY_COLOR 0x07
 #define RED_COLOR 0x04
 #define CURSOR_START 14

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "includes.h"
+#include "extern.h"
 #include "defintions.h"
 #include "global.h"
 #include "vga.h"

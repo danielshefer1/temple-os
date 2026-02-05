@@ -3,7 +3,6 @@
 void start() {
     SetGDT();
     InitPaging();
-    SetFirstTSS();
     InitIDT();
     enable_sse();
 

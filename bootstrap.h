@@ -4,8 +4,7 @@
 #include "defintions.h"
 #include "bootstrap_includes.h"
 
-extern uint32_t kernel_sectors;
-extern void enable_long_mode_and_jump();
+extern void enable_long_mode_and_jump(page_entry_t* pml4);
 
-void InitPaging();
+void InitPaging();    
 page_entry_t* GetPML4();
