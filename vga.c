@@ -178,7 +178,7 @@ void kprintf(const char* format, ...) {
                 format++;
             }
             
-            char str[20];
+            char str[40];
             uint64_t num;
             
             switch (*format) {

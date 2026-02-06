@@ -52,7 +52,8 @@ void SetIDTEntry(uint64_t offset, uint16_t sel, uint8_t present, uint8_t privile
     entry->privilege = privilege;
     entry->present = present;
 
-    entry->base_high = (offset >> 16) & 0xFFFF;
+    entry->base_mid = (offset >> 16) & 0xFFFF;
+    entry->base_high = (offset >> 32) & 0xFFFFFFFF;
 }
 
 void CheckIDT() {
@@ -61,7 +62,7 @@ void CheckIDT() {
     
     kprintf("IDTR Base: %x\n", current_idtr.base);
     kprintf("IDTR Limit: %x\n", current_idtr.limit);
-    kprintf("Expected Base: %x\n", (uint64_t)&idt);  // or physical if needed
+    kprintf("Expected Base: %x\n", (uint64_t)&idt); 
     kprintf("Expected Limit: %x\n", sizeof(idt) - 1);
 }
 
@@ -69,7 +70,8 @@ void ReplaceTimer() {
     CliHelper();
     uint64_t apic_timer = (uint64_t)((void*) isr_apic_stub_32);
     idt[TIMER_IDT].base_low = apic_timer & 0xFFFF;
-    idt[TIMER_IDT].base_high = (apic_timer >> 16) & 0xFFFF;
+    idt[TIMER_IDT].base_mid = (apic_timer >> 16) & 0xFFFF;
+    idt[TIMER_IDT].base_high = (apic_timer >> 32) & 0xFFFF;
     StiHelper();
 }
 
@@ -94,7 +96,7 @@ void InitIDT() {
 
     idtr.limit = sizeof(idt) - 1;
     idtr.base = (uint64_t)&idt;
-    LoadIDTHelper((uintptr_t)&idtr);
+    LoadIDTHelper(&idtr);
     StiHelper();
 
     //CheckIDT();

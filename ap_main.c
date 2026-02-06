@@ -2,7 +2,7 @@
 
 void ap_kmain() {
     LoadGDTHelper((gdt_ptr_t*)getGdtPointer());
-    LoadIDTHelper((uint64_t)getIdtPtr());
+    LoadIDTHelper((idt_ptr_t*)getIdtPtr());
     uint8_t cpu_id = get_cpuid();
     EnableLapic();
     InitTimer(TIMER_TICK_PER_MS);

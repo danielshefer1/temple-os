@@ -25,21 +25,21 @@ void InitPaging() {
     // Start PML4 Mapping
     pml4[identity_pml4_idx].present = 1;
     pml4[identity_pml4_idx].writable = 1;
-    pml4[identity_pml4_idx].address = (uint64_t)identity_pdpt >> 12;
+    pml4[identity_pml4_idx].address = (uint32_t)identity_pdpt >> 12;
 
     pml4[kernel_pml4_idx].present = 1;
     pml4[kernel_pml4_idx].writable = 1;
-    pml4[kernel_pml4_idx].address = (uint64_t)kernel_pdpt >> 12;
+    pml4[kernel_pml4_idx].address = (uint32_t)kernel_pdpt >> 12;
     // End PML4 Mapping
 
     // Start PDPT Mapping
     identity_pdpt[identity_pdpt_idx].present = 1;
     identity_pdpt[identity_pdpt_idx].writable = 1;
-    identity_pdpt[identity_pdpt_idx].address = (uint64_t)identity_pd >> 12;
+    identity_pdpt[identity_pdpt_idx].address = (uint32_t)identity_pd >> 12;
 
     kernel_pdpt[kernel_pdpt_idx].present = 1;
     kernel_pdpt[kernel_pdpt_idx].writable = 1;
-    kernel_pdpt[kernel_pdpt_idx].address = (uint64_t)kernel_pd >> 12;
+    kernel_pdpt[kernel_pdpt_idx].address = (uint32_t)kernel_pd >> 12;
     // Start PDPT Mapping
 
     // Start PD Mapping

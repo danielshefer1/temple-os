@@ -46,7 +46,8 @@ flush_cs:
 
 global LoadIDTHelper
 LoadIDTHelper:
-
+    lidt [rdi]
+    ret
 
 global inb
 inb:
@@ -58,7 +59,11 @@ outb:
 
 global check_interrupts
 check_interrupts:
-
+    pushfq
+    pop rax
+    shr rax, 9
+    and rax, 1
+    ret
 
 global load_tss
 load_tss:
@@ -101,36 +106,83 @@ spin_unlock:
 %macro ISR_STUB_NO_ERROR 1
 global isr_stub_%1
 isr_stub_%1:
-
+    push 0
+    push %1
+    jmp isr_common_stub
 %endmacro
 
 %macro ISR_STUB_ERROR 1
 global isr_stub_%1
 isr_stub_%1:
-
+    push %1
+    jmp isr_common_stub
 %endmacro
 
 %macro ISR_PIC_STUB 1
 global isr_pic_stub_%1
 isr_pic_stub_%1:
-
+    push 0
+    push %1
+    jmp isr_pic_stub
 %endmacro
 
 %macro ISR_APIC_STUB 1
 global isr_apic_stub_%1
 isr_apic_stub_%1:
-
+    push 0
+    push %1
+    jmp isr_apic_stub
 %endmacro
 
 %macro ISR_SYSCALL_STUB 1
 global isr_stub_%1
 isr_stub_%1:
-
+    push 0
+    push %1
+    jmp isr_syscall_stub
 %endmacro
 
 global isr_spurious
 isr_spurious:
-    
+    iret
+
+%macro PUSHAQ 0
+    sub rsp, 8
+    push rax
+    push rcx
+    push rdx
+    push rbx
+    push rbp
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+%endmacro
+
+%macro POPAQ 0
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rbp
+    pop rbx
+    pop rdx
+    pop rcx
+    pop rax
+    add rsp, 8
+%endmacro
 
 ISR_STUB_NO_ERROR 0
 ISR_STUB_NO_ERROR 1
@@ -161,15 +213,94 @@ ISR_SYSCALL_STUB 128
 
 global isr_common_stub
 isr_common_stub:
+    PUSHAQ             ; save all registers
+    push fs
+    push gs
+    
+    mov ax, 0x10       ; load kernel data selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    
+    mov rdi, rsp    
+    call isr_handler         
 
+    pop gs
+    pop fs
+    POPAQ
+    add rsp, 16         ; clean up int num and error code
+    iret
 
 global isr_pic_stub
 isr_pic_stub:
+    PUSHAQ
+    push fs
+    push gs
 
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov rdi, rsp    
+    call isr_handler
+
+    mov al, 0x20
+    out 0xA0, al      ; slave PIC
+    out 0x20, al      ; master PIC
+
+    pop gs
+    pop fs
+    POPAQ
+
+    add rsp, 16
+
+    iret
 
 global isr_apic_stub
 isr_apic_stub:
+    PUSHAQ
+    push fs
+    push gs
 
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov rdi, rsp    
+    call irq_handler
+
+    pop gs
+    pop fs
+    POPAQ
+
+    add rsp, 16
+
+    iret
 
 global isr_syscall_stub
 isr_syscall_stub:
+    PUSHAQ
+    push fs
+    push gs
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov rdi, rsp    
+    call syscall_handler
+
+    pop gs
+    pop fs
+    POPAQ
+
+    add rsp, 16
+
+    iret

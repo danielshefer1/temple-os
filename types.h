@@ -107,11 +107,12 @@ typedef struct gdt_ptr_t {
 
 typedef struct interrupt_frame_t {
     // Pushed by isr_common_stub
-    uint64_t gs, fs, es, ds;
-    uint64_t edi, esi, ebp, esp, ebx, edx, ecx, eax;  // pusha
+    uint64_t gs, fs;
+    uint64_t r15, r14, r13, r12, r11, r10, r9, r8; // PUSHAQ additional regs
+    uint64_t rdi, rsi, rbp, rsp, rbx, rdx, rcx, rax;  // PUSHAQ normal regs
     uint64_t int_no, err_code;
     // Pushed by CPU
-    uint64_t eip, cs, eflags, useresp, ss;
+    uint64_t rip, cs, qflags, userrsp, ss;
 } __attribute__((packed)) interrupt_frame_t;
 
 typedef struct idt_entry_t {
@@ -124,7 +125,8 @@ typedef struct idt_entry_t {
     uint8_t privilege : 2;
     uint8_t present : 1;
     // ----------------
-    uint16_t base_high;
+    uint16_t base_mid;
+    uint32_t base_high;
 } __attribute__((packed)) idt_entry_t;
 
 typedef struct idt_ptr_t {
@@ -151,7 +153,7 @@ struct tss_entry_struct {
     uint64_t esp1; uint64_t ss1; uint64_t esp2; uint64_t ss2; // Not used
     uint64_t cr3; uint64_t eip; uint64_t eflags;
     uint64_t eax; uint64_t ecx; uint64_t edx; uint64_t ebx;
-    uint64_t esp; uint64_t ebp; uint64_t esi; uint64_t edi;
+    uint64_t esp; uint64_t ebp; uint64_t esi; uint64_t rdi;
     uint64_t es; uint64_t cs; uint64_t ss; uint64_t ds; uint64_t fs; uint64_t gs;
     uint64_t ldt; uint16_t trap; uint16_t iomap_base;
 } __attribute__((packed));

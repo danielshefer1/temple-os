@@ -88,92 +88,92 @@ void ExecptionHandler(interrupt_frame_t* frame) {
 
 
 void DivideByZeroHandler(interrupt_frame_t* frame) {
-    kerror("Exception 0: Divide by Zero at EIP: %x\n", frame->eip);
+    kerror("Exception 0: Divide by Zero at RIP: %x\n", frame->rip);
 }
 
 void DebugHandler(interrupt_frame_t* frame) {
-    kerror("Exception 1: Debug Trap at EIP: %x\n", frame->eip);
+    kerror("Exception 1: Debug Trap at rip: %x\n", frame->rip);
 }
 
 void NMIHandler(interrupt_frame_t* frame) {
-    kerror("Exception 2: Non-Maskable Interrupt at EIP: %x\n", frame->eip);
+    kerror("Exception 2: Non-Maskable Interrupt at rip: %x\n", frame->rip);
 }
 
 void BreakpointHandler(interrupt_frame_t* frame) {
-    kerror("Exception 3: Breakpoint at EIP: %x\n", frame->eip);
+    kerror("Exception 3: Breakpoint at rip: %x\n", frame->rip);
 }
 
 void OverflowHandler(interrupt_frame_t* frame) {
-    kerror("Exception 4: Overflow at EIP: %x\n", frame->eip);
+    kerror("Exception 4: Overflow at rip: %x\n", frame->rip);
 }
 
 void BoundRangeExceededHandler(interrupt_frame_t* frame) {
-    kerror("Exception 5: BOUND Range Exceeded at EIP: %x\n", frame->eip);
+    kerror("Exception 5: BOUND Range Exceeded at rip: %x\n", frame->rip);
 }
 
 void InvalidOpcodeHandler(interrupt_frame_t* frame) {
-    kerror("Exception 6: Invalid Opcode at EIP: %x\n", frame->eip);
+    kerror("Exception 6: Invalid Opcode at rip: %x\n", frame->rip);
 }
 
 void DeviceNotAvailableHandler(interrupt_frame_t* frame) {
-    kerror("Exception 7: Device Not Available at EIP: %x\n", frame->eip);
+    kerror("Exception 7: Device Not Available at rip: %x\n", frame->rip);
 }
 
 void DoubleFaultHandler(interrupt_frame_t* frame) {
-    kerror("Exception 8: Double Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 8: Double Fault (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void CoprocessorSegmentOverrunHandler(interrupt_frame_t* frame) {
-    kerror("Exception 9: Coprocessor Segment Overrun at EIP: %x\n", frame->eip);
+    kerror("Exception 9: Coprocessor Segment Overrun at rip: %x\n", frame->rip);
 }
 
 void InvalidTSSHandler(interrupt_frame_t* frame) {
-    kerror("Exception 10: Invalid TSS (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 10: Invalid TSS (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void SegmentNotPresentHandler(interrupt_frame_t* frame) {
-    kerror("Exception 11: Segment Not Present (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 11: Segment Not Present (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void StackSegmentFaultHandler(interrupt_frame_t* frame) {
-    kerror("Exception 12: Stack-Segment Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 12: Stack-Segment Fault (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void GeneralProtectionFaultHandler(interrupt_frame_t* frame) {
-    kerror("Exception 13: General Protection Fault (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 13: General Protection Fault (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void PageFaultHandler(interrupt_frame_t* frame) {
     uint64_t faulting_addr = 0;
-    //__asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
-    kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, EIP: %x\n", frame->err_code, faulting_addr, frame->eip);
+    __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
+    kerror("Exception 14: Page Fault (Error Code: %x) at Address: %x, rip: %x\n", frame->err_code, faulting_addr, frame->rip);
 }
 
 void FloatingPointExceptionHandler(interrupt_frame_t* frame) {
-    kerror("Exception 16: x87 Floating-Point Exception at EIP: %x\n", frame->eip);
+    kerror("Exception 16: x87 Floating-Point Exception at rip: %x\n", frame->rip);
 }
 
 void AlignmentCheckHandler(interrupt_frame_t* frame) {
-    kerror("Exception 17: Alignment Check (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 17: Alignment Check (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void CoprocessorErrorHandler(interrupt_frame_t* frame) {
-    kerror("Exception 18: Machine Check at EIP: %x\n", frame->eip);
+    kerror("Exception 18: Machine Check at rip: %x\n", frame->rip);
 }
 
 void SIMDFloatingPointExceptionHandler(interrupt_frame_t* frame) {
-    kerror("Exception 19: SIMD Floating-Point Exception at EIP: %x\n", frame->eip);
+    kerror("Exception 19: SIMD Floating-Point Exception at rip: %x\n", frame->rip);
 }
 
 void VirtualizationExceptionHandler(interrupt_frame_t* frame) {
-    kerror("Exception 20: Virtualization Exception at EIP: %x\n", frame->eip);
+    kerror("Exception 20: Virtualization Exception at rip: %x\n", frame->rip);
 }
 
 void ControlProtectionExceptionHandler(interrupt_frame_t* frame) {
-    kerror("Exception 21: Control Protection Exception (Error Code: %x) at EIP: %x\n", frame->err_code, frame->eip);
+    kerror("Exception 21: Control Protection Exception (Error Code: %x) at rip: %x\n", frame->err_code, frame->rip);
 }
 
 void UnknownExceptionHandler(interrupt_frame_t* frame) {
-    kerror("Unknown Exception %d at EIP: %x\n", frame->int_no, frame->eip);
+    kerror("Unknown Exception %d at rip: %x\n", frame->int_no, frame->rip);
 }
 
