@@ -1,18 +1,18 @@
 #include "slab_alloc.h"
 
 
-static uint64_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(dentry_t), sizeof(inode_t), sizeof(dcache_entry_t)};
-static uint64_t slab_sizes[] = {1, 32, 2, 2, 1};
+static const uint64_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(dentry_t), sizeof(inode_t), sizeof(dcache_entry_t)};
+static const uint64_t slab_sizes[] = {1, 512, 2, 2, 1};
 static cache_t caches[sizeof(sizes) / sizeof(sizes[0])];
 static uint64_t curr_addr;
-static uint64_t num_cache = sizeof(sizes) / sizeof(sizes[0]);
+static const uint64_t num_cache = sizeof(sizes) / sizeof(sizes[0]);
 
 void InitSlabAlloc(uint64_t start) {
     uint64_t start_addr;
     curr_addr = start;
     
     if (sizeof(sizes) != sizeof(slab_sizes)) {
-        kerror("sizes, slab_sizes don't line up!");
+        kerror("sizes and slab_sizes don't line up!");
     }
 
     for (uint64_t i = 0; i < num_cache; i++) {
@@ -31,15 +31,15 @@ void InitSlabAlloc(uint64_t start) {
 }
 
 uint64_t CalculateBitMapSize(uint64_t i) {
-    if ((slab_sizes[i] * PAGE_SIZE / sizes[i]) % 32 == 0) return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32; 
-    else return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 32 + 1;
+    if ((slab_sizes[i] * PAGE_SIZE / sizes[i]) % 64 == 0) return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 64; 
+    else return (slab_sizes[i] * PAGE_SIZE / sizes[i]) / 64 + 1;
 }
 
 uint64_t GetEmptyBit(uint64_t num) {
     uint64_t bit_pos = 0, bit;
-    while (bit_pos < 32) {
-        bit = num << (31 - bit_pos);
-        bit = bit >> 31;
+    while (bit_pos < 64) {
+        bit = num << (63 - bit_pos);
+        bit = bit >> 63;
         if (bit == 0) {
             break;
         }
@@ -54,7 +54,7 @@ void* SearchCache(cache_t* cache, uint64_t cache_idx) {
     if (cache->partial_slabs != NULL) {
         s_p = cache->partial_slabs;
         for (uint64_t i = 0; i < s_p->bitmap_size; i++) {
-            if (s_p->bitmap[i] == 0xFFFFFFFF) {
+            if (s_p->bitmap[i] == UINT64_MAX) {
                 continue;
             }
             uint64_t bit_pos = GetEmptyBit(s_p->bitmap[i]);
@@ -65,7 +65,7 @@ void* SearchCache(cache_t* cache, uint64_t cache_idx) {
                 s_p->next = cache->full_slabs;
                 cache->full_slabs = s_p;
             }
-            return (void*) ((uint64_t) s_p->start + ((i * 32) + bit_pos) * sizes[cache_idx]);
+            return (void*) ((uint64_t) s_p->start + ((i * 64) + bit_pos) * sizes[cache_idx]);
         }
         s_p = s_p->next;
     }
@@ -91,10 +91,9 @@ void AddSlabW(cache_t* cache, uint64_t cache_idx) {
     uint64_t slab_size = slab_sizes[cache_idx];
     void* slab_addr = (void*) AddKernelPages(slab_size);
     
-    // 1. Calculate how many bitmap uint32s we need
     uint64_t total_slots = slab_size * PAGE_SIZE / sizes[cache_idx];
-    uint64_t bitmap_len = total_slots / 32;
-    if (total_slots % 32 != 0) bitmap_len++; // Safety for non-aligned sizes
+    uint64_t bitmap_len = total_slots / 64;
+    if (total_slots % 64 != 0) bitmap_len++; 
 
     // 2. Allocate the metadata structure
     slab_t* new_slab = AddSlab(bitmap_len);
@@ -109,7 +108,6 @@ void AddSlabW(cache_t* cache, uint64_t cache_idx) {
         new_slab->bitmap[i] = 0;
     }
 
-    // 4. IMPORTANT: Link the new slab to the cache!
     new_slab->next = cache->empty_slabs;
     cache->empty_slabs = new_slab;
 }
@@ -141,11 +139,10 @@ slab_t* SearchSlab(slab_t* slab1, slab_t* slab2, void* ptr, uint64_t cache_idx) 
     return NULL;
 }
 
-// Returns the index of the smallest cache that can fit 'size'
-// Returns -1 if the requested size is too large for any cache
+
 uint64_t GetBestCacheIndex(uint64_t size) {
     uint64_t best_idx = 0xFFFFFFF;
-    uint64_t min_waste = 0xFFFFFFFF;
+    uint64_t min_waste = UINT64_MAX;
 
     for (uint64_t i = 0; i < num_cache; i++) {
         if (caches[i].size >= size) {
@@ -228,10 +225,10 @@ void kfree(void* ptr, uint64_t size) {
     
     p->free_count++;
     slot_index = (uint64_t) ptr - (uint64_t) p->start;
-    bitmap_index = slot_index / 32;
-    bit_pos = slot_index % 32;
+    bitmap_index = slot_index / 64;
+    bit_pos = slot_index % 64;
 
-    p->bitmap[bitmap_index] ^=  (1 << bit_pos);        
+    p->bitmap[bitmap_index] ^=  (1ULL << bit_pos);        
 
     if (p->free_count == 1) {
         caches[idx].full_slabs = DeleteSlab(caches[idx].full_slabs, p);

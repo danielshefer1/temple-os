@@ -7,8 +7,10 @@ void kmain() {
     kprintf("GDT Set!\n");
     InitIDT();
     kprintf("IDT Set!\n");
-    uint64_t test = 5 / 0;
-
+    enable_sse();
+    kprintf("SSE Enabled!\n");
+    InitPaging();
+    kprintf("Paging Initialized!\n");
     CliHelper();
     HltHelper();
 

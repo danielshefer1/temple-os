@@ -10,8 +10,8 @@ uint64_t pow(uint64_t base, uint64_t exp) {
 
 uint64_t BiggestBit(uint64_t num) {
     uint64_t result = 0;
-    for (uint64_t i = 0; i < 32; i++) {
-        if (num & (1 << i)) {
+    for (uint64_t i = 0; i < 64; i++) {
+        if (num & (1ULL << i)) {
             result = i;
         }
     }

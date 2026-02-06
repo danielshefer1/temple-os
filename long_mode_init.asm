@@ -40,7 +40,7 @@ long_mode_entry:
 
     mov rax, KERNEL_BSS_END
     add rax, 0xFFFFFFFF80000000
-    sub rax, 0x200000
+    sub rax, 0x200000 
     add rax, 0xFFF           
     and rax, 0xFFFFFFFFFFFFF000 
     add rax, 0x4000

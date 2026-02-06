@@ -25,9 +25,11 @@ SECTIONS
         *(.eh_frame) /* Explicitly handle this to avoid overlaps */
     }
 
+    __text_size = . - _kernel_VMA_start;
+
     /* Use ALIGN inside the section definition so VMA and LMA both move */
     .data : AT(_kernel_LMA_start + (ADDR(.data) - _kernel_VMA_start)) {
-        . = ALIGN(4K); 
+        . = ALIGN(2M); 
         *(.data)
     }
 

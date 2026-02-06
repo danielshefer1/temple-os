@@ -79,7 +79,16 @@ get_cpuid:
 
 global enable_sse
 enable_sse:
+    mov rax, cr0
+    and ax, 0xFFFB      ; Clear EM bit
+    or ax, 0x2          ; Set MP bit
+    mov cr0, rax
 
+    ; 2. CR4: Set OSFXSR (bit 9) and OSXMMEXCPT (bit 10)
+    mov rax, cr4
+    or ax, (3 << 9)     ; Set bits 9 and 10
+    mov cr4, rax
+    ret
 
 global spin_lock
 spin_lock:    
@@ -100,6 +109,22 @@ global spin_unlock
 spin_unlock:
     mov rdx, rdi
     mov dword [rdi], 0      ; Atomic write of 0
+    ret
+
+global switch_pml4
+switch_pml4:
+    mov cr3, rdi
+    ret
+
+global flush_tlb
+flush_tlb:
+    mov rax, cr3
+    mov cr3, rax
+    ret
+
+global InvlpgHelper
+InvlpgHelper:
+    invlpg [rdi]
     ret
 
 ; Macro to create ISR stub without error code

@@ -7,6 +7,9 @@ extern uint64_t __total_pages;
 extern uint64_t _text_size;
 extern uint64_t trampoline_binary;
 extern uint64_t trampoline_size;
+extern uint64_t __kernel_size_bytes;
+extern uint64_t __file_size_bytes;
+extern uint64_t __text_size;
 
 extern void enable_paging_bootstrap(uint64_t *page_directory);
 extern void CliHelper();
@@ -25,6 +28,9 @@ extern void enable_paging(void* pd);
 extern void enable_sse();
 extern void spin_lock(spinlock_t* spinlock_addr);
 extern void spin_unlock(spinlock_t* spinlock_addr);
+extern void switch_pml4(page_entry_t* pml4_addr);
+extern void flush_tlb();
+extern void InvlpgHelper(uint64_t addr);
 
 // ISR stubs
 extern void isr_stub_0();
