@@ -52,11 +52,17 @@ LoadIDTHelper:
 
 global inb
 inb:
-
+    mov dx, di      
+    xor eax, eax    
+    in al, dx       
+    ret
 
 global outb
 outb:
-
+    mov dx, di      
+    mov al, sil
+    out dx, al      
+    ret
 
 global check_interrupts
 check_interrupts:
@@ -76,7 +82,10 @@ switch_to_user_mode:
 
 global get_cpuid
 get_cpuid:
-
+    mov eax, 0x01
+    cpuid
+    shr eax, 24
+    ret
 
 global enable_sse
 enable_sse:
@@ -257,7 +266,7 @@ isr_common_stub:
     pop fs
     POPAQ
     add rsp, 16         ; clean up int num and error code
-    iret
+    iretq
 
 global isr_pic_stub
 isr_pic_stub:
@@ -284,7 +293,7 @@ isr_pic_stub:
 
     add rsp, 16
 
-    iret
+    iretq
 
 global isr_apic_stub
 isr_apic_stub:
@@ -307,7 +316,7 @@ isr_apic_stub:
 
     add rsp, 16
 
-    iret
+    iretq
 
 global isr_syscall_stub
 isr_syscall_stub:
@@ -330,4 +339,4 @@ isr_syscall_stub:
 
     add rsp, 16
 
-    iret
+    iretq

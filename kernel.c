@@ -24,13 +24,16 @@ void kmain() {
     //kprintf("RSDT Initialized!\n");
     InitMadt();
     //kprintf("MADT Initialized!\n");
+    InitMcfg();
     clear_screen();
 
-    InitMcfg();
+    InitConsoleBuffer();
 
+    EnableLapic();
+    
+    InitTimer(TIMER_TICK_PER_MS);
 
-
-    kprintf("MCFG Initialized!\n");
+    kprintf("Kernel Initialized!\n");
 
     CliHelper();
     HltHelper();

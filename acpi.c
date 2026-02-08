@@ -151,7 +151,7 @@ void ParseMadt(madt_t* madt) {
 }
 
 void FindMcfg(rsdt_t* rsdt) {
-    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint64_t);
+    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
     acpi_header_t* entry;
 
     for (uint64_t i = 0; i < num_entries; i++) {

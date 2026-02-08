@@ -134,5 +134,5 @@ void InitConsoleBuffer() {
     console_buffer.head = 0;
     console_buffer.tail = 0;
     console_buffer.size = CONSOLE_BUFFER_SIZE;
-    console_buffer.buffer = kmalloc(sizeof(timed_key_t) * CONSOLE_BUFFER_SIZE);
+    console_buffer.buffer = keyboard_buffer;
 }
