@@ -12,7 +12,7 @@
 void PrintBuddyNode(buddy_node_t* node);
 void PrintBuddyBin(uint64_t start_order, uint64_t end_order);
 buddy_node_t* CreateBuddyNode(void* address, uint64_t order);
-void InitBuddyAlloc(uint64_t start, uint64_t size);
+void InitBuddyAlloc(e820_info_t* info);
 void* RequestBuddy(uint64_t size);
 void* GetBuddyAddress(void* address, uint64_t order);
 void InsertSortedBuddyNode(buddy_bin_t* bin, buddy_node_t* node, bool free_list);

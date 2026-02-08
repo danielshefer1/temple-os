@@ -48,10 +48,10 @@ typedef struct cache_t
 } cache_t;
 
 typedef struct e820_entry_t {
-    uint32_t base_low;    // Lower 32 bits of base
-    uint32_t base_high;   // Upper 32 bits of base  
-    uint32_t length_low;  // Lower 32 bits of length
-    uint32_t length_high; // Upper 32 bits of length
+    uint32_t base_low;    
+    uint32_t base_high;     
+    uint32_t length_low;  
+    uint32_t length_high; 
     uint32_t type;
 } e820_entry_t;
 

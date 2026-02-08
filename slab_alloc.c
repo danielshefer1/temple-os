@@ -2,7 +2,7 @@
 
 
 static const uint64_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(dentry_t), sizeof(inode_t), sizeof(dcache_entry_t)};
-static const uint64_t slab_sizes[] = {1, 512, 2, 2, 1};
+static const uint64_t slab_sizes[] = {1, 32, 2, 2, 1};
 static cache_t caches[sizeof(sizes) / sizeof(sizes[0])];
 static uint64_t curr_addr;
 static const uint64_t num_cache = sizeof(sizes) / sizeof(sizes[0]);

@@ -3,19 +3,31 @@
 static buddy_bin_t bins[MAX_ORDER];
 static uint64_t lowest_valid;
 
-void InitBuddyAlloc(uint64_t start, uint64_t size) {
-    for (int i = 0; i < MAX_ORDER; i++) {
-        bins[i].head_free = NULL;
-        bins[i].head_used = NULL;
-    }
+void AddToBuddyAlloc(uint64_t start, uint64_t size) {
     uint64_t bit;
 
     while (size > 0) {
         bit = BiggestBit(size);
-        size -= 1 << bit;
-        bins[bit].head_free = CreateBuddyNode((void*)start, bit);
-        start += 1 << bit;
+        size -= 1ULL << bit;
+        buddy_node_t* node = CreateBuddyNode((void*)start, bit);
+        InsertSortedBuddyNode(&bins[bit], node, true);
+        start += 1ULL << bit;
         lowest_valid = bit;
+    }
+}
+
+void InitBuddyAlloc(e820_info_t* info) {
+    uint64_t base, length;
+    for (uint64_t i = 0; i < info->num_entries; i++) {
+        base = ((uint64_t)info->entries[i].base_high << 32) | info->entries[i].base_low;
+        length = ((uint64_t)info->entries[i].length_high << 32) | info->entries[i].length_low;
+        if (base == MB) {
+            AddToBuddyAlloc(GB, length - GB);
+            continue;
+        }
+        if (info->entries[i].type == 1 && length >= MB) {
+            AddToBuddyAlloc(base, length);
+        }
     }
 }
 

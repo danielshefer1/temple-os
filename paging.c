@@ -14,7 +14,7 @@ void InitPaging() {
     uint64_t kernel_big_pages = (kernel_size + TABLE_SIZE - 1) / TABLE_SIZE;
     uint64_t text_big_pages = (text_size + TABLE_SIZE - 1) / TABLE_SIZE;
 
-    curr_addr = KERNEL_VIRTUAL + kernel_big_pages * TABLE_SIZE;
+    curr_addr = KERNEL_VIRTUAL + kernel_size;
 
     uint64_t kernel_pml4_idx = PML4_IDX(KERNEL_VIRTUAL);
     uint64_t kernel_pdpt_idx = PDPT_IDX(KERNEL_VIRTUAL);
@@ -81,6 +81,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pdpt[pdpt_idx].writable = 1;
         pdpt[pdpt_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pd) >> 12;
     }
+
     page_entry_t* pd = (page_entry_t*) ((pdpt[pdpt_idx].address << 12) + KERNEL_VIRTUAL);
 
     if (big_page) {
@@ -115,11 +116,11 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     }
 
     if (pd[pd_idx].page_size == 1) {
-        kprintf("Tried to map a small page but a big page already exists at that address!");
+        kprintf("Warning: ID 50\t");
         return;
     }
 
-    page_entry_t* pt = (page_entry_t*) ((uint64_t)(pd[pd_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pt = (page_entry_t*) ((pd[pd_idx].address << 12) + KERNEL_VIRTUAL);
 
     pt[pt_idx].present = 1;
     pt[pt_idx].writable = (flags & RW_PAGE_BIT) ? 1 : 0;

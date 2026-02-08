@@ -2,22 +2,35 @@
 
 void kmain() {
     InitPaging();
-    kprintf("Paging Initialized!\n");
+    //kprintf("Paging Initialized!\n");
     clear_screen();
-    kprintf("Kernel Main Started!\n");
+    //kprintf("Kernel Main Started!\n");
     SetGDT();
-    kprintf("GDT Set!\n");
+    //kprintf("GDT Set!\n");
     InitIDT();
-    kprintf("IDT Set!\n");
+    //kprintf("IDT Set!\n");
     enable_sse();
-    kprintf("SSE Enabled!\n");
+    //kprintf("SSE Enabled!\n");
     InitSlabAlloc((uint64_t)&(_stack_top));
-    kprintf("Slab Allocator Initialized!\n");
-    InitRsdt();
-    kprintf("RSDT Initialized!\n");
-    InitMadt();
-    kprintf("MADT Initialized!\n");
+    //kprintf("Slab Allocator Initialized!\n");
+    e820_info_t* info = init_E820(E820_ADDRESS);
+    if (info == NULL) {
+        //kerror("Failed to initialize E820!");
+    }
+    InitBuddyAlloc(info);
+    //kprintf("Buddy Allocator Initialized!\n");
 
+    InitRsdt();
+    //kprintf("RSDT Initialized!\n");
+    InitMadt();
+    //kprintf("MADT Initialized!\n");
+    clear_screen();
+
+    InitMcfg();
+
+
+
+    kprintf("MCFG Initialized!\n");
 
     CliHelper();
     HltHelper();
