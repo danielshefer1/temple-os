@@ -21,8 +21,7 @@ void start() {
     InitVFS();
 
     BootCores();
-    DisableIdentityMapping();
-
+    
     InitVGA();
     kprintf("Kernel Initialized Successfully\n");
 }

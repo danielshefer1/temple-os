@@ -59,7 +59,7 @@ typedef struct e820_info_t {
     uint32_t signature;
     uint32_t num_entries;
     e820_entry_t* entries;
-    uint32_t address;
+    uint64_t address;
 } e820_info_t;
 
 typedef struct tuple_t {
@@ -210,30 +210,36 @@ typedef struct rsdp_t {
     uint8_t checksum;
     char oem_id[6];
     uint8_t revision;
-    uint64_t rsdt_address;
+    uint32_t rsdt_address;
+
+    uint32_t length;
+    uint64_t xsdt_address;     // <--- This is the one you want for 64-bit
+    uint8_t extended_checksum;
+    uint8_t reserved[3];
+
 } __attribute__((packed)) rsdp_t;
 
 typedef struct acpi_header_t {
     char signature[4];      
-    uint64_t length;
+    uint32_t length;         
     uint8_t revision;
     uint8_t checksum;
     char oem_id[6];
     char oem_table_id[8];
-    uint64_t oem_revision;
-    uint64_t creator_id;
-    uint64_t creator_revision;
+    uint32_t oem_revision;    
+    uint32_t creator_id;      
+    uint32_t creator_revision; 
 } __attribute__((packed)) acpi_header_t;
 
 typedef struct rsdt_t {
     acpi_header_t header;
-    acpi_header_t** entries[];
+    uint32_t entries[];
 } __attribute__((packed)) rsdt_t;
 
 typedef struct madt_t {
     acpi_header_t header;           
-    uint64_t local_apic_address;    
-    uint64_t flags;                 
+    uint32_t local_apic_address;    
+    uint32_t flags;                 
 } __attribute__((packed)) madt_t;
 
 typedef struct madt_entry_header_t {
@@ -276,20 +282,19 @@ typedef struct spinlock_t {
 } spinlock_t;
 
 typedef struct mcfg_entry_t {
-    uint64_t base_address;     
+    uint64_t base_address;          
     uint16_t pci_segment_group;
     uint8_t start_bus_number;
     uint8_t end_bus_number;
-    uint64_t reserved;
+    uint32_t reserved;              
 } __attribute__((packed)) mcfg_entry_t;
 
-typedef struct mcfg_t{
+typedef struct mcfg_t {
     acpi_header_t header;
     uint64_t reserved;
     mcfg_entry_t entries[]; 
 } __attribute__((packed)) mcfg_t;
 
-#include <stdint.h>
 
 typedef struct pci_config_t{
     // --- Standard PCI Header (First 64 bytes) ---

@@ -10,6 +10,7 @@ extern uint64_t trampoline_size;
 extern uint64_t __kernel_size_bytes;
 extern uint64_t __file_size_bytes;
 extern uint64_t __text_size;
+extern uint64_t _stack_top;
 
 extern void enable_paging_bootstrap(uint64_t *page_directory);
 extern void CliHelper();

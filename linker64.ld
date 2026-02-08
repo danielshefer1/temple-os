@@ -41,7 +41,10 @@ SECTIONS
         _bss_start = . - _kernel_VMA_start + _kernel_LMA_start;
         *(.bss)
         *(COMMON)
-        . = ALIGN(4K);
+        . = ALIGN(4K);        
+        _stack_bottom = .;
+        . += 16384;      
+        _stack_top = .;
         _bss_end = . - _kernel_VMA_start + _kernel_LMA_start;
     }
     _kernel_VMA_end = .;

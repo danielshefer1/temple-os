@@ -5,8 +5,7 @@ page_entry_t pml4[512] __attribute__((aligned(4096)));
 page_entry_t kernel_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t kernel_pd[512] __attribute__((aligned(4096)));
 
-
-static uint64_t curr_addr;
+static uint64_t curr_addr, curr_addr;
 
 void InitPaging() {
     uint64_t kernel_size = (uint64_t)&__kernel_size_bytes;
@@ -41,7 +40,7 @@ void InitPaging() {
         if (i == 0) {
             kernel_pd[idx].pcd = 1;
         }
-        if (i >= text_big_pages) {
+        if (i > text_big_pages) {
             kernel_pd[idx].no_execute = 1;
         }
 
@@ -74,7 +73,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pml4[pml4_idx].writable = 1;
         pml4[pml4_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pdpt) >> 12;
     }
-    page_entry_t* pdpt = (page_entry_t*) ((uint64_t)(pml4[pml4_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pdpt = (page_entry_t*) ((pml4[pml4_idx].address << 12) + KERNEL_VIRTUAL);
     if (pdpt[pdpt_idx].present == 0) {
         new_pd = (page_entry_t*) kmalloc(PAGE_SIZE);
         memset(new_pd, 0, PAGE_SIZE);
@@ -82,15 +81,15 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pdpt[pdpt_idx].writable = 1;
         pdpt[pdpt_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pd) >> 12;
     }
-    page_entry_t* pd = (page_entry_t*) ((uint64_t)(pdpt[pdpt_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pd = (page_entry_t*) ((pdpt[pdpt_idx].address << 12) + KERNEL_VIRTUAL);
 
     if (big_page) {
         if (new_pd == NULL) {
-            kerror("Tried to map a big page but page directory already exists!");
+            kprintf("Tried to map a big page but page directory already exists!");
             return;
         }
         if (pt_idx != 0 && PT_IDX(phy) != 0) {
-            kerror("Tried to map a big page but not 2MB aligned!");
+            kprintf("Tried to map a big page but not 2MB aligned!");
             return;
         }
         pd[pd_idx].present = 1;
@@ -106,12 +105,18 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         return;
     }
 
+
     if (pd[pd_idx].present == 0) {
         page_entry_t* new_pt = (page_entry_t*) kmalloc(PAGE_SIZE);
         memset(new_pt, 0, PAGE_SIZE);
         pd[pd_idx].present = 1;
         pd[pd_idx].writable = 1;
         pd[pd_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pt) >> 12;
+    }
+
+    if (pd[pd_idx].page_size == 1) {
+        kprintf("Tried to map a small page but a big page already exists at that address!");
+        return;
     }
 
     page_entry_t* pt = (page_entry_t*) ((uint64_t)(pd[pd_idx].address) << 12 + KERNEL_VIRTUAL);
@@ -126,46 +131,47 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     pt[pt_idx].global = (flags & GLOBAL_PAGE_BIT) ? 1 : 0;
 }
 
-uint64_t AddKernelPageEntry() {
-    return 0;
-}
-uint64_t AddUserPageTable(uint64_t table_idx) {
-    return 0;
-}
 
-uint64_t AddMMIOPageTable(uint64_t table_idx) {
-    return 0;
-}
-
-
-
-void FillUserPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages) {
-
-}
-
-void FillMMIOPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages, uint64_t offset) {
-
-}
-
-void FillIdentityPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages) {
-
+void FillPageDirectoryGeneral(void* virt, void* phy, uint64_t size, uint64_t flags) {
+    uint64_t start_addr = (uint64_t)virt;
+    uint64_t addr = (uint64_t)phy;
+    uint64_t num_big_pages = size / TABLE_SIZE;
+    uint64_t remaining_size = size % TABLE_SIZE;
+    uint64_t num_small_pages = 0;
+    if (remaining_size != 0) {
+        num_small_pages = (remaining_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    }
+    if ((uint64_t)PT_IDX(addr) != 0 || (uint64_t)PT_IDX(start_addr) != 0) {
+        kprintf("Warning: Address is not 2MB aligned, will only be using small pages!\n");
+        num_big_pages = 0;
+        num_small_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    }
+    for (uint64_t i = 0; i < num_big_pages; i++) {
+        map_page_to_virt(start_addr + i * TABLE_SIZE, addr + i * TABLE_SIZE, flags, true);
+    }
+    for (uint64_t i = 0; i < num_small_pages; i++) {
+        map_page_to_virt(start_addr + num_big_pages * TABLE_SIZE + i * PAGE_SIZE, addr + num_big_pages * TABLE_SIZE + i * PAGE_SIZE, flags, false);
+    }
 }
 
 void FillPageDirectoryUser(void* addr, uint64_t size) {
-
+    FillPageDirectoryGeneral(addr, (void*)((uint64_t)addr - USER_VIRTUAL) ,size, RW_USER);
 }
 
 void FillPageDirectoryMMIO(void* addr, uint64_t size) {
-
+    FillPageDirectoryGeneral((void*)((uint64_t)addr + MMIO_OFFSET), addr, size, RW_MMIO);
 }
 
 void FillPageDirectoryPCI(void* addr, uint64_t size) {
-
+    FillPageDirectoryGeneral((void*)((uint64_t)addr + PCI_OFFSET), addr, size, RW_MMIO);
 }
 
 void FillPageDirectoryIdentityMapping(void* addr, uint64_t size) {
-
+    FillPageDirectoryGeneral(addr, addr, size, RW_KERNEL);
 }
+
+
+
 
 
 void RemoveTables(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t start_table, uint64_t end_table) {
@@ -205,15 +211,11 @@ void RemovePages(uint64_t addr, uint64_t num_pages, bool big_pages) {
 }
 
 uint64_t AddKernelPages(uint64_t num_pages) {
-    uint64_t big_pages = num_pages / 512;
-    uint64_t small_pages = num_pages % 512;
+
+
     uint64_t start_addr = curr_addr;
 
-    for (uint64_t i = 0; i < big_pages; i++) {
-        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, true);
-        curr_addr += TABLE_SIZE;
-    }
-    for (uint64_t i = 0; i < small_pages; i++) {
+    for (uint64_t i = 0; i < num_pages; i++) {
         map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, false);
         curr_addr += PAGE_SIZE;
     }

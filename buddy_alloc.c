@@ -165,10 +165,10 @@ void FreeBuddy(void* address) {
         if ((uint64_t)(1 << node->order) % PAGE_SIZE != 0) {
             page_count++;
         }
-        RemovePages(((uint64_t)address - USER_BASE) >> 21, (uint64_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
+        //RemovePages(((uint64_t)address - USER_BASE) >> 21, (uint64_t)address % TABLE_SIZE / PAGE_SIZE, page_count);
     }
     else {
-        RemovePageTables(((uint64_t)address - USER_BASE) >> 21, ((uint64_t)address + (1 << order) - USER_BASE) >> 21);
+        //RemovePageTables(((uint64_t)address - USER_BASE) >> 21, ((uint64_t)address + (1 << order) - USER_BASE) >> 21);
     }
 
     bool merged = MergeBuddy(address, order);

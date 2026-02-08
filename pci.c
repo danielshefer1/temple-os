@@ -8,7 +8,7 @@ void PciEnumeration() {
                 uint64_t device_phys = (uint64_t)ecam_ptr + ((bus << 20) | (dev << 15) | (func << 12));
 
 
-                map_page_to_virt(PCI_SCAN_VIRTUAL, device_phys, RW_MMIO);
+                map_page_to_virt(PCI_SCAN_VIRTUAL, device_phys, RW_MMIO, true);
 
                 volatile pci_config_t* config = (pci_config_t*)PCI_SCAN_VIRTUAL;
 

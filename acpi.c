@@ -5,19 +5,30 @@ static rsdt_t* rsdt;
 static madt_t* madt;
 static mcfg_t* mcfg;
 
-bool ValidateRsdp(void* addr) {
-    if (memcmp((void*)addr, "RSD PTR ", RSDP_SIG_LENGTH) == 0) {
-        uint8_t sum = 0;
-        uint8_t* bytes = (uint8_t*)addr;
-        for (int i = 0; i < 20; i++) {
-            sum += bytes[i];
-        }
-
-        if (sum == 0) {
-            return true;
-        }
+bool ValidateRsdp(rsdp_t* rsdp) {
+    // 1. Check Signature
+    if (memcmp(rsdp->signature, "RSD PTR ", 8) != 0) {
+        return false;
     }
-    return false;
+
+    // 2. Validate Legacy Checksum (First 20 bytes)
+    uint8_t sum = 0;
+    uint8_t* bytes = (uint8_t*)rsdp;
+    for (int i = 0; i < 20; i++) {
+        sum += bytes[i];
+    }
+    if (sum != 0) return false;
+
+    // 3. Validate Extended Checksum (Full 36 bytes)
+    if (rsdp->revision >= 2) {
+        uint8_t ext_sum = 0;
+        for (int i = 0; i < 36; i++) {
+            ext_sum += bytes[i];
+        }
+        if (ext_sum != 0) return false;
+    }
+
+    return true;
 }
 
 bool ValidateACPIHeader(acpi_header_t* header) {
@@ -33,13 +44,26 @@ bool ValidateACPIHeader(acpi_header_t* header) {
 }
 
 void FindRsdp() {
-    for (uint64_t addr = 0xE0000 + KERNEL_VIRTUAL; addr < 0x100000 + KERNEL_VIRTUAL; addr += 16) {
-        if (ValidateRsdp((void*) addr)) {
+
+    uint16_t ebda_segment = *(uint16_t*)(0x40E + KERNEL_VIRTUAL);
+    uint64_t ebda_base = (uint64_t)ebda_segment << 4;
+
+    if (ebda_base > 0) {
+        for (uint64_t addr = ebda_base + KERNEL_VIRTUAL; addr < ebda_base + 1024 + KERNEL_VIRTUAL; addr += 16) {
+            if (ValidateRsdp((rsdp_t*)addr)) {
+                rsdp = (rsdp_t*)addr;
+                return;
+            }
+        }
+    }
+
+    for (uint64_t addr = 0x9F400 + KERNEL_VIRTUAL; addr < 0x100000 + KERNEL_VIRTUAL; addr += 16) {
+        if (ValidateRsdp((rsdp_t*) addr)) {
             rsdp = (rsdp_t*) addr;
             return;
         }
     }
-    kprintf("Couldn't Find RSDP!");
+    kprintf("Couldn't Find RSDP!\n");
 }
 
 
@@ -67,20 +91,22 @@ void FindRsdt() {
 }
 
 void FindMadt(rsdt_t* rsdt) {
-    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint64_t);
+    uint64_t num_entries = (rsdt->header.length - sizeof(acpi_header_t)) / sizeof(uint32_t);
     acpi_header_t* entry;
 
     for (uint64_t i = 0; i < num_entries; i++) {
-        entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
+        uint32_t phy_addr = rsdt->entries[i];
+        entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT((uint64_t)phy_addr);
 
         if (!ValidateACPIHeader(entry)) {
-            kprintf("Found an unvalid ACPI table");
+            kprintf("Found an invalid ACPI table\n");
             continue;
         }
-        if (strncmp(entry->signature, "APIC", ACPI_TABLE_SIG_LEGNTH) == 0) {
+        
+        if (memcmp(entry->signature, "APIC", 4) == 0) {
             madt = (madt_t*)entry;
             kprintf("Found MADT!\n");
-            lapic = (volatile uint64_t*) madt->local_apic_address;
+            lapic = (volatile uint64_t*)((uint64_t)madt->local_apic_address);
             return;
         }
     }

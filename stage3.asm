@@ -156,7 +156,6 @@ stage3_return2:
 .launch:
     mov eax, 0xDEADBEEF
     call print_dd_hexa
-    ; 6. Jump to the Kernel Entry Point at 1MB
     jmp (STAGE4_BASE + 16)
 
 

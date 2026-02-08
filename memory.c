@@ -20,11 +20,11 @@ int32_t memcmp(const void* ptr1, const void* ptr2, uint64_t num) {
     const uint8_t* p2 = (const uint8_t*)ptr2;
 
     if (((uintptr_t)p1 | (uintptr_t)p2 | num) % 4 == 0) {
-        const uint64_t* p1_32 = (const uint64_t*)p1;
-        const uint64_t* p2_32 = (const uint64_t*)p2;
-        uint64_t words = num / 4;
+        const uint32_t* p1_32 = (const uint32_t*)p1;
+        const uint32_t* p2_32 = (const uint32_t*)p2;
+        uint32_t words = num / 4;
 
-        for (uint64_t i = 0; i < words; i++) {
+        for (uint32_t i = 0; i < words; i++) {
             if (p1_32[i] != p2_32[i]) {
                 p1 = (const uint8_t*)&p1_32[i];
                 p2 = (const uint8_t*)&p2_32[i];

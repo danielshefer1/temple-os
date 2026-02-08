@@ -4,6 +4,7 @@ extern irq_handler
 extern lapic
 extern __total_pages
 extern kmain
+extern _stack_top
 
 section .helpers
 
@@ -114,6 +115,7 @@ spin_unlock:
 global switch_pml4
 switch_pml4:
     mov cr3, rdi
+    mov rax, [rsp]
     ret
 
 global flush_tlb
