@@ -6,8 +6,8 @@ timed_key_t keyboard_buffer[CONSOLE_BUFFER_SIZE];
 volatile bool shift_pressed = false;
 volatile bool pit_timer_fired;
 uint64_t timer_ticks[UINT8_MAX];
-volatile uint64_t* lapic;
-volatile uint64_t* ioapic;
+volatile uint32_t* lapic;
+volatile uint32_t* ioapic;
 uint64_t cpu_count;
 
 int_override_t* overrides[16];

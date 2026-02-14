@@ -45,7 +45,7 @@ void SetIDTEntry(uint64_t offset, uint16_t sel, uint8_t present, uint8_t privile
 
     entry->base_low = offset & 0xFFFF;
     entry->sel = sel;
-    entry->reserved = 0;
+    entry->ist = 0;
 
     entry->gate_type = type;
     entry->storage_segment = 0;
@@ -54,6 +54,7 @@ void SetIDTEntry(uint64_t offset, uint16_t sel, uint8_t present, uint8_t privile
 
     entry->base_mid = (offset >> 16) & 0xFFFF;
     entry->base_high = (offset >> 32) & 0xFFFFFFFF;
+    entry->reserved = 0;
 }
 
 void CheckIDT() {
@@ -69,9 +70,8 @@ void CheckIDT() {
 void ReplaceTimer() {
     CliHelper();
     uint64_t apic_timer = (uint64_t)((void*) isr_apic_stub_32);
-    idt[TIMER_IDT].base_low = apic_timer & 0xFFFF;
-    idt[TIMER_IDT].base_mid = (apic_timer >> 16) & 0xFFFF;
-    idt[TIMER_IDT].base_high = (apic_timer >> 32) & 0xFFFF;
+    SetIDTEntry(apic_timer, GDT_CODE_SEGMENT, PRESENT,
+         PRIVILEGE_USER, IDT_TYPE_INTERRUPT_GATE, 32);
     StiHelper();
 }
 

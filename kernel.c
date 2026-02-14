@@ -32,8 +32,8 @@ void kmain() {
     EnableLapic();
     
     InitTimer(TIMER_TICK_PER_MS);
+    InitKeyboard();
 
-    kprintf("Kernel Initialized!\n");
 
     CliHelper();
     HltHelper();

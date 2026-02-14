@@ -28,6 +28,7 @@ uint64_t FindLapicTimerInitalCount() {
     InitPitTimer(PIC_TIMER_FREQUENCY); 
 
     pit_timer_fired = false;
+    StiHelper();
     while (!pit_timer_fired) PauseHelper();
 
     uint64_t initial_count = 0xFFFFFFFF;
@@ -69,7 +70,7 @@ void InitTimer(uint64_t ms) {
     // Set Timer divider to 16
     lapic[0x3E0 / 4] = 0x03;
     // Set IDT index and mode
-    lapic[0x320 / 4] = 0x20 | (1 << 17);
+    lapic[0x320 / 4] = 0x20 | (1 << 17); 
     // Set Initial Count
     lapic[0x380 / 4] = ticks_per_ms * ms;
 }

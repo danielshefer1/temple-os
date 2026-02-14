@@ -4,10 +4,10 @@ void memset(void* address, uint8_t value, uint64_t size) {
     uint64_t reminder = size % 4;
     size -= reminder;
     size /= 4;
-    uint64_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
+    uint32_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
 
     for(uint64_t i = 0; i < size; i++) {
-        ((uint64_t*) address)[i] = value_32;
+        ((uint32_t*) address)[i] = value_32;
     }
 
     for(uint64_t i = 0; i < reminder; i++) {

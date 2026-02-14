@@ -20,7 +20,7 @@ extern void PauseHelper();
 extern void LoadGDTHelper(gdt_ptr_t* gdtr);
 extern void LoadIDTHelper(idt_ptr_t* idtr);
 extern uint8_t inb(uint8_t port);
-extern void outb(uint8_t port, uint8_t value);
+extern void outb(uint16_t port, uint8_t value);
 extern bool check_interrupts();
 extern void load_tss();
 extern void switch_to_user_mode(uint64_t eip, uint64_t esp);

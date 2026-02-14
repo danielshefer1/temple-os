@@ -141,7 +141,6 @@ get_e820_memory_map:
 ; ----- PIC Remap -----
 remap_pic:
 
-
     mov al, 0x11
     out 0x20, al                    
     out 0xA0, al                     
@@ -156,7 +155,7 @@ remap_pic:
     mov al, 4                        
     out 0x21, al
     mov al, 2                       
-    
+    out 0xA1, al
 
     mov al, 1
     out 0x21, al
@@ -165,7 +164,7 @@ remap_pic:
     mov al, 0xFF              
     out 0x21, al                     
     mov al, 0xFF                     
-    out 0xA1, al                   
+    out 0xA1, al                     
     
     ret
 

@@ -106,7 +106,7 @@ void FindMadt(rsdt_t* rsdt) {
         if (memcmp(entry->signature, "APIC", 4) == 0) {
             madt = (madt_t*)entry;
             kprintf("Found MADT!\n");
-            lapic = (volatile uint64_t*)((uint64_t)madt->local_apic_address);
+            lapic = (volatile uint32_t*)((uint64_t)madt->local_apic_address);
             return;
         }
     }
@@ -131,7 +131,7 @@ void ParseMadt(madt_t* madt) {
             case 1:
                 kprintf("Found I/O APIC!\n");
                 io_apic_t* ioapic_obj = (io_apic_t*) entry;
-                ioapic = (volatile uint64_t*) ioapic_obj->ioapic_address;
+                ioapic = (volatile uint32_t*) ioapic_obj->ioapic_address;
                 break;
             case 2:
                 kprintf("Found Interrupts Override!\n");

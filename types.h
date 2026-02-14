@@ -118,7 +118,7 @@ typedef struct interrupt_frame_t {
 typedef struct idt_entry_t {
     uint16_t base_low;
     uint16_t sel;
-    uint8_t reserved;
+    uint8_t ist;
     // ---- Flags ----
     uint8_t gate_type : 4;
     uint8_t storage_segment : 1;
@@ -127,6 +127,7 @@ typedef struct idt_entry_t {
     // ----------------
     uint16_t base_mid;
     uint32_t base_high;
+    uint32_t reserved;
 } __attribute__((packed)) idt_entry_t;
 
 typedef struct idt_ptr_t {
@@ -156,7 +157,7 @@ struct tss_entry_struct {
     uint64_t esp; uint64_t ebp; uint64_t esi; uint64_t rdi;
     uint64_t es; uint64_t cs; uint64_t ss; uint64_t ds; uint64_t fs; uint64_t gs;
     uint64_t ldt; uint16_t trap; uint16_t iomap_base;
-} __attribute__((packed));
+} __attribute__((packed)) ;
 
 typedef struct tss_entry_struct tss_entry_t;
 

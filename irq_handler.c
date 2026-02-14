@@ -60,6 +60,7 @@ void irq_handler(interrupt_frame_t* frame) {
 
 void TimerHandler() {
     uint8_t cpu_id = get_cpuid();
+    //kprintf("Timer interrupt fired on CPU %d, total ticks: %d\n", cpu_id, timer_ticks[cpu_id]);
     timer_ticks[cpu_id]++;
 }
 

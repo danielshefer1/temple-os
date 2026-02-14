@@ -159,6 +159,7 @@ global isr_pic_stub_%1
 isr_pic_stub_%1:
     push 0
     push %1
+
     jmp isr_pic_stub
 %endmacro
 
