@@ -40,7 +40,10 @@ ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
 
 QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
-             -drive format=raw,file=$(DISK_IMG) -serial stdio 
+			 -drive format=raw,file=$(DISK_IMG) -serial stdio \
+			 -device qemu-xhci,id=xhci \
+			 -device usb-kbd,bus=xhci.0 \
+			 -device usb-mouse,bus=xhci.0
 
 # ============================================================================
 # Source & Object Definitions
