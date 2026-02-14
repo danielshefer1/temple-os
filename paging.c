@@ -5,6 +5,9 @@ page_entry_t pml4[512] __attribute__((aligned(4096)));
 page_entry_t kernel_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t kernel_pd[512] __attribute__((aligned(4096)));
 
+page_entry_t identity_pdpt[512] __attribute__((aligned(4096)));
+page_entry_t identity_pd[512] __attribute__((aligned(4096)));
+
 static uint64_t curr_addr, curr_addr;
 
 void InitPaging() {
@@ -25,13 +28,26 @@ void InitPaging() {
     pml4[kernel_pml4_idx].present = 1;
     pml4[kernel_pml4_idx].writable = 1;
     pml4[kernel_pml4_idx].address = (uint64_t)KERNEL_VIRT_TO_PHYS((uint64_t)kernel_pdpt) >> 12;
+
+    pml4[0].present = 1;
+    pml4[0].writable = 1;
+    pml4[0].address = (uint64_t)KERNEL_VIRT_TO_PHYS((uint64_t)identity_pdpt) >> 12;
     // End PML4 Mapping
 
     // Start PDPT Mapping
     kernel_pdpt[kernel_pdpt_idx].present = 1;
     kernel_pdpt[kernel_pdpt_idx].writable = 1;
     kernel_pdpt[kernel_pdpt_idx].address = (uint64_t)KERNEL_VIRT_TO_PHYS((uint64_t)kernel_pd) >> 12;
+
+    identity_pdpt[0].present = 1;
+    identity_pdpt[0].writable = 1;
+    identity_pdpt[0].address = (uint64_t)KERNEL_VIRT_TO_PHYS((uint64_t)identity_pd) >> 12;
     // Start PDPT Mapping
+
+    identity_pd[0].present = 1;
+    identity_pd[0].writable = 1;
+    identity_pd[0].page_size = 1;
+    identity_pd[0].address = 0;
 
     // Start PD Mapping
     for (uint64_t i = 0; i < kernel_big_pages + 1; i++) {
@@ -56,6 +72,11 @@ void InitPaging() {
 
 uint64_t PageDirAddrV() {
     return (uint64_t)pml4;
+}
+
+void DisableIdentityMapping() {
+    pml4[0].present = 0;
+    InvlpgHelper(0);
 }
 
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
@@ -116,7 +137,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     }
 
     if (pd[pd_idx].page_size == 1) {
-        kprintf("Warning: ID 50\t");
+        //kprintf("Warning: ID 50\t");
         return;
     }
 

@@ -48,8 +48,8 @@ void memcpy(void* dest, const void* src, uint64_t n) {
     const uint8_t* src1 = (const uint8_t*)src;
 
     if (((uintptr_t)dest1 | (uintptr_t)src1 | n) % 4 == 0) {
-        uint64_t* p1_32 = (uint64_t*)dest1;
-        const uint64_t* p2_32 = (const uint64_t*)src1;
+        uint32_t* p1_32 = (uint32_t*)dest1;
+        const uint32_t* p2_32 = (const uint32_t*)src1;
         uint64_t words = n / 4;
 
         for (uint64_t i = 0; i < words; i++) {

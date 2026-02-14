@@ -5,7 +5,7 @@ void CopyTrampoline() {
     memcpy((void*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL), trampoline_binary_addr, trampoline_size);
 }
 
-void lapic_write_icr(uint64_t high, uint64_t low) {
+void lapic_write_icr(uint32_t high, uint32_t low) {
     // High must be written first!
     lapic[0x310 / 4] = high;
     // Writing to the low register actually triggers the interrupt
@@ -18,7 +18,7 @@ void lapic_write_icr(uint64_t high, uint64_t low) {
     }
 }
 
-void SendInitIPI(uint64_t apic_id) {
+void SendInitIPI(uint32_t apic_id) {
     // 0x0000C500 breaks down as:
     // Bits 8-10: 101 (INIT)
     // Bit 14: 1 (Assert)
@@ -26,7 +26,7 @@ void SendInitIPI(uint64_t apic_id) {
     lapic_write_icr(apic_id << 24, 0x0000C500);
 }
 
-void SendStartupIPI(uint64_t apic_id, uint8_t vector) {
+void SendStartupIPI(uint32_t apic_id, uint8_t vector) {
     // 0x00000600 | vector
     // Bits 8-10: 110 (Startup)
     lapic_write_icr(apic_id << 24, 0x00000600 | vector);
@@ -48,7 +48,7 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     if (!trampoline_set) CopyTrampoline();
 
     uint64_t* inputs = (uint64_t*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL + trampoline_size);
-    inputs[0] = (AddStack() - KERNEL_VIRTUAL); // this cpu's stack, identity mapped
+    inputs[0] = AddStack(); // this cpu's stack
     inputs[1] = (uint64_t)((void*)ap_kmain); 
     inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 
@@ -65,7 +65,7 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
         PauseHelper();
     }
 
-    SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
+    //SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
 
     //StiHelper();
 }

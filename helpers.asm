@@ -84,7 +84,10 @@ global get_cpuid
 get_cpuid:
     mov eax, 0x01
     cpuid
-    shr eax, 24
+    shr ebx, 24
+    xor rax, rax
+    mov al, bl
+
     ret
 
 global enable_sse

@@ -7,7 +7,8 @@ void start() {
     enable_sse();
 
     InitSlabAlloc(PageDirAddrV() + 7 * PAGE_SIZE);
-    //InitBuddyAlloc((KERNEL_VIRTUAL >> 1) + PAGE_SIZE, KERNEL_VIRTUAL - 0x200000);
+    e820_info_t* e820_info = init_E820(E820_ADDRESS);
+    InitBuddyAlloc(e820_info);
 
     InitConsoleBuffer();
 
@@ -21,7 +22,8 @@ void start() {
     InitVFS();
 
     BootCores();
-    
+    sleep(100); // Wait for APs to finish initializing
+
     InitVGA();
     kprintf("Kernel Initialized Successfully\n");
 }

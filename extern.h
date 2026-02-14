@@ -6,7 +6,7 @@
 extern uint64_t __total_pages;
 extern uint64_t _text_size;
 extern uint64_t trampoline_binary;
-extern uint64_t trampoline_size;
+extern uint32_t trampoline_size;
 extern uint64_t __kernel_size_bytes;
 extern uint64_t __file_size_bytes;
 extern uint64_t __text_size;
