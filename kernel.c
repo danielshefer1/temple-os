@@ -3,6 +3,7 @@
 void kmain() {
     start();
 
-    
+    PciEnumeration();
+
     end();
 }

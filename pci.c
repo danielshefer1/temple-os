@@ -8,7 +8,7 @@ void PciEnumeration() {
                 uint64_t device_phys = (uint64_t)ecam_ptr + ((bus << 20) | (dev << 15) | (func << 12));
 
 
-                map_page_to_virt(PCI_SCAN_VIRTUAL, device_phys, RW_MMIO, true);
+                map_page_to_virt(PCI_SCAN_VIRTUAL, device_phys, RW_MMIO, false);
 
                 volatile pci_config_t* config = (pci_config_t*)PCI_SCAN_VIRTUAL;
 
@@ -22,8 +22,13 @@ void PciEnumeration() {
                         //config->vendor_id, config->device_id, config->class_code, config->subclass);
 
                 // 5. Look for your Advanced Disk (AHCI)
-                if (config->class_code == 0x01 && config->subclass == 0x06) {
+                if (config->class_code == AHCI_CLASS && config->subclass == AHCI_SUBCLASS) {
                     kprintf("Found AHCI device!\n");
+                }
+
+                // 6. Look for your xHCI (USB 3.0)
+                if (config->class_code == xHCI_CLASS && config->subclass == xHCI_SUBCLASS) {
+                    kprintf("Found xHCI device!\n");
                 }
                 
                 // Optimization: If not a multi-function device, don't scan funcs 1-7
