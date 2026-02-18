@@ -64,6 +64,7 @@ uint8_t AhciNumberOfPorts() {
 void InitPort(hba_port_t* port) {
     volatile hba_cmd_header_t* cmd_list = (hba_cmd_header_t*) AddNonCachableKernelPages(2);
     port->clb = (uint64_t)cmd_list;
+    
 }
 
 void AhciInit() {
