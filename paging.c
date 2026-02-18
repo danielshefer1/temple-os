@@ -244,6 +244,18 @@ uint64_t AddKernelPages(uint64_t num_pages) {
     return start_addr;
 }
 
+uint64_t AddNonCachableKernelPages(uint64_t num_pages) {
+
+
+    uint64_t start_addr = curr_addr;
+
+    for (uint64_t i = 0; i < num_pages; i++) {
+        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_MMIO, false);
+        curr_addr += PAGE_SIZE;
+    }
+    return start_addr;
+}
+
 uint64_t AddStack() {
     return AddKernelPages(STACK_PAGES);
 }

@@ -9,6 +9,7 @@
 uint64_t PageDirAddrV();
 void InitPaging();
 uint64_t AddKernelPages(uint64_t num_pages);
+uint64_t AddNonCachableKernelPages(uint64_t num_pages);
 uint64_t AddUserPageTable(uint64_t table_idx);
 void FillUserPageTable(uint64_t table_idx, uint64_t start_page, uint64_t num_pages);
 void RemovePageTables(uint64_t start_table, uint64_t end_table);

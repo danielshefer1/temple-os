@@ -16,5 +16,6 @@
 #include "apic.h"
 #include "utility.h"
 #include "pci.h"
+#include "ahci_driver.h"
 
 void kmain();

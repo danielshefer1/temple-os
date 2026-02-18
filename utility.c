@@ -22,6 +22,9 @@ void start() {
     InitVFS();
 
     BootCores();
+
+    PciEnumeration();
+
     sleep(100); // Wait for APs to finish initializing
 
     InitVGA();

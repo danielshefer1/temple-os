@@ -30,6 +30,9 @@
 #define PCI_SCAN_BASE 0xB0000000
 #define PCI_OFFSET (PCI_SCAN_VIRTUAL - PCI_SCAN_BASE)
 
+#define AHCI_VIRTUAL 0xFFFFFFFFE0000000
+
+
 #define PML4_IDX(addr) (((uint64_t)(addr) >> 39) & 0x1FF)
 #define PDPT_IDX(addr) (((uint64_t)(addr) >> 30) & 0x1FF)
 #define PD_IDX(addr)   (((uint64_t)(addr) >> 21) & 0x1FF)
@@ -198,4 +201,12 @@
 #define AHCI_SUBCLASS 0x06
 #define xHCI_CLASS 0x0C
 #define xHCI_SUBCLASS 0x03
+
+#define MSI_CAP 0x05
+
 // End PCI Defintions
+
+// AHCI Definitions
+#define BIOS_TIMEOUT 2000
+#define AHCI_INT_VECTOR 0x40
+// End AHCI Definitions
