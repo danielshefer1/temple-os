@@ -18,3 +18,4 @@ extern uint8_t cpu_ids[UINT8_MAX];
 extern volatile uint64_t cpus_active;
 extern volatile pci_config_t* ecam_ptr;
 extern volatile hba_mem_t* hba;
+extern volatile uint64_t disk_size;

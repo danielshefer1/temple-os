@@ -11,3 +11,4 @@
 extern void irq_handler(interrupt_frame_t* frame);
 void TimerHandler();
 void KeyboardHandler();
+void AhciHandler();

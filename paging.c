@@ -197,13 +197,13 @@ void FillPageDirectoryIdentityMapping(void* addr, uint64_t size) {
 
 
 void RemoveTables(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t start_table, uint64_t end_table) {
-    page_entry_t* pdpt_entry = (page_entry_t*) ((uint64_t)(pml4[pml4_idx].address) << 12 + KERNEL_VIRTUAL);
-    page_entry_t* pd_entry = (page_entry_t*) ((uint64_t)(pdpt_entry[pdpt_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pdpt_entry = (page_entry_t*) (((uint64_t)(pml4[pml4_idx].address) << 12) + KERNEL_VIRTUAL);
+    page_entry_t* pd_entry = (page_entry_t*) (((uint64_t)(pdpt_entry[pdpt_idx].address) << 12) + KERNEL_VIRTUAL);
     for (uint64_t i = start_table; i < end_table; i++) {
         if (pd_entry[i].present == 0) {
             continue;
         }
-        page_entry_t* pt_entry = (page_entry_t*) ((uint64_t)(pd_entry[i].address) << 12 + KERNEL_VIRTUAL);
+        page_entry_t* pt_entry = (page_entry_t*) (((uint64_t)(pd_entry[i].address) << 12) + KERNEL_VIRTUAL);
         for (uint64_t j = 0; j < 512; j++) {
             if (pt_entry[j].present == 1) {
                 pt_entry[j].present = 0;
@@ -216,7 +216,7 @@ void RemoveTables(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t start_table, ui
 }
 
 void RemovePDs(uint64_t pml4_idx, uint64_t pdpt_idx, uint64_t start_pd, uint64_t end_pd) {
-    page_entry_t* pdpt_entry = (page_entry_t*) ((uint64_t)(pml4[pml4_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pdpt_entry = (page_entry_t*) (((uint64_t)(pml4[pml4_idx].address) << 12) + KERNEL_VIRTUAL);
     for (uint64_t i = start_pd; i < end_pd; i++) {
         if (pdpt_entry[i].present == 1) {
             pdpt_entry[i].present = 0;
@@ -270,12 +270,12 @@ void RemovePage(uint64_t addr, bool big_page) {
         return;
     }
 
-    page_entry_t* pdpt_entry = (page_entry_t*) ((uint64_t)(pml4[pml4_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pdpt_entry = (page_entry_t*) (((uint64_t)(pml4[pml4_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pdpt_entry[pdpt_idx].present == 0) {
         return;
     }
 
-    page_entry_t* pd_entry = (page_entry_t*) ((uint64_t)(pdpt_entry[pdpt_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pd_entry = (page_entry_t*) (((uint64_t)(pdpt_entry[pdpt_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pd_entry[pd_idx].present == 0) {
         return;
     }
@@ -284,7 +284,7 @@ void RemovePage(uint64_t addr, bool big_page) {
         InvlpgHelper(addr);
         return;
     }
-    page_entry_t* pt_entry = (page_entry_t*) ((uint64_t)(pd_entry[pd_idx].address) << 12 + KERNEL_VIRTUAL);
+    page_entry_t* pt_entry = (page_entry_t*) (((uint64_t)(pd_entry[pd_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pt_entry[t_idx].present == 0) {
         return;
     }

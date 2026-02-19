@@ -27,6 +27,7 @@ static void* handlers[] = {
     (void*)isr_stub_21,
     (void*)isr_pic_stub_32,
     (void*)isr_apic_stub_33,
+    (void*)isr_apic_stub_64,
     (void*)isr_stub_128,
     (void*)isr_spurious
 };
@@ -34,7 +35,7 @@ static void* handlers[] = {
 static uint64_t handlers_idx[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 16, 17, 18, 19, 20,
-    21, 32, 33, 128, 0xFF
+    21, 32, 33, 64, 128, 0xFF
 };
 
 static uint64_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
