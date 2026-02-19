@@ -13,3 +13,4 @@ void GetAhciDriveInfo();
 void InitPort(hba_port_t* port);
 int64_t FindFreeSlotInCmdList(hba_port_t* port);
 void AhciRead(int port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys);
+void ParseMbr(uint8_t* buffer);

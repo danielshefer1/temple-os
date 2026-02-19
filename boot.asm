@@ -45,5 +45,17 @@ print_string:
 
 boot_drive db 0
 
-times 510 - ($ - $$) db 0
-dw 0xAA55
+times 446-($-$$) db 0   
+
+; Partition Entry 1 (16 bytes)
+db 0x80                 ; Bootable
+db 0, 0, 0              ; Starting CHS (ignored)
+db 0x83                 ; Type (0x83 = Linux/Generic Data)
+db 0, 0, 0              ; Ending CHS (ignored)
+dd 9                    ; STARTING LBA (Matches your 'seek=9' in Makefile!)
+dd 40951                ; SIZE IN SECTORS (Total sectors - 9)
+
+; Fill remaining 3 entries with zeros (48 bytes)
+times 48 db 0
+
+dw 0xAA55               ; The Magic Signature

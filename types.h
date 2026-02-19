@@ -452,3 +452,18 @@ typedef struct {
     // DW4 - 7
     uint32_t reserved1[4];
 } __attribute__((packed)) hba_cmd_header_t;
+
+typedef struct {
+    uint8_t  attributes;    // 0x80 = bootable, 0x00 = non-bootable
+    uint8_t  chs_start[3];  // Old CHS address (ignore this)
+    uint8_t  partition_type; // 0x07 = NTFS, 0x0B = FAT32, 0x83 = Linux, etc.
+    uint8_t  chs_end[3];    // Old CHS address (ignore this)
+    uint32_t lba_start;     // THE STARTING LBA OF THE PARTITION
+    uint32_t sector_count;  // Total number of sectors in partition
+} __attribute__((packed)) mbr_partition_t;
+
+typedef struct {
+    uint8_t         bootstrap[446]; // Bootloader code area
+    mbr_partition_t partitions[4];  // Four partition entries
+    uint16_t        signature;      // 0xAA55
+} __attribute__((packed)) mbr_t;
