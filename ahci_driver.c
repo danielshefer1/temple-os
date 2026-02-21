@@ -59,10 +59,35 @@ uint8_t AhciActivatePorts() {
         if (hba->pi & (1 << i)) {
             hba_port_t* port = &hba->ports[i];
             InitPort(port);
+
             ports_count++;
         }
     }
     return ports_count;
+}
+
+void PrintPortsSig() {
+    for (int i = 0; i < 32; i++) {
+        if (hba->pi & (1 << i)) {
+            hba_port_t* port = &hba->ports[i];
+
+            uint8_t det = port->ssts & 0x0F;
+
+            if (det != 0x03) continue;
+            uint32_t port_sig = port->sig;
+
+            switch (port_sig) {
+                case SATA_SIG_ATAPI:
+                    kprintf("Port %d: Found CD-ROM (SATAPI)\n", i);
+                    break;
+                case SATA_SIG_ATA:
+                    kprintf("Port %d: Found Hard Drive (SATA)\n", i);
+                    break;
+                default:
+                    kprintf("Port %d: Unknown device (Sig: %x)\n", i, port_sig);
+            }
+        }
+    }
 }
 
 void InitPort(hba_port_t* port) {
@@ -138,7 +163,7 @@ int64_t FindFreeSlotInCmdList(hba_port_t* port) {
     return -1; 
 }
 
-void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys) {
+void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys, bool sata) {
     hba_port_t* port = &hba->ports[port_no];
     
 
@@ -166,7 +191,7 @@ void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys) {
     fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
     fis->fis_type = 0x27; 
     fis->c = 1;           
-    fis->command = 0xEC;  // IDENTIFY DEVICE command
+    fis->command = sata ? 0xEC : 0xA1;  // IDENTIFY DEVICE command
     fis->device = 0;      
 
     header->cfl = sizeof(fis_reg_h2d_t) / 4; 
@@ -194,17 +219,17 @@ void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys) {
     kprintf("Identify Complete!\n");
 }
 
-void AhciRead(int port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
+bool AhciCommand(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys, bool write) {
     if (count == 0) {
         kprintf("Count must be greater than 0!\n");
-        return;
+        return false;
     }
 
     volatile hba_port_t* port = &hba->ports[port_no];
     int64_t slot = FindFreeSlotInCmdList(port); 
     if (slot == -1) {
         kprintf("No free command slot found!\n");
-        return;
+        return false;
     }
 
     uint8_t cpu_id = get_cpuid();
@@ -229,7 +254,7 @@ void AhciRead(int port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
     fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
     fis->fis_type = 0x27;
     fis->c = 1;
-    fis->command = 0x25; // READ DMA EXT
+    fis->command = write ? 0x35: 0x25; // READ DMA EXT
 
     fis->lba0 = (uint8_t)lba;
     fis->lba1 = (uint8_t)(lba >> 8);
@@ -245,11 +270,21 @@ void AhciRead(int port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
 
     // 3. Issue and Poll (or wait for ISR)
     header->cfl = 5;
-    header->w = 0;
+    header->w = write ? 1 : 0;
     header->prdtl = 1;
 
     port->ci = (1 << slot);
     while (port->ci & (1 << slot)); 
+
+    return true;
+}
+
+bool AhciRead(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
+    return AhciCommand(port_no, lba, count, buffer_phys, false);
+}
+
+bool AhciWrite(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
+    return AhciCommand(port_no, lba, count, buffer_phys, true);
 }
 
 void PrintAhciModel(uint16_t* buffer) {
@@ -278,10 +313,30 @@ void PrintDriveInfo(uint16_t* buffer) {
 }
 
 void GetAhciDriveInfo() {
+    uint16_t* buffer = (uint16_t*) AddNonCachableKernelPages(1);
+    bool sata;
+
     for (int i = 0; i < 32; i++) {
         if (hba->pi & (1 << i)) {
-            uint16_t* buffer = (uint16_t*) AddNonCachableKernelPages(1);
-            AhciSendIdentify(i, (uint16_t*)KERNEL_VIRT_TO_PHYS(buffer));
+            memset(buffer, 0, 512);
+            uint8_t det = hba->ports[i].ssts & 0x0F;
+
+            if (det != 0x03) continue;
+            uint32_t port_sig = hba->ports[i].sig;
+
+            switch (port_sig) {
+
+            case SATA_SIG_ATA:
+                sata = true;
+                break;
+            case SATA_SIG_ATAPI:
+                sata = false;
+                break;
+            default:
+                kprintf("Port %d: Unknown device (Sig: %x)\n", i, port_sig);
+                continue;
+            }
+            AhciSendIdentify(i, (uint16_t*)KERNEL_VIRT_TO_PHYS((uint64_t)buffer), sata);
 
             uint64_t total_sectors = (uint64_t)buffer[100] | 
                             ((uint64_t)buffer[101] << 16) | 
@@ -310,18 +365,16 @@ void ParseMbr(uint8_t* buffer) {
     for (int i = 0; i < 4; i++) {
         mbr_partition_t* part = &mbr->partitions[i];
 
-        // If the sector count is 0, the partition entry is empty/unused
         if (part->sector_count == 0) continue;
 
         kprintf("Partition #%d:\n", i);
         kprintf("  Bootable: %s\n", (part->attributes & 0x80) ? "Yes" : "No");
-        kprintf("  Type:     %x\n", part->partition_type);
+        kprintf("  Type: %x\n", part->partition_type);
         kprintf("  Start LBA: %d\n", part->lba_start);
-        kprintf("  Sectors:   %d\n", part->sector_count);
+        kprintf("  Sectors: %d\n", part->sector_count);
         
-        // Calculate size in MB for convenience
         uint64_t size_mb = ((uint64_t)part->sector_count * 512) / (1024 * 1024);
-        kprintf("  Size:      %u MB\n", (uint32_t)size_mb);
+        kprintf("  Size: %d MB\n", (uint32_t)size_mb);
     }
 }
 

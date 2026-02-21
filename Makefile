@@ -24,6 +24,8 @@ PAYLOAD = $(BUILD_DIR)/payload.bin
 TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
 LONG_MODE_INIT_BIN = $(BUILD_DIR)/long_mode_init.bin
 
+DATA_IMG = data.img
+
 # ============================================================================
 # Flags
 # ============================================================================
@@ -41,9 +43,10 @@ ASFLAGS_BIN   = -f bin
 
 QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
 			 -drive format=raw,file=$(DISK_IMG) -serial stdio \
+			 -drive index=1,format=raw,file=$(DATA_IMG) \
 			 -device qemu-xhci,id=xhci \
 			 -device usb-kbd,bus=xhci.0 \
-			 -device usb-mouse,bus=xhci.0
+			 -device usb-mouse,bus=xhci.0 
 
 # ============================================================================
 # Source & Object Definitions
@@ -64,11 +67,17 @@ OFFSETS = offsets.inc
 K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
 B_OBJS = $(addprefix $(B_OBJ_DIR)/, $(BOOTSTRAP_C_SRCS:.c=.o) $(BOOTSTRAP_ASM_SRCS:.asm=.o))
 
+
 # ============================================================================
 # Build Rules
 # ============================================================================
-all: $(DISK_IMG)
+all: $(DISK_IMG) $(DATA_IMG)
 
+$(DATA_IMG):
+	@echo "🗄️ Creating persistent data disk..."
+	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
+	@mformat -i $(DATA_IMG) -F ::
+	
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
 	@echo "⚙️  [K64] Compiling $<"
@@ -138,10 +147,10 @@ $(BUILD_DIR) $(K_OBJ_DIR) $(B_OBJ_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
-run: $(DISK_IMG)
+run: $(DISK_IMG) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 
-debug: $(DISK_IMG) $(KERNEL_ELF)
+debug: $(DISK_IMG) $(KERNEL_ELF) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & 
 	gdb $(KERNEL_ELF) \
 		-ex "target remote localhost:1234" \
@@ -151,7 +160,7 @@ debug: $(DISK_IMG) $(KERNEL_ELF)
 		-ex "hbreak kmain" \
 		-ex "continue"
 
-debug-bootstrap: $(DISK_IMG) $(BOOTSTRAP_ELF)
+debug-bootstrap: $(DISK_IMG) $(BOOTSTRAP_ELF) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & \
 	gdb -ex "set architecture i386:x86-64" \
 		-tui \

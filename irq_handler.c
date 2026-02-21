@@ -94,25 +94,26 @@ void KeyboardHandler() {
 void AhciHandler() {
     uint32_t interrupt_status = hba->is;
 
-    // 2. Iterate through all possible 32 ports
+
     for (int i = 0; i < 32; i++) {
         if (interrupt_status & (1 << i)) {
             hba_port_t* port = &hba->ports[i];
 
-            // 3. Read the port-specific interrupt reasons
+
             uint32_t port_is = port->is;
 
-            // 4. Handle the specific event
+
             if (port_is & (1 << 5)) {
-                // Descriptor Processed (Data moved successfully)
+
             }
             if (port_is & (1 << 0)) {
-                // Device to Host FIS received (Commonly means command done)
-                // This is where you'd wake up a thread waiting on port->ci
+
             }
             if (port_is & (1 << 30)) {
-                // Fatal Task File Error - Something went wrong with the SSD!
-                kprintf("AHCI Error on port %d\n", i);
+                kprintf("AHCI Error on port %d, Error Code: %x\n", i, port->is);
+                uint32_t tfd = port->tfd;
+                uint8_t error_reg = (tfd >> 8) & 0xFF;
+                kprintf("TFES detected. Error Register: %x\n", error_reg);
             }
 
             // 5. CLEAR the port interrupts (Write 1s to the bits that were set)
