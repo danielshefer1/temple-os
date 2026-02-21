@@ -194,7 +194,7 @@ dentry_t* VFS_Mount(char* name, char* parent_name, dentry_t* cwd, dentry_t* moun
 dentry_t* CreateDentry(inode_t* inode, char* name)  {
     dentry_t* node = kmalloc(sizeof(dentry_t));
     node->inode = inode;
-    node->ops = &fat32_ops;
+    node->inode->ops = &fat32_ops;
     node->name = name;
     return node;
 }
