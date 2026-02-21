@@ -20,4 +20,4 @@ volatile pci_config_t* ecam_ptr;
 
 volatile hba_mem_t* hba;
 
-volatile uint64_t disk_size;
+block_device_node_t* devices_head;

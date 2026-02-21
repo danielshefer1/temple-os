@@ -219,13 +219,63 @@ void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys, bool sata) {
     kprintf("Identify Complete!\n");
 }
 
-bool AhciCommand(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys, bool write) {
+int64_t AhciFlush(hba_port_t* port) {
+    int64_t slot = FindFreeSlotInCmdList(port);
+
+    if (slot == -1) {
+        kprintf("No free command slot found!\n");
+        return 1;
+    }
+
+    hba_cmd_header_t* header = (hba_cmd_header_t*)((port->clb | ((uint64_t)port->clbu << 32)) + KERNEL_VIRTUAL);
+    header += slot;
+    
+    hba_cmd_table_t* table = (hba_cmd_table_t*)((header->ctba | ((uint64_t)header->ctbau << 32)) + KERNEL_VIRTUAL);
+    memset(table, 0, sizeof(hba_cmd_table_t));
+
+
+    // 4. Build the FIS (The "Question")
+    fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
+    fis->fis_type = 0x27; 
+    fis->c = 1;           
+    fis->command = 0xEA;  
+
+    header->cfl = sizeof(fis_reg_h2d_t) / 4; 
+    header->w = 0;                           
+    header->prdtl = 0;                       
+    header->prdbc = 0;                       
+
+    // 6. Wait for port to be ready
+    while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
+
+    // 7. Issue the command!
+    port->ci = (1 << slot);
+
+    // 8. Wait for completion
+    while (1) {
+        // If slot bit is cleared, command is done
+        if (!(port->ci & (1 << slot))) break;
+        
+        // Check for errors
+        if (port->is & (1 << 30)) { // Task File Error bit
+            kprintf("Disk Error during Flush!\n");
+            return 1;
+        }
+    }
+    kprintf("Flush Complete!\n");
+    return 0;
+}
+
+int64_t AhciFlushWrapper(block_device_t* dev) {
+    return AhciFlush((hba_port_t*)dev->device_specific_ptr);
+}
+
+bool AhciCommand(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer_phys, bool write) {
     if (count == 0) {
         kprintf("Count must be greater than 0!\n");
         return false;
     }
 
-    volatile hba_port_t* port = &hba->ports[port_no];
     int64_t slot = FindFreeSlotInCmdList(port); 
     if (slot == -1) {
         kprintf("No free command slot found!\n");
@@ -279,12 +329,28 @@ bool AhciCommand(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer
     return true;
 }
 
-bool AhciRead(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
-    return AhciCommand(port_no, lba, count, buffer_phys, false);
+bool AhciRead(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
+    return AhciCommand(port, lba, count, buffer_phys, false);
 }
 
-bool AhciWrite(uint64_t port_no, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
-    return AhciCommand(port_no, lba, count, buffer_phys, true);
+int64_t AhciReadWrapper(block_device_t* dev, uint64_t lba, uint32_t count, void* buffer) {
+    hba_port_t* port = (hba_port_t*)dev->device_specific_ptr;
+    bool result = AhciRead(port, lba, count, (uint64_t) buffer);
+
+    if (result) return 0;
+    return 1;
+}
+
+bool AhciWrite(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
+    return AhciCommand(port, lba, count, buffer_phys, true);
+}
+
+int64_t AhciWriteWrapper(block_device_t* dev, uint64_t lba, uint32_t count, void* buffer) {
+    hba_port_t* port = (hba_port_t*)dev->device_specific_ptr;
+    bool result = AhciWrite(port, lba, count, (uint64_t) buffer);
+
+    if (result) return 0;
+    return 1;
 }
 
 void PrintAhciModel(uint16_t* buffer) {
@@ -299,7 +365,6 @@ void PrintAhciModel(uint16_t* buffer) {
 }
 
 void PrintDriveInfo(uint16_t* buffer) {
-    kprintf("Total Size: %d MiB\n", disk_size / MB);
 
     PrintAhciModel(buffer);
     
@@ -315,6 +380,11 @@ void PrintDriveInfo(uint16_t* buffer) {
 void GetAhciDriveInfo() {
     uint16_t* buffer = (uint16_t*) AddNonCachableKernelPages(1);
     bool sata;
+
+    block_device_t* dev;
+    block_device_node_t* dev_node;
+
+    char device_name[] = "sda";
 
     for (int i = 0; i < 32; i++) {
         if (hba->pi & (1 << i)) {
@@ -338,43 +408,56 @@ void GetAhciDriveInfo() {
             }
             AhciSendIdentify(i, (uint16_t*)KERNEL_VIRT_TO_PHYS((uint64_t)buffer), sata);
 
+ 
             uint64_t total_sectors = (uint64_t)buffer[100] | 
                             ((uint64_t)buffer[101] << 16) | 
                             ((uint64_t)buffer[102] << 32) | 
                             ((uint64_t)buffer[103] << 48);
-            uint64_t total_size_mb = (total_sectors * 512) / MB;
-            disk_size = total_sectors * 512;
 
-            PrintDriveInfo(buffer);
+            uint32_t logical_sector_size = 512;
+            uint16_t word106 = buffer[106];
+            
+            if ((word106 & 0xC000) == 0x4000) {
+                if (word106 & (1 << 12)) {
+                    logical_sector_size = (uint32_t)buffer[117] | ((uint32_t)buffer[118] << 16);
+                }
+            }
+
+            dev = (block_device_t*) kmalloc(sizeof(block_device_t));
+            dev_node = (block_device_node_t*) kmalloc(sizeof(block_device_node_t));
+
+            dev->device_specific_ptr = &hba->ports[i];
+            dev->sector_size = logical_sector_size;
+            dev->total_sectors = total_sectors;
+            cpystr(device_name, dev->name);
+            device_name[2]++;
+
+            dev->read = AhciReadWrapper;
+            dev->write = AhciWriteWrapper;
+            dev->flush = AhciFlushWrapper;
+
+            dev_node->value = dev;
+            dev_node->next = devices_head;
+            devices_head = dev_node;
+
+            //PrintDriveInfo(buffer);
         }
     }
 }
 
+void PrintAhciDevices() {
+    block_device_node_t* p = devices_head;
+    block_device_t* dev;
+    uint64_t idx = 0;
 
-void ParseMbr(uint8_t* buffer) {
-    mbr_t* mbr = (mbr_t*)buffer;
+    while (p != NULL) {
+        dev = p->value;
+        kprintf("Device #%d:\n", idx);
+        kprintf("Name: %s\t", dev->name);
+        kprintf("Total Sectors: %d, Sectors Size: %d\n", dev->total_sectors, dev->sector_size);
 
-    // 1. Check Signature first
-    if (mbr->signature != 0xAA55) {
-        kprintf("Error: MBR Signature mismatch (Expected 0xAA55, got 0x%x)\n", mbr->signature);
-        return;
-    }
-
-    kprintf("--- MBR Partition Table ---\n");
-
-    for (int i = 0; i < 4; i++) {
-        mbr_partition_t* part = &mbr->partitions[i];
-
-        if (part->sector_count == 0) continue;
-
-        kprintf("Partition #%d:\n", i);
-        kprintf("  Bootable: %s\n", (part->attributes & 0x80) ? "Yes" : "No");
-        kprintf("  Type: %x\n", part->partition_type);
-        kprintf("  Start LBA: %d\n", part->lba_start);
-        kprintf("  Sectors: %d\n", part->sector_count);
-        
-        uint64_t size_mb = ((uint64_t)part->sector_count * 512) / (1024 * 1024);
-        kprintf("  Size: %d MB\n", (uint32_t)size_mb);
+        p = p->next;
+        idx++;
     }
 }
 
@@ -385,4 +468,5 @@ void AhciInit() {
     AhciActivatePorts();
 
     hba->ghc |= (1 << 1);
+    GetAhciDriveInfo();
 }

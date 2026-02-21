@@ -217,4 +217,6 @@
 
 #define SATA_SIG_ATA    0x00000101 
 #define SATA_SIG_ATAPI  0xEB140101
+
+#define MAX_PORTS 32
 // End AHCI Definitions

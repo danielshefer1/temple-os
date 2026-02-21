@@ -16,6 +16,7 @@
 #include "apic.h"
 #include "ap_start.h"
 #include "pci.h"
+#include "ahci_driver.h"
 
 void start();
 void end();

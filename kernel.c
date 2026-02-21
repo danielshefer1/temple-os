@@ -2,9 +2,7 @@
 
 void kmain() {
     start();
-
-    AhciInit();
     
-    GetAhciDriveInfo();
+    PrintAhciDevices();
     end();
 }

@@ -7,9 +7,10 @@ void ap_kmain() {
     EnableLapic();
     InitTimer(TIMER_TICK_PER_MS);
     enable_sse();
-    cpus_active++;
 
     kprintf("Core %d woke up!\n", cpu_id);
+    cpus_active++;
+
     CliHelper();
     while (true) HltHelper();
 }

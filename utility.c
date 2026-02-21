@@ -21,9 +21,10 @@ void start() {
     InitKeyboard();
     InitVFS();
 
-    BootCores();
-
     PciEnumeration();
+    AhciInit();
+
+    BootCores();
 
     sleep(100); // Wait for APs to finish initializing
 

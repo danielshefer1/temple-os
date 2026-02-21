@@ -55,7 +55,7 @@ KERNEL_C_SRCS = E820.c vga.c kernel.c slab_alloc.c paging.c math.c buddy_alloc.c
                 set_gdt.c isr_handler.c set_idt.c timer.c keyboard.c global.c \
                 string.c syscall_handler.c vfs.c dcache.c acpi.c \
                 memory.c apic.c irq_handler.c utility.c ap_start.c ap_main.c pci.c \
-				ahci_driver.c
+				ahci_driver.c mbr.c
 KERNEL_ASM_SRCS = helpers.asm trampoline_wrapper.asm
 
 BOOTSTRAP_C_SRCS = bootstrapper.c paging_bootstrap.c
