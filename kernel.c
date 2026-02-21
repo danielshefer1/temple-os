@@ -3,6 +3,7 @@
 void kmain() {
     start();
     
-    PrintAhciDevices();
+    ParseDevicesMbrs();   
+    PrintParitions();
     end();
 }

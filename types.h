@@ -182,15 +182,15 @@ typedef struct inode_t {
     uint64_t owner_id;
     uint64_t group_id;
     uint64_t link_count;
-    mutex_t mutex;
+    vfs_ops_t* ops;
+    void* driver_data;
 } inode_t;
 
 typedef struct dentry_t {
     char* name;
     char* syslink_name;
     inode_t* inode;
-    vfs_ops_t* ops;
-    void* driver_data;
+    mutex_t mutex;
 
     struct dentry_t* parent;
     struct dentry_t* children;
@@ -454,13 +454,13 @@ typedef struct {
 } __attribute__((packed)) hba_cmd_header_t;
 
 typedef struct {
-    uint8_t  attributes;    // 0x80 = bootable, 0x00 = non-bootable
-    uint8_t  chs_start[3];  // Old CHS address (ignore this)
-    uint8_t  partition_type; // 0x07 = NTFS, 0x0B = FAT32, 0x83 = Linux, etc.
-    uint8_t  chs_end[3];    // Old CHS address (ignore this)
-    uint32_t lba_start;     // THE STARTING LBA OF THE PARTITION
-    uint32_t sector_count;  // Total number of sectors in partition
-} __attribute__((packed)) mbr_partition_t;
+    uint8_t  attributes;    
+    uint8_t  chs_start[3];  
+    uint8_t  partition_type; 
+    uint8_t  chs_end[3];    
+    uint32_t lba_start;     
+    uint32_t sector_count;  
+} mbr_partition_t;
 
 typedef struct {
     uint8_t         bootstrap[446]; // Bootloader code area
@@ -491,3 +491,8 @@ typedef struct block_device_node {
     block_device_t* value;
     struct block_device_node* next;
 } block_device_node_t;
+
+typedef struct partition_device_node {
+    partition_device_t* value;
+    struct partition_device_node* next;
+} partition_device_node_t;

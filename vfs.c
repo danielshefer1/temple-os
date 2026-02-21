@@ -15,8 +15,7 @@ void InitVFS() {
     root_dentry = (dentry_t*) kmalloc(sizeof(dentry_t));
     root_inode = (inode_t*) kmalloc(sizeof(inode_t));
     root_dentry->inode = root_inode;
-    *root_inode = (inode_t) {VFS_DIRECTORY, 0, 0, 0, 0, 1, (mutex_t){false, 0, 0}};
-    root_dentry->ops = &fat32_ops;
+    *root_inode = (inode_t) {VFS_DIRECTORY, 0, 0, 0, 0, 1, 0};
 
     root_dentry->name = "/";
     root_dentry->parent = NULL;
@@ -169,7 +168,6 @@ dentry_t* VFS_CreateDentry(char* name, char* parent_name, uint64_t type, dentry_
     *new_inode = (inode_t) {
         .owner_id = 0, // Temp, needs to match the proccess calling
         .group_id = 0, // Same here
-        .mutex = (mutex_t) {false, 0, 0},
         .size = 0,
         .permissions = 0, // Temp, needs to match the proccess calling
         .type = type,

@@ -414,6 +414,8 @@ void GetAhciDriveInfo() {
                             ((uint64_t)buffer[102] << 32) | 
                             ((uint64_t)buffer[103] << 48);
 
+            if (total_sectors == 0) continue;
+
             uint32_t logical_sector_size = 512;
             uint16_t word106 = buffer[106];
             

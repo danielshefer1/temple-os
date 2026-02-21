@@ -17,5 +17,6 @@
 #include "utility.h"
 #include "pci.h"
 #include "ahci_driver.h"
+#include "mbr.h"
 
 void kmain();

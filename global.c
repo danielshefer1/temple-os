@@ -21,3 +21,4 @@ volatile pci_config_t* ecam_ptr;
 volatile hba_mem_t* hba;
 
 block_device_node_t* devices_head;
+partition_device_node_t* parts_head;

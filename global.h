@@ -19,3 +19,4 @@ extern volatile uint64_t cpus_active;
 extern volatile pci_config_t* ecam_ptr;
 extern volatile hba_mem_t* hba;
 extern block_device_node_t* devices_head;
+extern partition_device_node_t* parts_head;
