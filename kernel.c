@@ -4,6 +4,7 @@ void kmain() {
     start();
     
     ParseDevicesMbrs();   
-    PrintParitions();
+    InsertDisksAndPartsInVFS();
+    PrintVFS_Root();
     end();
 }

@@ -148,7 +148,7 @@ uint64_t GetBestCacheIndex(uint64_t size) {
     for (uint64_t i = 0; i < num_cache; i++) {
         if (caches[i].size >= size) {
             uint64_t waste = caches[i].size - size;
-            
+            if (waste == 0) return i;
             // Found a better fit (smaller waste)
             if (waste < min_waste) {
                 min_waste = waste;

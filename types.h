@@ -184,6 +184,8 @@ typedef struct inode_t {
     uint64_t link_count;
     vfs_ops_t* ops;
     void* driver_data;
+    mutex_t mutex;
+
 } inode_t;
 
 typedef struct dentry_t {

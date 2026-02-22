@@ -71,6 +71,12 @@ void PrintVFS_Dentry(dentry_t* dentry, int32_t tab_number) {
         case SYS_LINK:
             kprintf("path - %s\n", dentry->syslink_name);
             break;
+        case DISK:
+            kprintf("Disk Name - %s\n", dentry->name);
+            break;
+        case VFS_PARTITION:
+            kprintf("Partition Name - %s\n", dentry->name);
+            break;
         default:
             kprintf("Unkown Dentry Type, type - %d\n", dentry->inode->type);
     } 
@@ -101,6 +107,12 @@ void GetTypeString(uint64_t type_idx, char* type) {
             break;
         case SYS_LINK:
             cpystr("S-LINK", type);
+            break;
+        case DISK:
+            cpystr("DISK", type);
+            break;
+        case VFS_PARTITION:
+            cpystr("PART", type);
             break;
         default:
             cpystr("UK", type);
@@ -195,7 +207,9 @@ dentry_t* CreateDentry(inode_t* inode, char* name)  {
     dentry_t* node = kmalloc(sizeof(dentry_t));
     node->inode = inode;
     node->inode->ops = &fat32_ops;
-    node->name = name;
+    uint64_t len = strlen(name) + 1;
+    node->name = kmalloc(len);
+    memcpy(node->name, name, len);
     return node;
 }
 
@@ -212,14 +226,40 @@ void AddDentryToParent(dentry_t* parent, dentry_t* node) {
         return;
     }
 
+    int64_t cmp_first = strcmp(node_name, p->name);
+
+    if (cmp_first == 0) {
+        kfree(node->inode, sizeof(inode_t));
+        kfree(node, sizeof(dentry_t));
+        return;
+    }
+
+    if (strcmp(node_name, p->name) < 0) {
+        node->next = p;
+        parent->children = node;
+        return;
+    }
+
     while (p->next != NULL) {
-        if (strcmp(node_name, p->next->name) < 0) {
+        int64_t cmp = strcmp(node_name, p->name);
+
+        if (cmp == 0) {
+            kfree(node->inode, sizeof(inode_t));
+            kfree(node, sizeof(dentry_t));
+            return;    
+        }
+        else if (cmp < 0) {
             node->next = p->next;
             p->next = node;
-    
+
             return;
-        }
+        } 
         p = p->next;
+    }
+    if (strcmp(node->name, p->name) == 0) {
+        kfree(node->inode, sizeof(inode_t));
+        kfree(node, sizeof(dentry_t));
+        return;  
     }
     p->next = node;
     node->next = NULL;
