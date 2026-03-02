@@ -18,5 +18,6 @@
 #include "pci.h"
 #include "ahci_driver.h"
 #include "mbr.h"
+#include "fat32_driver.h"
 
 void kmain();

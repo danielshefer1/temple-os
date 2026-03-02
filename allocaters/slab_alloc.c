@@ -205,17 +205,32 @@ slab_t* DeleteSlab(slab_t* head, slab_t* target) {
 
 void kfree(void* ptr, uint64_t size) {
     
-    uint64_t slot_index, bitmap_index, bit_pos;
-    memset(ptr, SLAB_GARBAGE_BYTE, size);
+    uint64_t slot_index, bitmap_index, bit_pos, idx;
+    slab_t* bup_slab, *p;
 
-    uint64_t idx = GetBestCacheIndex(size);
+    if (size == 0) {
+        idx = SLAB_WOS_CODE;
+        for (uint64_t i = 0; i < num_cache; i++) {
+            bup_slab = SearchSlab(caches[i].full_slabs, caches[i].partial_slabs, ptr, i);
+            if (bup_slab != NULL) break;
+        }
+        return;
+    }
+    else {
+        memset(ptr, SLAB_GARBAGE_BYTE, size);
+        idx = GetBestCacheIndex(size);
+    }
+
     if (idx == 0xFFFFFFF) {
         return;
     } 
-
-    cache_t* cache = &caches[idx];
-
-    slab_t* p = SearchSlab(cache->full_slabs, cache->partial_slabs, ptr, idx);
+    if (idx == SLAB_WOS_CODE) {
+        p = bup_slab;
+    }
+    else {
+        cache_t* cache = &caches[idx];
+        p = SearchSlab(cache->full_slabs, cache->partial_slabs, ptr, idx);
+    }
     
     if (p == NULL) {
         return;

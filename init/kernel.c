@@ -5,6 +5,8 @@ void kmain() {
     
     ParseDevicesMbrs();   
     InsertDisksAndPartsInVFS();
-    PrintVFS_Root();
+
+    dentry_t* root = ProbeForData();
+    //if (root != NULL) PrintVFS_Dentry(root, 0);
     end();
 }

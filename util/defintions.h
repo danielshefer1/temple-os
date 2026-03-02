@@ -3,6 +3,7 @@
 
 // Slab Definitions
 #define SLAB_GARBAGE_BYTE 0xAC
+#define SLAB_WOS_CODE 0xFFFFFFFE
 // End Slab Definitions
 
 // Buddy Definitions
@@ -222,3 +223,8 @@
 
 #define MAX_PORTS 32
 // End AHCI Definitions
+
+// FAT32 Definitions
+#define ROOT_LABEL "MYOS_ROOT"
+#define ROOT_LABEL_LENGTH 9
+// End FAT32 Definitions

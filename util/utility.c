@@ -19,7 +19,7 @@ void start() {
     InitTimer(TIMER_TICK_PER_MS);
 
     InitKeyboard();
-    InitVFS();
+    //InitVFS();
 
     PciEnumeration();
     AhciInit();

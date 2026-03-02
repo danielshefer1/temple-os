@@ -1,5 +1,4 @@
 #include "bootstrap.h"
-#include "types.h"
 
 void bootstrap_kmain() {
     InitPaging();

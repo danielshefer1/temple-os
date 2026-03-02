@@ -31,7 +31,9 @@ DATA_IMG = data.img
 # ============================================================================
 # -mno-red-zone is mandatory for 64-bit kernels to prevent stack corruption
 COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
-K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone
+INCDIRS = -I ./allocaters -I ./boot -I ./drivers -I ./file_system -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user -I ./util -I ./wrappers
+
+K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone $(INCDIRS)
 B_CFLAGS = $(COMMON_CFLAGS) -m32
 
 K_LDFLAGS = -m elf_x86_64 -T linker64.ld
@@ -51,15 +53,15 @@ QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machin
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = E820.c vga.c kernel.c slab_alloc.c paging.c math.c buddy_alloc.c \
-                set_gdt.c isr_handler.c set_idt.c timer.c keyboard.c global.c \
-                string.c syscall_handler.c vfs.c dcache.c acpi.c \
-                memory.c apic.c irq_handler.c utility.c ap_start.c ap_main.c pci.c \
-				ahci_driver.c mbr.c
-KERNEL_ASM_SRCS = helpers.asm trampoline_wrapper.asm
+KERNEL_C_SRCS = init/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
+                tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c wrappers/keyboard.c util/global.c \
+                util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c init/acpi.c \
+                util/memory.c init/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c init/pci.c \
+				drivers/ahci_driver.c file_system/mbr.c file_system/fat32_driver.c
+KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm
 
-BOOTSTRAP_C_SRCS = bootstrapper.c paging_bootstrap.c
-BOOTSTRAP_ASM_SRCS = stage4.asm
+BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c
+BOOTSTRAP_ASM_SRCS = boot/stage4.asm
 
 OFFSETS = offsets.inc
 
@@ -76,10 +78,13 @@ all: $(DISK_IMG) $(DATA_IMG)
 $(DATA_IMG):
 	@echo "🗄️ Creating persistent data disk..."
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
-	@mformat -i $(DATA_IMG) -F ::
+	@printf "o\nn\np\n1\n2048\n\nt\nc\nw\n" | fdisk $(DATA_IMG)	
+	@mformat -i $(DATA_IMG)@@$(PART_OFFSET) -F -v "MYOS_ROOT" ::
+	@echo "✅ $(DATA_IMG) is ready."
 	
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
+	@mkdir -p $(dir $@)
 	@echo "⚙️  [K64] Compiling $<"
 	@$(CC64) $(K_CFLAGS) -MMD -MP -c $< -o $@
 
@@ -93,6 +98,7 @@ $(KERNEL_ELF): $(K_OBJS)
 
 # --- Bootstrap Rules ---
 $(B_OBJ_DIR)/%.o: %.c | $(B_OBJ_DIR)
+	@mkdir -p $(dir $@)
 	@echo "⚙️  [B32] Compiling $<"
 	@$(CC32) $(B_CFLAGS) -MMD -MP -c $< -o $@
 
@@ -108,17 +114,18 @@ $(OFFSETS) : $(KERNEL_ELF) $(B_OBJ_DIR)
 	@ offsets.bash
 
 $(TRAMPOLINE_BIN) : $(BUILD_DIR)
-	@$(AS) $(ASFLAGS_BIN) trampoline.asm -o $(TRAMPOLINE_BIN)
+	@mkdir -p $(dir $(TRAMPOLINE_BIN))
+	@$(AS) $(ASFLAGS_BIN) multi/trampoline.asm -o $(TRAMPOLINE_BIN)
 
 $(LONG_MODE_INIT_BIN) : $(BUILD_DIR)
-	@$(AS) $(ASFLAGS_BIN) long_mode_init.asm -o $(LONG_MODE_INIT_BIN)
+	@$(AS) $(ASFLAGS_BIN) boot/long_mode_init.asm -o $(LONG_MODE_INIT_BIN)
 
 # --- Image Generation ---
-$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot.asm stage2.asm stage3.asm trampoline.asm | $(BUILD_DIR)
+$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/boot.asm boot/stage2.asm boot/stage3.asm multi/trampoline.asm | $(BUILD_DIR)
 	@echo "📦 Constructing Disk Image"
-	@$(AS) $(ASFLAGS_BIN) boot.asm -o $(BUILD_DIR)/boot.bin
-	@$(AS) $(ASFLAGS_BIN) stage2.asm -o $(BUILD_DIR)/stage2.bin
-	@$(AS) $(ASFLAGS_BIN) stage3.asm -o $(BUILD_DIR)/stage3.bin
+	@$(AS) $(ASFLAGS_BIN) boot/boot.asm -o $(BUILD_DIR)/boot.bin
+	@$(AS) $(ASFLAGS_BIN) boot/stage2.asm -o $(BUILD_DIR)/stage2.bin
+	@$(AS) $(ASFLAGS_BIN) boot/stage3.asm -o $(BUILD_DIR)/stage3.bin
 	
 	@$(OBJCOPY64) -O binary -R .bss  $(KERNEL_ELF) $(BUILD_DIR)/kernel.bin
 	@$(OBJCOPY32) -O binary \

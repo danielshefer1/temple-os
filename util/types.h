@@ -169,11 +169,43 @@ typedef struct mutex_t {
 
 struct dentry_t;
 
-typedef struct vfs_ops_t {
-    uint64_t (*read)(struct dentry_t* node, uint64_t offset, uint64_t size, char* buffer);
-    uint64_t (*write)(struct dentry_t* node, uint64_t offset, uint64_t size, char* buffer);
-    struct dentry_t* (*finddir)(struct dentry_t* node, char* name);
-} vfs_ops_t;
+typedef struct inode_ops_t {
+    int64_t (*read)(struct inode_t* inode, uint64_t offset, uint64_t size, char* buffer);
+    int64_t (*write)(struct inode_t* inode, uint64_t offset, uint64_t size, char* buffer);
+    
+    struct inode_t* (*lookup)(struct inode_t* parent_dir, char* name);
+    int64_t (*readdir)(struct inode_t* inode, uint64_t index, struct dentry_t* out);
+} inode_ops_t;
+
+typedef struct fat32_internal_info_t {
+    struct block_device_t* bdev;
+
+    uint32_t bytes_per_sector;    
+    uint32_t sectors_per_cluster;   
+    uint32_t reserved_sectors;      
+
+   
+    uint32_t fat_start_lba;         
+    uint32_t number_of_fats;        
+    uint32_t fat_size;             
+    
+    uint32_t data_start_lba;        
+    uint32_t root_cluster;          
+    
+    uint32_t total_clusters;
+    uint32_t free_clusters;
+    uint32_t last_alloc_cluster;    
+} fat32_internal_info_t;
+
+typedef struct superblock_t {
+    uint64_t magic;
+    uint64_t block_size;
+    
+    void* fs_info;             
+    struct superblock_ops_t* ops;
+    
+    struct inode_t* root_inode; 
+} superblock_t;
 
 typedef struct inode_t {
     uint64_t type;
@@ -182,23 +214,33 @@ typedef struct inode_t {
     uint64_t owner_id;
     uint64_t group_id;
     uint64_t link_count;
-    vfs_ops_t* ops;
+    inode_ops_t* ops;
     void* driver_data;
+    char* syslink_name;
     mutex_t mutex;
 
 } inode_t;
 
+typedef enum {
+    MOUNT_NONE = 0,
+    MOUNT_BIND,       
+    MOUNT_FILESYSTEM  
+} mount_type_t;
+
 typedef struct dentry_t {
-    char* name;
-    char* syslink_name;
-    inode_t* inode;
     mutex_t mutex;
 
+    mount_type_t mount_type;
+    union {
+        struct dentry_t* target_dentry;
+        inode_t* target_inode;
+    } mount_data;
+
+    char* name;
+    inode_t* inode;
     struct dentry_t* parent;
     struct dentry_t* children;
     struct dentry_t* next;
-
-    struct dentry_t* mount_root;
 } dentry_t;
 
 
@@ -216,7 +258,7 @@ typedef struct rsdp_t {
     uint32_t rsdt_address;
 
     uint32_t length;
-    uint64_t xsdt_address;     // <--- This is the one you want for 64-bit
+    uint64_t xsdt_address;     
     uint8_t extended_checksum;
     uint8_t reserved[3];
 
@@ -498,3 +540,36 @@ typedef struct partition_device_node {
     partition_device_t* value;
     struct partition_device_node* next;
 } partition_device_node_t;
+
+typedef struct {
+    // Small BPB FAT16/FAT32
+    uint8_t jmp[3];             
+    char oem_id[8];          
+    uint16_t bytes_per_sector;   
+    uint8_t sectors_per_cluster;
+    uint16_t reserved_sectors;   
+    uint8_t fat_count;          
+    uint16_t root_entries;       
+    uint16_t total_sectors_16;   
+    uint8_t media_type;         
+    uint16_t fat_size_16;       
+    uint16_t sectors_per_track;  
+    uint16_t head_count;         
+    uint32_t hidden_sectors;     
+    uint32_t total_sectors_32;   
+
+    // Extended Section
+    uint32_t fat_size_32;        
+    uint16_t ext_flags;          
+    uint16_t fs_version;         
+    uint32_t root_cluster;       
+    uint16_t fs_info;            
+    uint16_t backup_boot_sector; 
+    uint8_t reserved[12];       
+    uint8_t drive_number;       
+    uint8_t reserved1;          
+    uint8_t boot_signature;     
+    uint32_t volume_id;          
+    char volume_label[11];   
+    char system_id[8];       
+} __attribute__((packed)) fat32_bpb_t;
