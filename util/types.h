@@ -231,10 +231,7 @@ typedef struct dentry_t {
     mutex_t mutex;
 
     mount_type_t mount_type;
-    union {
-        struct dentry_t* target_dentry;
-        inode_t* target_inode;
-    } mount_data;
+    struct dentry_t* mount_dentry;
 
     char* name;
     inode_t* inode;
