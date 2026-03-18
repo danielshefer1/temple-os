@@ -6,9 +6,11 @@ void start() {
     InitIDT();
     enable_sse();
 
-    InitSlabAlloc(PageDirAddrV() + 7 * PAGE_SIZE);
+    uint64_t kernel_size = (uint64_t)&__total_pages;
+    InitSlabAlloc(KERNEL_VIRTUAL + kernel_size*PAGE_SIZE);
     e820_info_t* e820_info = init_E820(E820_ADDRESS);
-    InitBuddyAlloc(e820_info);
+    InitUserBuddyAlloc(e820_info);
+    InitKernelBuddyAlloc(KERNEL_VIRT_TO_PHYS(GetCurrPrimitveAddr()), GB);
 
     InitConsoleBuffer();
 

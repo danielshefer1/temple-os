@@ -9,15 +9,11 @@ uint64_t pow(uint64_t base, uint64_t exp) {
 }
 
 uint64_t BiggestBit(uint64_t num) {
-    if (num == 0) return 0;
-    uint64_t result = 0;
-    for (uint64_t i = 63; i > 0; i--) {
-        if (num & (1ULL << i)) {
-            result = i;
-            break;
-        }
-    }
-    return result;
+    return 63 - __builtin_clzll(num);
+}
+
+uint64_t SmallestBit(uint64_t num) {
+    return __builtin_ctzll(num);
 }
 
 bool IsPowerOfTwo(uint64_t num) {

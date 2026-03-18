@@ -9,6 +9,7 @@
 #include "vga.h"
 #include "slab_alloc.h"
 #include "string.h"
+#include "buddy_alloc.h"
 
 void AhciInit();
 void GetAhciDriveInfo();

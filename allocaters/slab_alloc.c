@@ -18,7 +18,7 @@ void InitSlabAlloc(uint64_t start) {
 
     for (uint64_t i = 0; i < num_cache; i++) {
         caches[i].size = sizes[i];
-        start_addr = AddKernelPages(slab_sizes[i]);
+        start_addr = AddKernelPagesPrimitive(slab_sizes[i]);
         caches[i].empty_slabs = (slab_t*) curr_addr;
         caches[i].empty_slabs->start = (void*) start_addr;
         caches[i].empty_slabs->num_slots = slab_sizes[i] * PAGE_SIZE / sizes[i];
@@ -96,10 +96,8 @@ void AddSlabW(cache_t* cache, uint64_t cache_idx) {
     uint64_t bitmap_len = total_slots / 64;
     if (total_slots % 64 != 0) bitmap_len++; 
 
-    // 2. Allocate the metadata structure
     slab_t* new_slab = AddSlab(bitmap_len);
     
-    // 3. Initialize metadata
     new_slab->start = slab_addr;
     new_slab->num_slots = total_slots;
     new_slab->free_count = total_slots;

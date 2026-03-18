@@ -8,7 +8,7 @@ page_entry_t kernel_pd[512] __attribute__((aligned(4096)));
 page_entry_t identity_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t identity_pd[512] __attribute__((aligned(4096)));
 
-static uint64_t curr_addr, curr_addr;
+static uint64_t curr_addr_prim;
 
 void InitPaging() {
     uint64_t kernel_size = (uint64_t)&__kernel_size_bytes;
@@ -17,7 +17,7 @@ void InitPaging() {
     uint64_t kernel_big_pages = (kernel_size + TABLE_SIZE - 1) / TABLE_SIZE;
     uint64_t text_big_pages = (text_size + TABLE_SIZE - 1) / TABLE_SIZE;
 
-    curr_addr = KERNEL_VIRTUAL + kernel_size;
+    curr_addr_prim = KERNEL_VIRTUAL + (((kernel_size + PAGE_SIZE - 1) / PAGE_SIZE) + 8)*PAGE_SIZE;
 
     uint64_t kernel_pml4_idx = PML4_IDX(KERNEL_VIRTUAL);
     uint64_t kernel_pdpt_idx = PDPT_IDX(KERNEL_VIRTUAL);
@@ -70,6 +70,8 @@ void InitPaging() {
     switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS((uint64_t)pml4));
 }
 
+uint64_t GetCurrPrimitveAddr() { return curr_addr_prim;}
+
 uint64_t PageDirAddrV() {
     return (uint64_t)pml4;
 }
@@ -111,7 +113,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
             return;
         }
         if (pt_idx != 0 && PT_IDX(phy) != 0) {
-            kprintf("Tried to map a big page but not 2MB aligned!");
+            //kprintf("Tried to map a big page but not 2MB aligned!");
             return;
         }
         pd[pd_idx].present = 1;
@@ -164,7 +166,7 @@ void FillPageDirectoryGeneral(void* virt, void* phy, uint64_t size, uint64_t fla
         num_small_pages = (remaining_size + PAGE_SIZE - 1) / PAGE_SIZE;
     }
     if ((uint64_t)PT_IDX(addr) != 0 || (uint64_t)PT_IDX(start_addr) != 0) {
-        kprintf("Warning: Address is not 2MB aligned, will only be using small pages!\n");
+        //kprintf("Warning: Address is not 2MB aligned, will only be using small pages!\n");
         num_big_pages = 0;
         num_small_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
     }
@@ -232,28 +234,64 @@ void RemovePages(uint64_t addr, uint64_t num_pages, bool big_pages) {
     }
 }
 
-uint64_t AddKernelPages(uint64_t num_pages) {
-
-
-    uint64_t start_addr = curr_addr;
+uint64_t AddKernelPagesPrimitive(uint64_t num_pages) {
+    uint64_t start_addr = curr_addr_prim;
 
     for (uint64_t i = 0; i < num_pages; i++) {
-        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, false);
+        map_page_to_virt(curr_addr_prim, KERNEL_VIRT_TO_PHYS(curr_addr_prim), RW_KERNEL, false);
+        curr_addr_prim += PAGE_SIZE;
+    }
+    return start_addr;
+}
+
+uint64_t AddKernelPages(uint64_t num_pages) {
+    uint64_t start_addr = ((uint64_t)RequestBuddy(num_pages * PAGE_SIZE, false)) + KERNEL_VIRTUAL, curr_addr = start_addr;
+    uint64_t pages_in_big = 2*MB/PAGE_SIZE;
+
+    while (num_pages >= 2*MB/PAGE_SIZE) {
+        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, true);
+        num_pages -= 2*MB/PAGE_SIZE;
+        curr_addr += 2*MB;
+    }
+    while (num_pages > 0) {
+        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, true);
+        num_pages--;
         curr_addr += PAGE_SIZE;
     }
     return start_addr;
 }
 
 uint64_t AddNonCachableKernelPages(uint64_t num_pages) {
+    uint64_t start_addr = ((uint64_t)RequestBuddy(num_pages * PAGE_SIZE, false)) + KERNEL_VIRTUAL, curr_addr = start_addr;
+    uint64_t pages_in_big = 2*MB/PAGE_SIZE;
 
-
-    uint64_t start_addr = curr_addr;
-
-    for (uint64_t i = 0; i < num_pages; i++) {
-        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_MMIO, false);
+    while (num_pages >= pages_in_big) {
+        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_MMIO, true);
+        num_pages -= pages_in_big;
+        curr_addr += 2*MB;
+    }
+    while (num_pages > 0) {
+        map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_MMIO, true);
+        num_pages--;
         curr_addr += PAGE_SIZE;
     }
     return start_addr;
+}
+
+void RemoveKernelPages(uint64_t start, uint64_t num_pages) {
+    uint64_t curr_addr = start, pages_in_big = 2*MB/PAGE_SIZE;
+
+    FreeBuddy((void*) start, false);
+    while (num_pages >= pages_in_big) {
+        RemovePage(curr_addr, true);
+        num_pages -= pages_in_big;
+        curr_addr += 2*MB;
+    }
+    while (num_pages > 0) {
+        RemovePage(curr_addr, false);
+        num_pages--;
+        curr_addr += PAGE_SIZE;
+    }
 }
 
 uint64_t AddStack() {

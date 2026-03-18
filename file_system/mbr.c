@@ -49,6 +49,7 @@ void ParseDevicesMbrs() {
         p = p->next;
         memset(buffer, 0, 512);
     }
+    RemoveKernelPages((uint64_t)buffer, 1);
 }
 
 void InsertDisksAndPartsInVFS() {

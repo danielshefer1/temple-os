@@ -445,6 +445,7 @@ void GetAhciDriveInfo() {
             //PrintDriveInfo(buffer);
         }
     }
+    RemoveKernelPages((uint64_t)buffer, 1);
 }
 
 void PrintAhciDevices() {

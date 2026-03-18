@@ -222,9 +222,14 @@
 #define SATA_SIG_ATAPI  0xEB140101
 
 #define MAX_PORTS 32
+#define SECTOR_SIZE 512
 // End AHCI Definitions
 
 // FAT32 Definitions
 #define ROOT_LABEL "MYOS_ROOT"
 #define ROOT_LABEL_LENGTH 9
+
+#define FAT32_BAD     0x0FFFFFF7  
+#define FAT32_FREE    0x00000000 
+
 // End FAT32 Definitions

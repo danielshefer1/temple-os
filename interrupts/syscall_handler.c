@@ -47,13 +47,13 @@ int32_t ReadHandler(interrupt_frame_t* frame) {
 int32_t MmapHandler(interrupt_frame_t* frame) {
 
     int32_t size = frame->rbx;
-    void* ret = RequestBuddy(size);
+    void* ret = RequestBuddy(size, true);
     return (int32_t) ret;
 }
 
 int32_t MunmapHandler(interrupt_frame_t* frame) {
     int32_t addr = frame->rbx;
-    FreeBuddy((void*) addr);
+    FreeBuddy((void*) addr, true);
     return 1;
 }
 
