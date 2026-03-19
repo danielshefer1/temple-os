@@ -258,11 +258,6 @@ int64_t Fat32_LookUp(fat32_internal_info_t* vol, uint32_t dir_cluster, dentry_t*
 }
 
 void PrintDirEntry(fat32_dir_entry_t* entry, char* name) {
-    char ext[4] = {0};
-    memcpy(ext,  entry->ext,  3);
-
-    for (int i = 2; i >= 0 && ext[i]  == ' '; i--) ext[i]  = '\0';
-
-    kprintf("Name: %s.%s\n", name, ext);
+    kprintf("Name: %s\n", name);
     kprintf("Attr: %x, File Size: %x\n", entry->attributes, entry->file_size);
 }
