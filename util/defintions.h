@@ -87,6 +87,7 @@
 #define RED_COLOR 0x04
 #define CURSOR_START 14
 #define CURSOR_END 15
+#define SPACE_CHAR 0x20
 // End VGA Definitions
 
 // GDT Definitions
@@ -178,7 +179,6 @@
 #define DISK 4
 #define VFS_PARTITION 5
 
-#define MAX_FILE_NAME_SIZE 256
 // End VFS Definitons
 
 // Dcache Definitions
@@ -232,4 +232,15 @@
 #define FAT32_BAD     0x0FFFFFF7  
 #define FAT32_FREE    0x00000000 
 
+#define MAX_FILENAME_FAT32 256
+
+#define END_ENTRY 0x00
+#define DELETED_ENTRY 0xE5
+
+
+#define LFN_ATTR 0xF
+#define OS_ATTR 0x4
+#define VOLUME_LABEL_ATTR 0x8
+
+#define LAST_LFN 0x40
 // End FAT32 Definitions

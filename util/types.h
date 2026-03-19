@@ -501,7 +501,7 @@ typedef struct inode_t {
 
 typedef struct {
     uint32_t first_cluster;   
-    fat32_internal_info_t* vol;  
+    struct fat32_internal_info_t* vol;  
 } fat32_inode_data_t;
 
 typedef enum {
