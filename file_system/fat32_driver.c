@@ -172,7 +172,7 @@ void CollectLfnFragment(fat32_lfn_entry_t* lfn, char* out_buf) {
 int64_t ParseLFNs(fat32_lfn_entry_t* entry, char* out) {
 
     int64_t lfn_i = entry->sequence_num;
-    if (lfn_i & LAST_LFN == LAST_LFN) lfn_i = lfn_i & ~(LAST_LFN);
+    if ((lfn_i & LAST_LFN) == LAST_LFN) lfn_i = lfn_i & ~(LAST_LFN);
     else return -3;
     int64_t i_83 = lfn_i;
 
