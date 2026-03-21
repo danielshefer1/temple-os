@@ -11,4 +11,3 @@
 
 void ParseDevicesMbrs();
 void PrintParitions();
-void InsertDisksAndPartsInVFS();

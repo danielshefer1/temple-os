@@ -1,14 +1,13 @@
 #include "fat32_driver.h"
 
-static uint32_t bytes_per_cluster;
 
 bool fat32_is_eoc(uint32_t val) {return val >= 0x0FFFFFF8;}
 bool fat32_is_free(uint32_t val) {return val == 0x00000000;}
 bool fat32_is_bad(uint32_t val) {return val == 0x0FFFFFF7;}
 bool fat32_is_valid(uint32_t val) {return val >= 0x00000002 && val <= 0x0FFFFFEF;}
 
-void CopyBPB_IntoInfo(fat32_internal_info_t* vol, fat32_bpb_t* bpb, partition_device_t* part) {
-    vol->bdev = part->physical_device;
+void CopyBPB_IntoInfo(fat32_internal_info_t* vol, fat32_bpb_t* bpb, superblock_t* sb) {
+    vol->bdev = sb->bdev;
     vol->bytes_per_sector = bpb->bytes_per_sector;
     vol->sectors_per_cluster = bpb->sectors_per_cluster;
     vol->reserved_sectors = bpb->reserved_sectors;
@@ -16,9 +15,9 @@ void CopyBPB_IntoInfo(fat32_internal_info_t* vol, fat32_bpb_t* bpb, partition_de
     vol->fat_size = bpb->fat_size_32;
     vol->root_cluster = bpb->root_cluster;
 
-    vol->fat_start_lba = part->start_lba + bpb->reserved_sectors;
+    vol->fat_start_lba = sb->start_lba + bpb->reserved_sectors;
 
-    vol->data_start_lba = part->start_lba + bpb->reserved_sectors
+    vol->data_start_lba = sb->start_lba + bpb->reserved_sectors
                            + (bpb->fat_count * bpb->fat_size_32);
 
     vol->total_clusters = (bpb->total_sectors_32
@@ -30,12 +29,19 @@ void CopyBPB_IntoInfo(fat32_internal_info_t* vol, fat32_bpb_t* bpb, partition_de
     vol->last_alloc_cluster = 0;
 }
 
-void AddAdittionalValues(fat32_internal_info_t* vol) {
-    bytes_per_cluster = vol->bytes_per_sector * vol->sectors_per_cluster;
+superblock_t* Fat32MountRootWrapper() {
+    superblock_t* sb = (superblock_t*) kmalloc(sizeof(superblock_t));
+    int64_t ret_code = Fat32MountRoot(sb);
+    if (ret_code != 0) {
+        kfree(sb, sizeof(sb));
+        return NULL;
+    }
+    return sb;
 }
 
-int64_t Fat32MountRoot(fat32_internal_info_t* vol) {
+int64_t Fat32MountRoot(superblock_t* sb) {
     if (parts_head == NULL) return -1;
+    if (sb == NULL) return 1;
     fat32_bpb_t* buffer = (fat32_bpb_t*)AddNonCachableKernelPages(1);
 
     partition_device_node_t* p = parts_head;
@@ -46,9 +52,13 @@ int64_t Fat32MountRoot(fat32_internal_info_t* vol) {
         part->physical_device->read(part->physical_device, part->start_lba, SECTOR_SIZE, (void*) KERNEL_VIRT_TO_PHYS(buffer));
 
         if (strncmp(buffer->volume_label, ROOT_LABEL, ROOT_LABEL_LENGTH) == 0) {
-            CopyBPB_IntoInfo(vol, buffer, part);
-            AddAdittionalValues(vol);
-            RemoveKernelPages((uint64_t)buffer, 1);
+            sb->bdev = part->physical_device;
+            sb->start_lba = part->start_lba;
+            int64_t ret_code = Fat32Mount(sb);
+            if (ret_code != 0) {
+                kfree(sb->fs_info, sizeof(fat32_internal_info_t));
+                return 2;
+            }
             return 0;
         }
         p = p->next;
@@ -57,18 +67,22 @@ int64_t Fat32MountRoot(fat32_internal_info_t* vol) {
     return 1;
 }
 
-int64_t Fat32Mount(fat32_internal_info_t* vol, partition_device_t* part) {
+int64_t Fat32Mount(superblock_t* sb) {
+    if (sb == NULL) return 1;
+    if (sb->bdev == NULL) return 2;
 
     fat32_bpb_t* buffer = (fat32_bpb_t*)AddNonCachableKernelPages(1);
-    part->physical_device->read(part->physical_device, part->start_lba, SECTOR_SIZE, (void*)KERNEL_VIRT_TO_PHYS(buffer));
 
-    if (strncmp(buffer->volume_label, ROOT_LABEL, ROOT_LABEL_LENGTH) == 0) {
-        CopyBPB_IntoInfo(vol, buffer, part);
-        RemoveKernelPages((uint64_t)buffer, 1);
-        return 0;
-    }
-    RemoveKernelPages((uint64_t)buffer, 1); 
-    return 1;
+    sb->bdev->read(sb->bdev, sb->start_lba, SECTOR_SIZE, (void*)KERNEL_VIRT_TO_PHYS(buffer));
+    sb->fs_info = kmalloc(sizeof(fat32_internal_info_t));
+
+    CopyBPB_IntoInfo((fat32_internal_info_t*)sb->fs_info, buffer, sb);
+    sb->magic = FAT32_MAGIC;
+    fat32_internal_info_t* vol = (fat32_internal_info_t*)sb->fs_info;
+    sb->block_size = vol->bytes_per_sector * vol->sectors_per_cluster;
+
+    RemoveKernelPages((uint64_t)buffer, 1);
+    return 0;
 }
 
 uint32_t ClusterToLBA(uint32_t cluster, fat32_internal_info_t* vol) {
@@ -113,7 +127,7 @@ int64_t ReadDirToBuf(fat32_internal_info_t* vol, uint32_t dir_cluster, fat32_dir
         memset(next_buf, 0, SECTOR_SIZE);
     }
 
-    uint64_t entries_per_cluster = bytes_per_cluster / 32;
+    uint64_t entries_per_cluster = vol->bytes_per_sector * vol->sectors_per_cluster / 32;
     uint64_t total_entries = entries_per_cluster * cluster_count, total_entries_pages = (total_entries + PAGE_SIZE - 1) / PAGE_SIZE;
 
     fat32_dir_entry_t* buf = (fat32_dir_entry_t*) AddNonCachableKernelPages(total_entries_pages);
@@ -124,7 +138,7 @@ int64_t ReadDirToBuf(fat32_internal_info_t* vol, uint32_t dir_cluster, fat32_dir
     while (!fat32_is_eoc(cluster)) {
         ReadCluster(cluster, vol, buf + offset);
         offset += entries_per_cluster;
-        cluster = FatNextCluster(cluster, vol, NULL);
+        cluster = FatNextCluster(cluster, vol, next_buf);
     }
 
     *out = buf;
@@ -196,27 +210,24 @@ int64_t ParseLFNs(fat32_lfn_entry_t* entry, char* out) {
     return 0;
 }
 
-int64_t fat32_alloc_inode() {}
-int64_t fat32_read_inode() {}
-
-int64_t Fat32_LookUp(fat32_internal_info_t* vol, uint32_t dir_cluster, dentry_t* dentry) {
-    uint64_t pages_per_cluster = (bytes_per_cluster + PAGE_SIZE - 1) / PAGE_SIZE,
-     entries_per_cluster = bytes_per_cluster / 32;
+int64_t Fat32_LookUp(inode_t* parent_dir, dentry_t* dentry) {
+    uint64_t pages_per_cluster = (parent_dir->sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE,
+     entries_per_cluster = parent_dir->sb->block_size / 32;
 
     char tmp_name[MAX_FILENAME_FAT32];
     memset(tmp_name, 0, MAX_FILENAME_FAT32);
 
     fat32_dir_entry_t* dir, *entry;
     uint32_t clusters_count = 0;
-    ReadDirToBuf(vol, dir_cluster, &dir, &clusters_count);
-    uint32_t pages_allocated = (clusters_count * bytes_per_cluster + PAGE_SIZE - 1) / PAGE_SIZE;
+    ReadDirToBuf((fat32_internal_info_t*)parent_dir->sb->fs_info,(uint32_t)parent_dir->fs_data, &dir, &clusters_count);
+    uint32_t pages_allocated = (clusters_count * parent_dir->sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     if (clusters_count == 0) {RemoveKernelPages((uint64_t)dir, pages_allocated);  return -2;}
 
-    uint32_t i = 0;
+    uint64_t i = 0;
     fat32_lfn_entry_t* lfn_entry;
 
-    while (i * 32 < clusters_count * bytes_per_cluster) {
+    while (i * 32 < clusters_count * parent_dir->sb->block_size) {
         entry = &dir[i];
         uint8_t entry_status = *((uint8_t*)entry);
 
@@ -245,8 +256,7 @@ int64_t Fat32_LookUp(fat32_internal_info_t* vol, uint32_t dir_cluster, dentry_t*
         }
 
         if (strcmp(tmp_name, dentry->name) == 0) {
-            fat32_alloc_inode();
-            fat32_read_inode();
+            // IMPORTANT - Need to allocate and populate inode and make the dentry point to it here! - IMPORTANT
             RemoveKernelPages((uint64_t)dir, pages_allocated);
             return 0;
         }

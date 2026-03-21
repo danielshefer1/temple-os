@@ -243,4 +243,6 @@
 #define VOLUME_LABEL_ATTR 0x8
 
 #define LAST_LFN 0x40
+
+#define FAT32_MAGIC 0xFA732000
 // End FAT32 Definitions

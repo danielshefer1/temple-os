@@ -6,8 +6,10 @@
 #include "vfs.h"
 #include "paging.h"
 #include "string.h"
+#include "slab_alloc.h"
 
-int64_t Fat32MountRoot(fat32_internal_info_t* info);
-int64_t Fat32Mount(fat32_internal_info_t* info, partition_device_t* part);
-int64_t Fat32_LookUp(fat32_internal_info_t* vol, uint32_t dir_cluster, dentry_t* dentry);
+superblock_t* Fat32MountRootWrapper();
+int64_t Fat32MountRoot(superblock_t* sb);
+int64_t Fat32Mount(superblock_t* sb);
+int64_t Fat32_LookUp(inode_t* parent_dir, dentry_t* dentry);
 void PrintDirEntry(fat32_dir_entry_t* entry, char* name);

@@ -5,10 +5,9 @@ void kmain() {
     
     ParseDevicesMbrs();
 
-    fat32_internal_info_t info;
-    int64_t mountroot_code = Fat32MountRoot(&info);
-    kprintf("MountRoot return code: %x\n", mountroot_code);
-    if (mountroot_code == 0) Fat32_LookUp(&info, info.root_cluster, NULL);
+    superblock_t* sb = Fat32MountRootWrapper();
+    kprintf("Superblock's address: %x\n", sb);
+    if (sb != NULL) kprintf("Mounted successfully using sb!");
 
     end();
 }

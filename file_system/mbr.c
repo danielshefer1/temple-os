@@ -52,49 +52,6 @@ void ParseDevicesMbrs() {
     RemoveKernelPages((uint64_t)buffer, 1);
 }
 
-void InsertDisksAndPartsInVFS() {
-    if (parts_head == NULL) ParseDevicesMbrs();
-    if (parts_head == NULL) {
-        kprintf("ParseDevicesMbr() doesn't work as expected, aborting!\n");
-        return;
-    }
-
-    dentry_t* dev_dir = NULL/*(VFS_CreateDentry("dev", "/", VFS_DIRECTORY, NULL)*/, *part_den;
-
-    block_device_node_t* dev_p = devices_head;
-    partition_device_node_t* part_p = parts_head;
-
-    block_device_t* dev;
-    partition_device_t* part = part_p->value;
-
-    int64_t idx = 0;
-    block_device_t* curr_dev = part->physical_device;
-    char part_name[256];
-    uint64_t curr_dev_len = strlen(part->physical_device->name);
-    cpystr(part->physical_device->name, part_name);
-
-
-    while (dev_p != NULL) {
-        dev = dev_p->value;
-        //VFS_CreateDentry(dev->name, ".", DISK, dev_dir);
-        dev_p = dev_p->next;
-    }
-    while (part_p != NULL) {
-        part = part_p->value;
-        if (part->physical_device != curr_dev) {
-            idx = 0;
-            curr_dev_len = strlen(part->physical_device->name);
-            cpystr(part->physical_device->name, part_name);
-        } 
-        idx++;
-        part_name[curr_dev_len] = idx + '0';
-
-        part_den = NULL; //VFS_CreateDentry(part_name, ".", VFS_PARTITION, dev_dir);
-        part_den->inode->driver_data = part;
-        part_p = part_p->next;
-    }
-}
-
 void PrintParitions() {
     if (parts_head == NULL) return;
 
