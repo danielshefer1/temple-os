@@ -4,6 +4,7 @@
 #include "includes.h"
 #include "global.h"
 #include "buddy_alloc.h"
+#include "slab_alloc.h"
 #include "string.h"
 
 superblock_t* EXT2MountRoot();

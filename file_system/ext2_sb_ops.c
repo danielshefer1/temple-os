@@ -50,6 +50,31 @@ int64_t EXT2FindRoot(superblock_t* sb) {
     return 1;
 }
 
+int64_t CopySbExtToInternal(ext2_superblock_t* sbext, superblock_t* sb) {
+    if (sbext->s_magic != EXT2_MAGIC) {
+        kprintf("ext2: invalid magic: %x\n", sbext->s_magic);
+        return -1;
+    }
+
+    ext2_internal_info_t* vol = (ext2_internal_info_t*) sb->fs_info;
+
+    sb->block_size = EXT2_BLOCK_SIZE(sbext);
+    vol->inodes_per_group = sbext->s_inodes_per_group;
+    vol->blocks_per_group = sbext->s_blocks_per_group;
+    vol->inode_size = sbext->s_rev_level >= 1 ? sbext->s_inode_size : 128;
+    vol->first_data_block = sbext->s_first_data_block;
+    vol->first_ino = sbext->s_rev_level >= 1 ? sbext->s_first_ino : 11;
+    vol->total_inodes = sbext->s_inodes_count;
+    vol->total_blocks = sbext->s_blocks_count;
+    vol->free_inodes = sbext->s_free_inodes_count;
+    vol->free_blocks = sbext->s_free_blocks_count;
+
+    uint32_t sb_block = sbext->s_first_data_block;
+    vol->gdt_lba = sb_block + 1;
+
+    return 0;
+}
+
 int64_t EXT2Mount(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 2;
@@ -67,34 +92,46 @@ int64_t EXT2Mount(superblock_t* sb) {
     if (sbext->s_magic != EXT2_MAGIC) return 3;
 
     sb->fs_info = kmalloc(sizeof(ext2_internal_info_t));
-    CopySbExtToInternal(sbext, (ext2_internal_info_t*)sb->fs_info);
-
-    ext2_internal_info_t* vol = (ext2_internal_info_t*) sb->fs_info;
-    sb->block_size = vol->block_size;
+    CopySbExtToInternal(sbext, sb);
 
     RemoveKernelPages(buf, pages_count);
     return 0;
 }
 
-int64_t CopySbExtToInternal(ext2_superblock_t* sbext, ext2_internal_info_t* vol) {
-    if (sbext->s_magic != EXT2_MAGIC) {
-        kprintf("ext2: invalid magic: %x\n", sbext->s_magic);
-        return -1;
-    }
+inode_t* EXT2AllocInode(superblock_t* sb) {
+    if (sb == NULL) return NULL;
 
-    vol->block_size = EXT2_BLOCK_SIZE(sbext);
-    vol->inodes_per_group = sbext->s_inodes_per_group;
-    vol->blocks_per_group = sbext->s_blocks_per_group;
-    vol->inode_size = sbext->s_rev_level >= 1 ? sbext->s_inode_size : 128;
-    vol->first_data_block = sbext->s_first_data_block;
-    vol->first_ino = sbext->s_rev_level >= 1 ? sbext->s_first_ino : 11;
-    vol->total_inodes = sbext->s_inodes_count;
-    vol->total_blocks = sbext->s_blocks_count;
-    vol->free_inodes = sbext->s_free_inodes_count;
-    vol->free_blocks = sbext->s_free_blocks_count;
+    inode_t* inode = (inode_t*) kmalloc(sizeof(inode_t));
+    if (inode == NULL || (uint64_t)inode == KERNEL_VIRTUAL) return NULL;
 
-    uint32_t sb_block = sbext->s_first_data_block;
-    vol->gdt_lba = sb_block + 1;
+    inode->fs_specific = kmalloc(sizeof(ext2_inode_data_t));
+    if (inode->fs_specific == NULL || (uint64_t)inode->fs_specific == KERNEL_VIRTUAL) return NULL;
 
-    return 0;
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+    inode->sb = sb;
+    inode->ops = NULL; // IMPORTANT - fill in with ext2 ops later - IMPORTANT
 }
+
+void EXT2FreeInode(superblock_t* sb, inode_t* inode) {
+
+}
+
+uint32_t EXT2SectorsInBlock(superblock_t* sb) {
+    return sb->block_size / sb->bdev->sector_size;
+}
+
+uint64_t EXT2BlockToLba(superblock_t* sb, uint32_t block_idx) {
+    uint32_t sectors_per_block = sb->block_size / sb->bdev->sector_size;
+
+    return sb->start_lba + (block_idx * sectors_per_block);
+}
+
+int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
+    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
+
+    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
+    sb->bdev->read(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), buf);
+    return 0;
+
+}
+

@@ -488,7 +488,7 @@ typedef struct inode_t {
     uint64_t accessed_at;  
 
     struct inode_ops_t* ops;
-    void* fs_data;
+    void* fs_specific;
     char* syslink_name;
     superblock_t* sb;
 
@@ -583,7 +583,7 @@ typedef struct file_ops_t {
     int64_t  (*readdir)     (file_t* file, dentry_t* out);
 
     // file lifecycle
-    int64_t  (*open)        (inode_t* inode, file_t* file);    uint64_t block_size;      
+    int64_t  (*open)        (inode_t* inode, file_t* file);  
 
     int64_t  (*close)       (file_t* file);
     int64_t  (*flush)       (file_t* file);
@@ -680,7 +680,6 @@ typedef struct ext2_dir_entry {
 } __attribute__((packed)) ext2_dir_entry_t;
 
 typedef struct {
-    uint32_t block_size;          // 1024 << s_log_block_size
     uint32_t inodes_per_group;    // s_inodes_per_group
     uint32_t blocks_per_group;    // s_blocks_per_group
     uint32_t inode_size;          // s_inode_size (128 for rev0, varies for rev1)
@@ -694,3 +693,21 @@ typedef struct {
 
     uint32_t gdt_lba;             // LBA of the group descriptor table
 } ext2_internal_info_t;
+
+typedef struct ext2_inode_data_t {
+    uint32_t inode_number;
+    uint32_t block_group;
+    uint64_t disk_offset;
+
+    uint32_t i_blocks;        
+    uint32_t i_flags;         
+    uint32_t i_generation;   
+    uint32_t i_file_acl;      
+    uint32_t i_dir_acl;      
+    uint32_t i_faddr;         
+    uint32_t i_osd1;          
+    uint8_t  i_osd2[12];      
+    uint32_t i_dtime;         
+
+    uint32_t i_block[15];     
+} ext2_inode_data_t;
