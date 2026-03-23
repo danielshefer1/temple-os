@@ -57,7 +57,7 @@ KERNEL_C_SRCS = init/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc.c 
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c wrappers/keyboard.c util/global.c \
                 util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c init/acpi.c \
                 util/memory.c init/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c init/pci.c \
-				drivers/ahci_driver.c file_system/mbr.c file_system/fat32_driver.c
+				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm
 
 BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c
@@ -78,8 +78,7 @@ all: $(DISK_IMG) $(DATA_IMG)
 $(DATA_IMG):
 	@echo "🗄️ Creating persistent data disk..."
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
-	@printf "o\nn\np\n1\n2048\n\nt\nc\nw\n" | fdisk $(DATA_IMG)	
-	@mformat -i $(DATA_IMG)@@$(PART_OFFSET) -F -v "MYOS_ROOT" ::
+	@mke2fs -t ext2 -L "MYOS_ROOT" $(DATA_IMG)
 	@echo "✅ $(DATA_IMG) is ready."
 	
 # --- Kernel Rules ---

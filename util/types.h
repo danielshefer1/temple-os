@@ -460,10 +460,7 @@ typedef struct mutex_t {
 } mutex_t;
 
 
-typedef struct {
-    uint64_t free_blocks;     // free_clusters
-    uint64_t last_alloc_block;
-} fs_stat_t;
+
 
 typedef struct superblock_t {
     uint64_t magic;
@@ -524,25 +521,10 @@ typedef struct dcache_entry {
     struct dcache_entry* next;
 } dcache_entry_t;
 
-typedef struct fat32_internal_info_t {
-    block_device_t* bdev;
-
-    uint32_t bytes_per_sector;    
-    uint32_t sectors_per_cluster;   
-    uint32_t reserved_sectors;      
-
-   
-    uint32_t fat_start_lba;         
-    uint32_t number_of_fats;        
-    uint32_t fat_size;             
-    
-    uint32_t data_start_lba;        
-    uint32_t root_cluster;          
-    
-    uint32_t total_clusters;
-    uint32_t free_clusters;
-    uint32_t last_alloc_cluster;    
-} fat32_internal_info_t;
+typedef struct {
+    uint64_t free_blocks;     // free_clusters
+    uint64_t last_alloc_block;
+} fs_stat_t;
 
 typedef struct file_t {
     inode_t*      inode;        
@@ -610,62 +592,105 @@ typedef struct file_ops_t {
     int64_t  (*ioctl)       (file_t* file, uint64_t cmd, void* arg);
 } file_ops_t;
 
-typedef struct {
-    // Small BPB FAT16/FAT32
-    uint8_t jmp[3];             
-    char oem_id[8];          
-    uint16_t bytes_per_sector;   
-    uint8_t sectors_per_cluster;
-    uint16_t reserved_sectors;   
-    uint8_t fat_count;          
-    uint16_t root_entries;       
-    uint16_t total_sectors_16;   
-    uint8_t media_type;         
-    uint16_t fat_size_16;       
-    uint16_t sectors_per_track;  
-    uint16_t head_count;         
-    uint32_t hidden_sectors;     
-    uint32_t total_sectors_32;   
+typedef struct ext2_superblock {
+    uint32_t s_inodes_count;         // total inodes
+    uint32_t s_blocks_count;         // total blocks
+    uint32_t s_r_blocks_count;       // reserved blocks (for root)
+    uint32_t s_free_blocks_count;
+    uint32_t s_free_inodes_count;
+    uint32_t s_first_data_block;     // block containing superblock (0 or 1)
+    uint32_t s_log_block_size;       // block size = 1024 << s_log_block_size
+    uint32_t s_log_frag_size;
+    uint32_t s_blocks_per_group;
+    uint32_t s_frags_per_group;
+    uint32_t s_inodes_per_group;
+    uint32_t s_mtime;                // last mount time
+    uint32_t s_wtime;                // last write time
+    uint16_t s_mnt_count;
+    uint16_t s_max_mnt_count;
+    uint16_t s_magic;                // 0xEF53
+    uint16_t s_state;                // 1=clean, 2=errors
+    uint16_t s_errors;
+    uint16_t s_minor_rev_level;
+    uint32_t s_lastcheck;
+    uint32_t s_checkinterval;
+    uint32_t s_creator_os;
+    uint32_t s_rev_level;            // 0=original, 1=dynamic
+    uint16_t s_def_resuid;
+    uint16_t s_def_resgid;
 
-    // Extended Section
-    uint32_t fat_size_32;        
-    uint16_t ext_flags;          
-    uint16_t fs_version;         
-    uint32_t root_cluster;       
-    uint16_t fs_info;            
-    uint16_t backup_boot_sector; 
-    uint8_t reserved[12];       
-    uint8_t drive_number;       
-    uint8_t reserved1;          
-    uint8_t boot_signature;     
-    uint32_t volume_id;          
-    char volume_label[11];   
-    char system_id[8];       
-} __attribute__((packed)) fat32_bpb_t;
+    // ext2 revision 1 only (s_rev_level == 1)
+    uint32_t s_first_ino;            // first usable inode (usually 11)
+    uint16_t s_inode_size;           // size of inode struct (usually 128)
+    uint16_t s_block_group_nr;       // block group this superblock is in
+    uint32_t s_feature_compat;
+    uint32_t s_feature_incompat;
+    uint32_t s_feature_ro_compat;
+    uint8_t  s_uuid[16];             // filesystem UUID
+    char     s_volume_name[16];      // volume label (null terminated)
+    char     s_last_mounted[64];     // path where last mounted
+    uint32_t s_algo_bitmap;
+
+    uint8_t  s_prealloc_blocks;
+    uint8_t  s_prealloc_dir_blocks;
+    uint16_t s_padding;
+
+    uint8_t  s_reserved[820];        // pad to 1024 bytes
+} __attribute__((packed)) ext2_superblock_t;
+
+typedef struct ext2_block_group_desc {
+    uint32_t bg_block_bitmap;        // block number of block bitmap
+    uint32_t bg_inode_bitmap;        // block number of inode bitmap
+    uint32_t bg_inode_table;         // block number of inode table
+    uint16_t bg_free_blocks_count;
+    uint16_t bg_free_inodes_count;
+    uint16_t bg_used_dirs_count;     // how many inodes are directories
+    uint16_t bg_pad;
+    uint8_t  bg_reserved[12];
+} __attribute__((packed)) ext2_block_group_desc_t;
+
+typedef struct ext2_inode {
+    uint16_t i_mode;                 // file type + permissions
+    uint16_t i_uid;
+    uint32_t i_size;                 // file size in bytes
+    uint32_t i_atime;                // last access time
+    uint32_t i_ctime;                // creation time
+    uint32_t i_mtime;                // last modification time
+    uint32_t i_dtime;                // deletion time
+    uint16_t i_gid;
+    uint16_t i_links_count;          // hard link count
+    uint32_t i_blocks;               // number of 512-byte blocks reserved
+    uint32_t i_flags;
+    uint32_t i_osd1;                 // OS-specific value 1
+    uint32_t i_block[15];            // [0..11]=direct, [12]=indirect,
+                                     // [13]=double indirect, [14]=triple
+    uint32_t i_generation;           // file version (for NFS)
+    uint32_t i_file_acl;             // extended attributes block
+    uint32_t i_dir_acl;              // for regular files: high 32 bits of size
+    uint32_t i_faddr;                // fragment address
+    uint8_t  i_osd2[12];             // OS-specific value 2
+} __attribute__((packed)) ext2_inode_t;
+
+typedef struct ext2_dir_entry {
+    uint32_t inode;                  
+    uint16_t rec_len;                
+    uint8_t  name_len;              
+    uint8_t  file_type;              
+    char     name[];                 
+} __attribute__((packed)) ext2_dir_entry_t;
 
 typedef struct {
-    char name[8];      
-    char ext[3];       
-    uint8_t attributes;  
-    uint8_t reserved;
-    uint8_t create_time_ms;
-    uint16_t create_time;
-    uint16_t create_date;
-    uint16_t last_access_date;
-    uint16_t first_cluster_high; 
-    uint16_t write_time;
-    uint16_t write_date;
-    uint16_t first_cluster_low;  
-    uint32_t file_size;         
-} __attribute__((packed)) fat32_dir_entry_t;
+    uint32_t block_size;          // 1024 << s_log_block_size
+    uint32_t inodes_per_group;    // s_inodes_per_group
+    uint32_t blocks_per_group;    // s_blocks_per_group
+    uint32_t inode_size;          // s_inode_size (128 for rev0, varies for rev1)
+    uint32_t first_data_block;    // s_first_data_block (0 or 1)
+    uint32_t first_ino;           // s_first_ino, first usable inode
 
-typedef struct {
-    uint8_t sequence_num;    
-    uint16_t name_part1[5];   
-    uint8_t attributes;      
-    uint8_t type;            
-    uint8_t checksum;        
-    uint16_t name_part2[6];   
-    uint16_t first_cluster;   
-    uint16_t name_part3[2];  
-} __attribute__((packed)) fat32_lfn_entry_t;
+    uint32_t total_inodes;        // s_inodes_count
+    uint32_t total_blocks;        // s_blocks_count
+    uint32_t free_inodes;         // s_free_inodes_count
+    uint32_t free_blocks;         // s_free_blocks_count
+
+    uint32_t gdt_lba;             // LBA of the group descriptor table
+} ext2_internal_info_t;

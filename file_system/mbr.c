@@ -6,6 +6,19 @@ void ParseMbr(uint8_t* buffer, block_device_t* dev) {
     partition_device_node_t* new_node;
     if (mbr->signature != 0xAA55) {
         kprintf("Error: MBR Signature mismatch (Expected 0xAA55, got %x)\n", mbr->signature);
+
+        new_part = (partition_device_t*) kmalloc(sizeof(partition_device_t));
+        new_node = (partition_device_node_t*) kmalloc(sizeof(partition_device_node_t));
+
+        new_part->partition_type = 0x00;
+        new_part->sector_count = dev->total_sectors;
+        new_part->start_lba = 0x00;
+        new_part->physical_device = dev;
+
+
+        new_node->value = new_part;
+        new_node->next = parts_head;
+        parts_head = new_node;
         return;
     }
 

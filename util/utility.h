@@ -17,6 +17,7 @@
 #include "ap_start.h"
 #include "pci.h"
 #include "ahci_driver.h"
+#include "mbr.h"
 
 void start();
 void end();

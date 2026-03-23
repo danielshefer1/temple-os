@@ -25,6 +25,7 @@ void start() {
 
     PciEnumeration();
     AhciInit();
+    ParseDevicesMbrs();
 
     BootCores();
 

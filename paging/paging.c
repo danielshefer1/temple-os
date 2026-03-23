@@ -263,6 +263,7 @@ uint64_t AddKernelPages(uint64_t num_pages) {
 
 uint64_t AddNonCachableKernelPages(uint64_t num_pages) {
     uint64_t start_addr = ((uint64_t)RequestBuddy(num_pages * PAGE_SIZE, false)) + KERNEL_VIRTUAL, curr_addr = start_addr;
+    if (start_addr == KERNEL_VIRTUAL) return 0;
     uint64_t pages_in_big = 2*MB/PAGE_SIZE;
 
     while (num_pages >= pages_in_big) {

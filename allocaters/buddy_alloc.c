@@ -14,7 +14,7 @@ void AddToBuddyAlloc(uint64_t start, uint64_t size, bool user) {
         size_order = BiggestBit(size);
         bit = (start_order < size_order) ? start_order : size_order;
 
-        if (bit <= PAGE_SIZE_LOG2) break;
+        if (bit < PAGE_SIZE_LOG2) break;
         size -= 1ULL << bit;
         buddy_node_t* node = CreateBuddyNode((void*)start, bit);
         InsertSortedBuddyNode(&bins[bit], node, true);
