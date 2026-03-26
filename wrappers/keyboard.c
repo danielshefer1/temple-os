@@ -3,9 +3,7 @@
 void PushKeyboardBuffer(input_buffer_t* buffer, char c) {
     uint64_t cpu_id = get_cpuid();
     if (c == 'Q') {
-        kprintf("Shutting down in 5 seconds...\n");
-        sleep(5000);
-        Shutdown();
+        shutdown_req = true;  
     }
 
     buffer->buffer[buffer->head].c = c;

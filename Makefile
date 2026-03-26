@@ -46,10 +46,11 @@ ASFLAGS_BIN   = -f bin
 QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
 			 -drive format=raw,file=$(DISK_IMG) -serial stdio \
 			 -drive index=1,format=raw,file=$(DATA_IMG) \
-			 -device qemu-xhci,id=xhci \
+			 -rtc base=localtime,clock=host,driftfix=slew \
+			 #-device qemu-xhci,id=xhci \
 			 -device usb-kbd,bus=xhci.0 \
 			 -device usb-mouse,bus=xhci.0 \
-			 -rtc base=localtime,clock=host,driftfix=slew
+			 
 
 # ============================================================================
 # Source & Object Definitions
