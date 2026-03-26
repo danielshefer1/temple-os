@@ -10,4 +10,5 @@
 superblock_t* EXT2MountRoot();
 int64_t EXT2FindRoot(superblock_t* sb);
 int64_t EXT2Mount(superblock_t* sb);
-int64_t CopySbExtToInternal(ext2_superblock_t* sbext, ext2_internal_info_t* vol);
+int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb);
+int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf);

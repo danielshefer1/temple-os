@@ -48,16 +48,17 @@ QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machin
 			 -drive index=1,format=raw,file=$(DATA_IMG) \
 			 -device qemu-xhci,id=xhci \
 			 -device usb-kbd,bus=xhci.0 \
-			 -device usb-mouse,bus=xhci.0 
+			 -device usb-mouse,bus=xhci.0 \
+			 -rtc base=localtime,clock=host,driftfix=slew
 
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = init/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c wrappers/keyboard.c util/global.c \
-                util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c init/acpi.c \
-                util/memory.c init/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c init/pci.c \
-				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c
+                util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c drivers/acpi.c \
+                util/memory.c drivers/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c drivers/pci.c \
+				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c drivers/rtc.c drivers/fadt.c
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm
 
 BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c

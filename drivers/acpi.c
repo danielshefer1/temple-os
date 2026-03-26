@@ -4,6 +4,7 @@ static rsdp_t* rsdp;
 static rsdt_t* rsdt;
 static madt_t* madt;
 static mcfg_t* mcfg;
+static fadt_t* fadt;
 
 bool ValidateRsdp(rsdp_t* rsdp) {
     // 1. Check Signature
@@ -172,6 +173,26 @@ void FindMcfg(rsdt_t* rsdt) {
     kerror("Didn't find MCFG!");
 }
 
+void FindFadt(rsdt_t* rsdt) {
+    uint64_t num_entries = (rsdt->header.length - RSDT_HEADER_LENGTH) / sizeof(uint32_t);
+    acpi_header_t* entry;
+
+    for (uint64_t i = 0; i < num_entries; i++) {
+        entry = (acpi_header_t*) MMIO_PHYS_TO_VIRT(rsdt->entries[i]);
+
+        if (!ValidateACPIHeader(entry)) {
+            kprintf("Found an unvalid ACPI table");
+            continue;
+        }
+        if (strncmp(entry->signature, "FACP", ACPI_TABLE_SIG_LEGNTH) == 0) {
+            fadt = (fadt_t*)entry;
+            kprintf("Found FADT!\n");
+            return;
+        }
+    }
+    kerror("Didn't find FADT!");
+}
+
 void InitRsdt() {
     FindRsdp();
     FillPageDirectoryMMIO((void*)MMIO_BASE, TABLE_SIZE);
@@ -190,4 +211,14 @@ void InitMadt() {
 
 void InitMcfg() {
     FindMcfg(rsdt);
+}
+
+void InitFadt() {
+    FindFadt(rsdt);
+    EnableAcpi(fadt);
+    kprintf("Enabled ACPI!\n");
+}
+
+void Shutdown() {
+    AcpiShutdown(fadt);
 }

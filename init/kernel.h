@@ -19,5 +19,6 @@
 #include "ahci_driver.h"
 #include "mbr.h"
 #include "ext2_sb_ops.h"
+#include "rtc.h"
 
 void kmain();

@@ -204,6 +204,49 @@ typedef struct madt_entry_header_t {
     uint8_t length;
 } __attribute__((packed)) madt_entry_header_t;
 
+typedef struct fadt_t {
+    acpi_header_t header;
+
+    uint32_t firmware_ctrl;      // Physical address of FACS
+    uint32_t dsdt;               // Physical address of DSDT
+    uint8_t  reserved1;          // Used in ACPI 1.0; reserved now
+    uint8_t  preferred_pm_profile;
+    uint16_t sci_int;            // System Control Interrupt (IRQ)
+    uint32_t smi_cmd;            // Port to write to for SMI commands
+    uint8_t  acpi_enable;        // Value to write to smi_cmd to enable ACPI
+    uint8_t  acpi_disable;       // Value to write to smi_cmd to disable ACPI
+    uint8_t  s4bios_req;         // Value for S4BIOS state
+    uint8_t  pstate_cnt;         // Processor performance state control
+    uint32_t pm1a_evt_blk;       // PM1a Event Block Address
+    uint32_t pm1b_evt_blk;       // PM1b Event Block Address
+    uint32_t pm1a_cnt_blk;       // PM1a Control Block Address
+    uint32_t pm1b_cnt_blk;       // PM1b Control Block Address
+    uint32_t pm2_cnt_blk;        // PM2 Control Block Address
+    uint32_t pm_tmr_blk;         // PM Timer Block Address
+    uint32_t gpe0_blk;           // General Purpose Event 0 Block
+    uint32_t gpe1_blk;           // General Purpose Event 1 Block
+    uint8_t  pm1_evt_len;
+    uint8_t  pm1_cnt_len;
+    uint8_t  pm2_cnt_len;
+    uint8_t  pm_tmr_len;
+    uint8_t  gpe0_blk_len;
+    uint8_t  gpe1_blk_len;
+    uint8_t  gpe1_base;
+    uint8_t  cst_cnt;            // _CST support
+    uint16_t p_lvl2_lat;         // Worst-case latency to enter C2
+    uint16_t p_lvl3_lat;         // Worst-case latency to enter C3
+    uint16_t flush_size;
+    uint16_t flush_stride;
+    uint8_t  duty_offset;
+    uint8_t  duty_width;
+    uint8_t  day_alrm;           // RTC Day Alarm index
+    uint8_t  mon_alrm;           // RTC Month Alarm index
+    uint8_t  century;            // RTC Century index (The one you need!)
+    uint16_t boot_arch_flags;    // Legacy Boot Arch Flags (PS/2, VGA, etc)
+    uint8_t  reserved2;
+    uint32_t flags;              // Fixed Feature Flags (e.g. HW_REDUCED_ACPI)
+} __attribute__((packed)) fadt_t;
+
 typedef struct local_apic_t {
     madt_entry_header_t header;
     uint8_t acpi_processor_id;  
@@ -592,7 +635,7 @@ typedef struct file_ops_t {
     int64_t  (*ioctl)       (file_t* file, uint64_t cmd, void* arg);
 } file_ops_t;
 
-typedef struct ext2_superblock {
+typedef struct ext2_superblock_disk {
     uint32_t s_inodes_count;         // total inodes
     uint32_t s_blocks_count;         // total blocks
     uint32_t s_r_blocks_count;       // reserved blocks (for root)
@@ -636,18 +679,7 @@ typedef struct ext2_superblock {
     uint16_t s_padding;
 
     uint8_t  s_reserved[820];        // pad to 1024 bytes
-} __attribute__((packed)) ext2_superblock_t;
-
-typedef struct ext2_block_group_desc {
-    uint32_t bg_block_bitmap;        // block number of block bitmap
-    uint32_t bg_inode_bitmap;        // block number of inode bitmap
-    uint32_t bg_inode_table;         // block number of inode table
-    uint16_t bg_free_blocks_count;
-    uint16_t bg_free_inodes_count;
-    uint16_t bg_used_dirs_count;     // how many inodes are directories
-    uint16_t bg_pad;
-    uint8_t  bg_reserved[12];
-} __attribute__((packed)) ext2_block_group_desc_t;
+} __attribute__((packed)) ext2_superblock_disk_t;
 
 typedef struct ext2_inode {
     uint16_t i_mode;                 // file type + permissions
@@ -679,20 +711,54 @@ typedef struct ext2_dir_entry {
     char     name[];                 
 } __attribute__((packed)) ext2_dir_entry_t;
 
-typedef struct {
-    uint32_t inodes_per_group;    // s_inodes_per_group
-    uint32_t blocks_per_group;    // s_blocks_per_group
-    uint32_t inode_size;          // s_inode_size (128 for rev0, varies for rev1)
-    uint32_t first_data_block;    // s_first_data_block (0 or 1)
-    uint32_t first_ino;           // s_first_ino, first usable inode
+typedef struct ext2_block_group_desc_disk_t {
+    uint32_t block_bitmap;
+    uint32_t inode_bitmap;
+    uint32_t inode_table;
+    uint16_t free_blocks_count;
+    uint16_t free_inodes_count;
+    uint16_t used_dirs_count;
+    uint16_t pad;
+    uint8_t  reserved[12];
+} __attribute__((packed)) ext2_block_group_desc_disk_t;
 
-    uint32_t total_inodes;        // s_inodes_count
-    uint32_t total_blocks;        // s_blocks_count
-    uint32_t free_inodes;         // s_free_inodes_count
-    uint32_t free_blocks;         // s_free_blocks_count
 
-    uint32_t gdt_lba;             // LBA of the group descriptor table
-} ext2_internal_info_t;
+typedef struct ext2_block_group_t {
+    uint32_t block_bitmap;
+    uint32_t inode_bitmap;
+    uint32_t inode_table;
+    uint32_t free_blocks_count;   
+    uint32_t free_inodes_count;
+    uint32_t used_dirs_count;
+} ext2_block_group_t;
+
+
+
+typedef struct ext2_info_t {
+    uint32_t sectors_per_block;   
+    uint32_t blocks_per_group;
+    uint32_t inodes_per_group;
+    uint32_t inode_size;          // size of one ext2_inode_t on disk
+    uint32_t block_group_count;  
+    uint32_t total_blocks;
+    uint32_t total_inodes;
+
+    // free space — updated on alloc/free
+    uint32_t free_blocks;
+    uint32_t free_inodes;
+
+    uint32_t root_inode_number;
+    uint32_t first_data_block;
+    uint32_t first_usable_inode;
+
+    // block group descriptor table — one entry per block group
+    ext2_block_group_t* bgdt;
+
+    // feature flags — read from superblock
+    uint32_t feature_compat;
+    uint32_t feature_incompat;
+    uint32_t feature_ro_compat;
+} ext2_info_t;
 
 typedef struct ext2_inode_data_t {
     uint32_t inode_number;
@@ -711,3 +777,20 @@ typedef struct ext2_inode_data_t {
 
     uint32_t i_block[15];     
 } ext2_inode_data_t;
+
+typedef struct date {
+    uint8_t day;
+    uint8_t month;
+    uint8_t year;
+} date_t;
+
+typedef struct time {
+    uint8_t seconds;
+    uint8_t minutes;
+    uint8_t hours;
+} time_t;
+
+typedef struct total_time {
+    date_t date;
+    time_t time;
+} total_time_t;

@@ -17,6 +17,7 @@ void start() {
     InitRsdt();
     InitMadt();
     InitMcfg();
+    InitFadt();
     EnableLapic();
     InitTimer(TIMER_TICK_PER_MS);
 

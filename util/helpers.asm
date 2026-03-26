@@ -52,16 +52,41 @@ LoadIDTHelper:
 
 global inb
 inb:
-    mov dx, di      
-    xor eax, eax    
-    in al, dx       
+    mov dx, di
+    in al, dx
+    ret
+
+global inw
+inw:
+    mov dx, di
+    in ax, dx
+    ret
+
+global inl
+inl:
+    mov dx, di
+    in eax, dx
     ret
 
 global outb
 outb:
-    mov dx, di      
-    mov al, sil
-    out dx, al      
+    mov dx, di
+    mov ax, si
+    out dx, al
+    ret
+
+global outw
+outw:
+    mov dx, di
+    mov ax, si
+    out dx, ax
+    ret
+
+global outl
+outl:
+    mov dx, di
+    mov eax, esi
+    out dx, eax
     ret
 
 global check_interrupts

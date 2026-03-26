@@ -19,8 +19,16 @@ extern void HltHelper();
 extern void PauseHelper();
 extern void LoadGDTHelper(gdt_ptr_t* gdtr);
 extern void LoadIDTHelper(idt_ptr_t* idtr);
-extern uint8_t inb(uint8_t port);
-extern void outb(uint16_t port, uint8_t value);
+
+extern uint8_t  inb(uint16_t port);
+extern uint16_t inw(uint16_t port);
+extern uint32_t inl(uint16_t port);
+
+extern void outb(uint16_t port, uint8_t  val);
+extern void outw(uint16_t port, uint16_t val);
+extern void outl(uint16_t port, uint32_t val);
+
+
 extern bool check_interrupts();
 extern void load_tss();
 extern void switch_to_user_mode(uint64_t eip, uint64_t esp);
