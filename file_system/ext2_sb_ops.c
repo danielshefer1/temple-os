@@ -141,7 +141,7 @@ int64_t EXT2Mount(superblock_t* sb) {
     GetTotalTime(&total_time);
     uint32_t mtime = CalculateUnixTimestamp(&total_time);
     if (mtime != 0 && ret == 0) sbext->s_mtime = mtime;
-    //sbext->s_state = 0x02;
+    sbext->s_state = 0x02;
 
     sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 

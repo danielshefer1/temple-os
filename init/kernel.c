@@ -3,10 +3,7 @@
 void kmain() {
     start();
 
-    kprintf("Input a number: ");
-
-    uint64_t test;
-    kscanf("%d", &test);
+    superblock_t* sb = EXT2MountRoot();
 
     end();
 }
