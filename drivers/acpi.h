@@ -16,3 +16,4 @@ void InitMcfg();
 void InitFadt();
 
 void Shutdown();
+uint8_t GetCenturyReg();

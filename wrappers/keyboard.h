@@ -6,6 +6,8 @@
 #include "global.h"
 #include "vga.h"
 #include "slab_alloc.h"
+#include "acpi.h"
+#include "timer.h"
 
 void PushKeyboardBuffer(input_buffer_t* buffer, char c);
 void InitConsoleBuffer();

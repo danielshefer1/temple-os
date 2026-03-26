@@ -781,7 +781,7 @@ typedef struct ext2_inode_data_t {
 typedef struct date {
     uint8_t day;
     uint8_t month;
-    uint8_t year;
+    uint16_t year;
 } date_t;
 
 typedef struct time {

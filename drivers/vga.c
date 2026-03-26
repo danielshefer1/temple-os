@@ -271,7 +271,6 @@ void kerror(const char* format, ...) {
     va_end(args);
     spin_unlock(&vga_spinlock);
 
-    end();
 }
 
 void InitVGA() {

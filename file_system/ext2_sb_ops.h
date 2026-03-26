@@ -6,6 +6,7 @@
 #include "buddy_alloc.h"
 #include "slab_alloc.h"
 #include "string.h"
+#include "rtc.h"
 
 superblock_t* EXT2MountRoot();
 int64_t EXT2FindRoot(superblock_t* sb);

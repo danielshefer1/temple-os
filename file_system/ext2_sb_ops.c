@@ -137,6 +137,14 @@ int64_t EXT2Mount(superblock_t* sb) {
     sb->fs_info = kmalloc(sizeof(ext2_info_t));
     int64_t ret = CopySbExtToInternal(sbext, sb);
 
+    total_time_t total_time;
+    GetTotalTime(&total_time);
+    uint32_t mtime = CalculateUnixTimestamp(&total_time);
+    if (mtime != 0 && ret == 0) sbext->s_mtime = mtime;
+    //sbext->s_state = 0x02;
+
+    sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
+
     RemoveKernelPages(buf, pages_count);
 
     if (ret != 0) return ret + 1;
@@ -144,7 +152,36 @@ int64_t EXT2Mount(superblock_t* sb) {
 }
 
 int64_t EXT2Sync(superblock_t* sb) {
-    
+    if (sb == NULL) return 1;
+    if (sb->bdev == NULL) return 1;
+
+    uint64_t sector_size = sb->bdev->sector_size;
+
+    uint64_t blocks_offset = EXT2_SUPERBLOCK_OFFSET / sector_size;
+    uint64_t sectors_count = (EXT2_SUPERBLOCK_LENGTH + sector_size  - 1) / sector_size;
+    uint64_t pages_count = (EXT2_SUPERBLOCK_LENGTH + PAGE_SIZE - 1) / (PAGE_SIZE);
+    uint64_t buf = AddKernelPages(pages_count);
+    sb->bdev->read(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
+
+    uint64_t sector_offset = EXT2_SUPERBLOCK_OFFSET % sector_size;
+    ext2_superblock_disk_t* sbext = (ext2_superblock_disk_t*)(buf + sector_offset);
+    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
+
+    sbext->s_free_blocks_count = vol->free_blocks;
+    sbext->s_free_inodes_count = vol->free_inodes;
+
+    total_time_t total_time;
+    GetTotalTime(&total_time);
+    uint32_t wtime = CalculateUnixTimestamp(&total_time);
+    if (wtime != 0) sbext->s_wtime = wtime;
+
+    sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
+
+    return 0;
+}
+
+int64_t EXT2Umount() {
+
 }
 
 inode_t* EXT2AllocInode(superblock_t* sb) {

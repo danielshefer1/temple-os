@@ -25,3 +25,7 @@ void AcpiShutdown(fadt_t* fadt) {
     
     while(true) {HltHelper();}
 }
+
+uint8_t GetCenturyRegInternal(fadt_t* fadt) {
+    return fadt->century;
+}

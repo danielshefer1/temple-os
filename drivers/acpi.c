@@ -222,3 +222,8 @@ void InitFadt() {
 void Shutdown() {
     AcpiShutdown(fadt);
 }
+
+uint8_t GetCenturyReg() {
+    if (fadt == NULL) return 0x00;
+    return GetCenturyRegInternal(fadt);
+}

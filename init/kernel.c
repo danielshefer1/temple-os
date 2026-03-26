@@ -3,8 +3,10 @@
 void kmain() {
     start();
 
-    sleep(1000);
-    Shutdown();
-    
+    kprintf("Input a number: ");
+
+    uint64_t test;
+    kscanf("%d", &test);
+
     end();
 }
