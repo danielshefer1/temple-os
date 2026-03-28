@@ -172,12 +172,31 @@
 // End Serial Definitions
 
 // VFS Definitons
-#define VFS_FILE 0
-#define VFS_DIRECTORY 1
-#define MOUNT_POINT 2
-#define SYS_LINK 3
-#define DISK 4
-#define VFS_PARTITION 5
+#define VFS_TYPE_FILE      0x01
+#define VFS_TYPE_DIR       0x02
+#define VFS_TYPE_SYMLINK   0x03
+#define VFS_TYPE_CHARDEV   0x04
+#define VFS_TYPE_BLOCKDEV  0x05
+#define VFS_TYPE_FIFO      0x06
+#define VFS_TYPE_SOCKET    0x07
+#define VFS_TYPE_UNKNOWN   0x00
+
+#define EOK          0    // success
+#define EPERM        1    // operation not permitted (wrong permissions)
+#define ENOENT       2    // no such file or directory
+#define EIO          5    // I/O error (disk read/write failed)
+#define EBADF        9    // bad file descriptor
+#define ENOMEM       12   // out of memory
+#define EACCES       13   // permission denied
+#define EBUSY        16   // device or resource busy
+#define EEXIST       17   // file already exists
+#define ENOTDIR      20   // not a directory
+#define EISDIR       21   // is a directory (tried to read a dir as a file)
+#define EINVAL       22   // invalid argument
+#define ENOSPC       28   // no space left on device
+#define EROFS        30   // read only filesystem
+#define ENOTEMPTY    39   // directory not empty (tried to rmdir non-empty dir)
+#define ENOTSUP      95   // operation not supported
 
 // End VFS Definitons
 
@@ -281,21 +300,13 @@
 #define EXT2_NODUMP_FL       0x00000040   // do not dump
 #define EXT2_NOATIME_FL      0x00000080   // do not update atime
 
-// file_type values
-#define EXT2_FT_UNKNOWN   0
-#define EXT2_FT_REG_FILE  1
-#define EXT2_FT_DIR       2
-#define EXT2_FT_CHRDEV    3
-#define EXT2_FT_BLKDEV    4
-#define EXT2_FT_FIFO      5
-#define EXT2_FT_SOCK      6
-#define EXT2_FT_SYMLINK   7
-// ─── Useful Constants ─────────────────────────────────────────────────────────
-
 #define EXT2_MAGIC              0xEF53
-#define EXT2_ROOT_INO           2      // root directory is always inode 2
 #define EXT2_SUPERBLOCK_OFFSET  1024   // superblock always at byte 1024
 #define EXT2_SUPERBLOCK_LENGTH 1024
+
+#define EXT2_VALID_FS    0x0001   // cleanly unmounted
+#define EXT2_ERROR_FS    0x0002   // not cleanly unmounted / has errors
+#define EXT2_ORPHAN_FS   0x0004   // orphan inodes being recovered
 
 // inode numbers reserved by ext2 (1-10)
 #define EXT2_BAD_INO            1      // bad blocks inode
@@ -306,19 +317,7 @@
 #define EXT2_UNDEL_DIR_INO      6
 #define EXT2_FIRST_INO          11     // first non-reserved inode
 
-// ─── Helper Macros ────────────────────────────────────────────────────────────
-
 #define EXT2_BLOCK_SIZE(sb)         (1024 << (sb)->s_log_block_size)
-#define EXT2_INODES_PER_GROUP(sb)   ((sb)->s_inodes_per_group)
-#define EXT2_INODE_SIZE(sb)         ((sb)->s_inode_size)
-
-// given inode number, which block group is it in?
-#define EXT2_INODE_GROUP(sb, ino) (((ino) - 1) / (sb)->s_inodes_per_group)
-
-// index of inode within its block group's inode table
-#define EXT2_INODE_INDEX(sb, ino) (((ino) - 1) % (sb)->s_inodes_per_group)
-
-#define ROOT_INODE 2
 // End EXT2 Definitions
 
 // RTC Definitions

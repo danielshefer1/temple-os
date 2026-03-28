@@ -39,7 +39,6 @@ void start() {
 
 void end() {
     while (true) {
-        CliHelper();
         HltHelper();
     }
 }

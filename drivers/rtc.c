@@ -91,27 +91,22 @@ uint32_t CalculateUnixTimestamp(total_time_t* total_time) {
 
     uint64_t total_days = 0;
 
-    // 1. Add days for every year since 1970
     for (int y = 1970; y < total_time->date.year; y++) {
         if ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) {
-            total_days += 366; // Leap year
+            total_days += 366; 
         } else {
             total_days += 365;
         }
     }
 
-    // 2. Add days for the current year up to the current month
     total_days += days_before_month[total_time->date.month - 1];
 
-    // 3. Add an extra day if it's a leap year and we are past February
     if (total_time->date.month > 2 && ((total_time->date.year % 4 == 0 && total_time->date.year % 100 != 0) || (total_time->date.year % 400 == 0))) {
         total_days++;
     }
 
-    // 4. Add the days of the current month
     total_days += (total_time->date.day - 1);
 
-    // 5. Convert to seconds and add time
     uint32_t timestamp = (total_days * 86400) + (total_time->time.hours * 3600) + (total_time->time.minutes * 60) + total_time->time.seconds;
 
     return timestamp;

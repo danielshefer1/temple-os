@@ -80,6 +80,35 @@ int64_t EXT2ReadBGDT(superblock_t* sb) {
     return 0;
 }
 
+int64_t EXT2WriteBGDT(superblock_t* sb) {
+    if (sb == NULL) return 1;
+    if (sb->fs_info == NULL) return 1;
+    if (sb->block_size == 0) return 1;
+
+    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
+
+    uint32_t bgdt_block = (sb->block_size == 1024) ? 2 : 1;
+
+    uint32_t raw_size = vol->block_group_count * sizeof(ext2_block_group_desc_disk_t);
+    uint32_t raw_size_pages = (raw_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    ext2_block_group_desc_disk_t* buf = (ext2_block_group_desc_disk_t*) AddKernelPages(raw_size_pages);
+    EXT2ReadBlocks(sb, bgdt_block, (raw_size + sb->block_size - 1) / sb->block_size, (void*)buf);
+
+    for (uint32_t i = 0; i < vol->block_group_count; i++) {
+        buf[i].block_bitmap = vol->bgdt[i].block_bitmap;
+        buf[i].inode_bitmap = vol->bgdt[i].inode_bitmap;
+        buf[i].inode_table = vol->bgdt[i].inode_table;
+        buf[i].free_blocks_count = vol->bgdt[i].free_blocks_count;
+        buf[i].free_inodes_count = vol->bgdt[i].free_inodes_count;
+        buf[i].used_dirs_count = vol->bgdt[i].used_dirs_count;
+    }
+
+    EXT2WriteBlocks(sb, bgdt_block, (raw_size + sb->block_size - 1) / sb->block_size, (void*)buf);
+    RemoveKernelPages((uint64_t)buf, raw_size_pages);
+ 
+    return 0;
+}
+
 int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
     if (sbext->s_magic != EXT2_MAGIC) {
         kprintf("ext2: invalid magic: %x\n", sbext->s_magic);
@@ -96,7 +125,7 @@ int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
 
     vol->first_data_block = sbext->s_first_data_block;
     vol->first_usable_inode = sbext->s_rev_level >= 1 ? sbext->s_first_ino : 11;
-    vol->root_inode_number = ROOT_INODE;
+    vol->root_inode_number = EXT2_ROOT_INO;
 
     vol->total_inodes = sbext->s_inodes_count;
     vol->total_blocks = sbext->s_blocks_count;
@@ -110,6 +139,9 @@ int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
     vol->feature_compat = sbext->s_feature_compat;
     vol->feature_incompat = sbext->s_feature_incompat;
     vol->feature_ro_compat = sbext->s_feature_ro_compat;
+
+    memcpy(vol->hash_seed, sbext->s_hash_seed, sizeof(vol->hash_seed));
+    vol->def_hash_version = sbext->s_def_hash_version;
 
     int64_t ret = EXT2ReadBGDT(sb);
 
@@ -141,7 +173,8 @@ int64_t EXT2Mount(superblock_t* sb) {
     GetTotalTime(&total_time);
     uint32_t mtime = CalculateUnixTimestamp(&total_time);
     if (mtime != 0 && ret == 0) sbext->s_mtime = mtime;
-    sbext->s_state = 0x02;
+    sbext->s_state = EXT2_ERROR_FS;
+    sbext->s_mnt_count++;
 
     sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 
@@ -180,8 +213,33 @@ int64_t EXT2Sync(superblock_t* sb) {
     return 0;
 }
 
-int64_t EXT2Umount() {
+int64_t EXT2Umount(superblock_t* sb) {
+    if (sb == NULL) return 1;
+    if (sb->bdev == NULL) return 1;
 
+    uint64_t sector_size = sb->bdev->sector_size;
+
+    uint64_t blocks_offset = EXT2_SUPERBLOCK_OFFSET / sector_size;
+    uint64_t sectors_count = (EXT2_SUPERBLOCK_LENGTH + sector_size  - 1) / sector_size;
+    uint64_t pages_count = (EXT2_SUPERBLOCK_LENGTH + PAGE_SIZE - 1) / (PAGE_SIZE);
+    uint64_t buf = AddKernelPages(pages_count);
+    sb->bdev->read(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
+
+    uint64_t sector_offset = EXT2_SUPERBLOCK_OFFSET % sector_size;
+    ext2_superblock_disk_t* sbext = (ext2_superblock_disk_t*)(buf + sector_offset);
+    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
+
+    sbext->s_state = EXT2_VALID_FS;
+
+    EXT2WriteBGDT(sb);
+
+    sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
+
+    return 0; // IMPORTANT - Fill the rest when I know how to deal with inode, now just clean the sb//
+}
+
+uint32_t EXT2InodeNumberToGroup(ext2_info_t* vol, uint32_t inode_number) {
+    return (inode_number - 1) / vol->inodes_per_group;
 }
 
 inode_t* EXT2AllocInode(superblock_t* sb) {
@@ -197,11 +255,101 @@ inode_t* EXT2AllocInode(superblock_t* sb) {
     };
 
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+
     inode->sb = sb;
     inode->ops = NULL; // IMPORTANT - fill in with ext2 ops later - IMPORTANT
+
+    data->block_group = UINT32_MAX;
+
+    return inode;
 }
 
-void EXT2FreeInode(superblock_t* sb, inode_t* inode) {
+void EXT2FreeInode(inode_t* inode) {
+    // IMPORTANT - Fill later when we have more inode and file ops! //
+}
+
+uint64_t EXT2ModeToType(uint16_t mode) {
+    switch (mode & 0xF000) {
+        case EXT2_S_IFREG: return VFS_TYPE_FILE;
+        case EXT2_S_IFDIR: return VFS_TYPE_DIR;
+        case EXT2_S_IFLNK: return VFS_TYPE_SYMLINK;
+        case EXT2_S_IFCHR: return VFS_TYPE_CHARDEV;
+        case EXT2_S_IFBLK: return VFS_TYPE_BLOCKDEV;
+        case EXT2_S_IFIFO: return VFS_TYPE_FIFO;
+        case EXT2_S_IFSOCK: return VFS_TYPE_SOCKET;
+        default:     return VFS_TYPE_UNKNOWN;
+    }
+}
+
+void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+
+    inode->size        = raw->i_size;
+    inode->permissions = raw->i_mode & 0x0FFF;
+    inode->type        = EXT2ModeToType(raw->i_mode);
+    inode->owner_id    = raw->i_uid;
+    inode->group_id    = raw->i_gid;
+    inode->ref_count   = raw->i_links_count;
+    inode->created_at  = raw->i_ctime;
+    inode->modified_at = raw->i_mtime;
+    inode->accessed_at = raw->i_atime;
+
+    data->i_blocks     = raw->i_blocks;
+    data->i_flags      = raw->i_flags;
+    data->i_generation = raw->i_generation;
+    data->i_file_acl   = raw->i_file_acl;
+    data->i_dir_acl    = raw->i_dir_acl;
+    data->i_faddr      = raw->i_faddr;
+    data->i_osd1       = raw->i_osd1;
+    data->i_dtime      = raw->i_dtime;
+    memcpy(data->i_osd2,  raw->i_osd2,   sizeof(raw->i_osd2));
+    memcpy(data->i_block, raw->i_block,  sizeof(raw->i_block));
+
+    if (inode->type == VFS_TYPE_FILE)
+        inode->size |= ((uint64_t)raw->i_dir_acl << 32);
+}
+
+/*
+    Fields in inode that have to be filled before you call this func:
+    1. inode number
+    2. superblock
+    3. block group (Optional)
+    Every other field is filled here.
+*/
+int64_t EXT2ReadInode(inode_t* inode) {
+    if (inode == NULL) return 1;
+    if (inode->sb == NULL) return 1;
+    if (inode->fs_specific == NULL) return 1;
+
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
+    superblock_t* sb = inode->sb;
+
+    if (data->block_group == UINT32_MAX) data->block_group = EXT2InodeNumberToGroup(vol, data->inode_number);
+
+    uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
+    uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
+    uint32_t block_offset   = (inode_index * vol->inode_size) / sb->block_size;
+    uint32_t byte_offset    = (inode_index * vol->inode_size) % sb->block_size;
+
+    uint8_t* buf = (uint8_t*) AddKernelPages((sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    
+    EXT2ReadBlocks(sb, inode_table + block_offset, 1, buf);
+
+    ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
+    PopulateInode(raw_inode, inode);
+
+    total_time_t total_time;
+    GetTotalTime(&total_time);
+    uint32_t unix_timstamp = CalculateUnixTimestamp(&total_time);
+    raw_inode->i_atime = unix_timstamp;
+    EXT2WriteBlocks(sb, inode_table + block_offset, 1, buf);
+
+    RemoveKernelPages((uint64_t)buf, (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
+
+
+    return 0;
 }
 
 uint32_t EXT2SectorsInBlock(superblock_t* sb) {
@@ -219,6 +367,15 @@ int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, voi
 
     uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
     sb->bdev->read(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
+    return 0;
+
+}
+
+int64_t EXT2WriteBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
+    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
+
+    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
+    sb->bdev->write(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
     return 0;
 
 }
