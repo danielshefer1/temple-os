@@ -5,4 +5,4 @@
 *.d
 qemu.log
 build/
-data_folder/
+data-folder/

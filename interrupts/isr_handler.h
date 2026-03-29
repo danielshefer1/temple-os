@@ -5,6 +5,7 @@
 #include "types.h"
 #include "defintions.h"
 #include "vga.h"
+#include "utility.h"
 
 void isr_handler(interrupt_frame_t* frame);
 

@@ -281,18 +281,32 @@ uint64_t EXT2ModeToType(uint16_t mode) {
     }
 }
 
+uint32_t EXT2TypeToMode(uint64_t type) {
+    switch (type) {
+        case VFS_TYPE_FILE: return EXT2_S_IFREG;
+        case VFS_TYPE_DIR: return EXT2_S_IFDIR;
+        case VFS_TYPE_SYMLINK: return EXT2_S_IFLNK;
+        case VFS_TYPE_CHARDEV: return EXT2_S_IFCHR;
+        case VFS_TYPE_BLOCKDEV: return EXT2_S_IFBLK;
+        case VFS_TYPE_FIFO: return EXT2_S_IFIFO;
+        case VFS_TYPE_SOCKET: return EXT2_S_IFSOCK;
+        default:     return 0;
+    }
+}
+
 void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
 
     inode->size        = raw->i_size;
-    inode->permissions = raw->i_mode & 0x0FFF;
     inode->type        = EXT2ModeToType(raw->i_mode);
-    inode->owner_id    = raw->i_uid;
-    inode->group_id    = raw->i_gid;
-    inode->ref_count   = raw->i_links_count;
-    inode->created_at  = raw->i_ctime;
-    inode->modified_at = raw->i_mtime;
-    inode->accessed_at = raw->i_atime;
+
+    data->permissions  = raw->i_mode & 0x0FFF;
+    data->owner_id     = raw->i_uid;
+    data->group_id     = raw->i_gid;
+    data->ref_count    = raw->i_links_count;
+    data->created_at   = raw->i_ctime;
+    data->modified_at  = raw->i_mtime;
+    data->accessed_at  = raw->i_atime;
 
     data->i_blocks     = raw->i_blocks;
     data->i_flags      = raw->i_flags;
@@ -302,8 +316,8 @@ void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
     data->i_faddr      = raw->i_faddr;
     data->i_osd1       = raw->i_osd1;
     data->i_dtime      = raw->i_dtime;
-    memcpy(data->i_osd2,  raw->i_osd2,   sizeof(raw->i_osd2));
-    memcpy(data->i_block, raw->i_block,  sizeof(raw->i_block));
+    memcpy(data->i_osd2,  raw->i_osd2,  sizeof(raw->i_osd2));
+    memcpy(data->i_block, raw->i_block, sizeof(raw->i_block));
 
     if (inode->type == VFS_TYPE_FILE)
         inode->size |= ((uint64_t)raw->i_dir_acl << 32);
@@ -333,6 +347,8 @@ int64_t EXT2ReadInode(inode_t* inode) {
     uint32_t block_offset   = (inode_index * vol->inode_size) / sb->block_size;
     uint32_t byte_offset    = (inode_index * vol->inode_size) % sb->block_size;
 
+    data->disk_offset = block_offset * sb->block_size + byte_offset;
+
     uint8_t* buf = (uint8_t*) AddKernelPages((sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
     
     EXT2ReadBlocks(sb, inode_table + block_offset, 1, buf);
@@ -342,13 +358,65 @@ int64_t EXT2ReadInode(inode_t* inode) {
 
     total_time_t total_time;
     GetTotalTime(&total_time);
-    uint32_t unix_timstamp = CalculateUnixTimestamp(&total_time);
-    raw_inode->i_atime = unix_timstamp;
+    uint32_t unix_timestamp = CalculateUnixTimestamp(&total_time);
+
+    if (unix_timestamp != 0) {
+        data->accessed_at    = unix_timestamp;
+        raw_inode->i_atime   = unix_timestamp;
+        EXT2WriteBlocks(sb, inode_table + block_offset, 1, buf);
+    }
+
+    RemoveKernelPages((uint64_t)buf, (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    return 0;
+}
+
+void PopulateRawInode(inode_t* inode, ext2_inode_disk_t* raw) {
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+
+    raw->i_size        = inode->size;
+    raw->i_mode        = EXT2TypeToMode(inode->type) | (data->permissions & 0x0FFF);
+    raw->i_uid         = data->owner_id;
+    raw->i_gid         = data->group_id;
+    raw->i_links_count = data->ref_count;
+    raw->i_ctime       = data->created_at;
+    raw->i_mtime       = data->modified_at;
+    raw->i_atime       = data->accessed_at;
+
+    raw->i_blocks      = data->i_blocks;
+    raw->i_flags       = data->i_flags;
+    raw->i_generation  = data->i_generation;
+    raw->i_file_acl    = data->i_file_acl;
+    raw->i_dir_acl     = data->i_dir_acl;
+    raw->i_faddr       = data->i_faddr;
+    raw->i_osd1        = data->i_osd1;
+    raw->i_dtime       = data->i_dtime;
+    memcpy(raw->i_osd2,  data->i_osd2,  sizeof(raw->i_osd2));
+    memcpy(raw->i_block, data->i_block, sizeof(raw->i_block));
+}
+
+int64_t EXT2WriteInode(inode_t* inode) {
+    if (inode == NULL) return 1;
+    if (inode->sb == NULL) return 1;
+    if (inode->fs_specific == NULL) return 1;
+
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
+    superblock_t* sb = inode->sb;
+
+    uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
+    uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
+    uint32_t block_offset = (data->disk_offset + sb->block_size - 1) / sb->block_size;
+    uint32_t byte_offset = data->disk_offset % sb->block_size;
+
+    uint8_t* buf = (uint8_t*) AddKernelPages((sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
+    
+    EXT2ReadBlocks(sb, inode_table + block_offset, 1, buf);
+    ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
+    PopulateRawInode(inode, raw_inode);
     EXT2WriteBlocks(sb, inode_table + block_offset, 1, buf);
 
     RemoveKernelPages((uint64_t)buf, (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
-
-
     return 0;
 }
 

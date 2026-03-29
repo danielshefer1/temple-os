@@ -521,22 +521,14 @@ typedef struct superblock_t {
 typedef struct inode_t {
     uint64_t type;
     uint64_t size;
-    uint64_t permissions;
-    uint64_t owner_id;
-    uint64_t group_id;
-    uint64_t ref_count;
-
-    uint64_t created_at;      
-    uint64_t modified_at;     
-    uint64_t accessed_at;  
 
     struct inode_ops_t* ops;
     void* fs_specific;
+
     char* syslink_name;
     superblock_t* sb;
 
     mutex_t mutex;
-
 } inode_t;
 
 typedef enum {
@@ -694,7 +686,7 @@ typedef struct ext2_inode_disk {
     uint16_t i_uid;
     uint32_t i_size;                 // file size in bytes
     uint32_t i_atime;                // last access time
-    uint32_t i_ctime;                // creation time
+    uint32_t i_ctime;                // change time
     uint32_t i_mtime;                // last modification time
     uint32_t i_dtime;                // deletion time
     uint16_t i_gid;
@@ -775,18 +767,23 @@ typedef struct ext2_inode_data_t {
     uint32_t inode_number;
     uint32_t block_group;
     uint64_t disk_offset;
-
-    uint32_t i_blocks;        
-    uint32_t i_flags;         
-    uint32_t i_generation;   
-    uint32_t i_file_acl;      
-    uint32_t i_dir_acl;      
-    uint32_t i_faddr;         
-    uint32_t i_osd1;          
-    uint8_t  i_osd2[12];      
-    uint32_t i_dtime;         
-
-    uint32_t i_block[15];     
+    uint32_t permissions;
+    uint32_t owner_id;
+    uint32_t group_id;
+    uint32_t ref_count;
+    uint32_t created_at;
+    uint32_t modified_at;
+    uint32_t accessed_at;
+    uint32_t i_blocks;
+    uint32_t i_flags;
+    uint32_t i_generation;
+    uint32_t i_file_acl;
+    uint32_t i_dir_acl;
+    uint32_t i_faddr;
+    uint32_t i_osd1;
+    uint8_t  i_osd2[12];
+    uint32_t i_dtime;
+    uint32_t i_block[15];
 } ext2_inode_data_t;
 
 typedef struct date {

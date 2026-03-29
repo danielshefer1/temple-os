@@ -85,6 +85,7 @@ void ExecptionHandler(interrupt_frame_t* frame) {
             ControlProtectionExceptionHandler(frame);
             break;
     }
+    end();
 }
 
 
