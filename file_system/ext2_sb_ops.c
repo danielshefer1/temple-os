@@ -304,7 +304,7 @@ void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
     data->owner_id     = raw->i_uid;
     data->group_id     = raw->i_gid;
     data->ref_count    = raw->i_links_count;
-    data->created_at   = raw->i_ctime;
+    data->changed_at   = raw->i_ctime;
     data->modified_at  = raw->i_mtime;
     data->accessed_at  = raw->i_atime;
 
@@ -378,7 +378,7 @@ void PopulateRawInode(inode_t* inode, ext2_inode_disk_t* raw) {
     raw->i_uid         = data->owner_id;
     raw->i_gid         = data->group_id;
     raw->i_links_count = data->ref_count;
-    raw->i_ctime       = data->created_at;
+    raw->i_ctime       = data->changed_at;
     raw->i_mtime       = data->modified_at;
     raw->i_atime       = data->accessed_at;
 
