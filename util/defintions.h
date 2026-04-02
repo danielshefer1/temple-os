@@ -318,6 +318,7 @@
 #define EXT2_FIRST_INO          11     // first non-reserved inode
 
 #define EXT2_BLOCK_SIZE(sb)         (1024 << (sb)->s_log_block_size)
+#define EXT2_BLOCKS_PER_BLOCK(sb)     (sb->block_size / sizeof(uint32_t))
 // End EXT2 Definitions
 
 // RTC Definitions
@@ -335,3 +336,8 @@
 #define RTC_HANG_REG 0x0A
 #define RTC_STATUS_REG 0x0B
 // End RTC Definitions
+
+// Buffer Cache Definitions
+#define BUFFER_CACHE_CAP 4096
+#define BUFFER_CACHE_SIZE 512
+// End Buffer Cache Definitions

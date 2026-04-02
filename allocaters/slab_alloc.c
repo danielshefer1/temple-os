@@ -2,8 +2,8 @@
 
 
 static const uint64_t sizes[] = {sizeof(buddy_node_t), PAGE_SIZE, sizeof(dentry_t), sizeof(ext2_inode_data_t), sizeof(dcache_entry_t), sizeof(block_device_t),
-     sizeof(block_device_node_t), sizeof(partition_device_t), sizeof(superblock_t), sizeof(ext2_info_t), sizeof(inode_t)};
-static const uint64_t slab_sizes[] = {4, 32, 4, 4, 4, 4, 1, 1, 1, 1, 4};
+     sizeof(block_device_node_t), sizeof(partition_device_t), sizeof(superblock_t), sizeof(ext2_info_t), sizeof(inode_t), sizeof(buffer_node_t)};
+static const uint64_t slab_sizes[] = {4, 32, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4};
 static cache_t caches[sizeof(sizes) / sizeof(sizes[0])];
 static uint64_t curr_addr;
 static const uint64_t num_cache = sizeof(sizes) / sizeof(sizes[0]);

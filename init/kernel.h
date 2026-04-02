@@ -20,5 +20,7 @@
 #include "mbr.h"
 #include "ext2_sb_ops.h"
 #include "rtc.h"
+#include "blocks_buffer.h"
+#include "ext2_ino_ops.h"
 
 void kmain();

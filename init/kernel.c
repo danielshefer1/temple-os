@@ -5,10 +5,11 @@ void kmain() {
 
     superblock_t* sb = EXT2MountRoot();
 
-    inode_t* test_inode = EXT2AllocInode(sb);
-    ext2_inode_data_t* data = (ext2_inode_data_t*) test_inode->fs_specific;
-    data->inode_number = 2;
-    EXT2ReadInode(test_inode);
+    dentry_t dentry;
+    dentry.name = "test.txt";
+    dentry.inode = NULL;
+
+    EXT2Lookup(sb->root_inode, &dentry);
 
     EXT2Umount(sb);
     end();

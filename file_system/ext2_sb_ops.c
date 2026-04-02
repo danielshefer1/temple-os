@@ -1,5 +1,17 @@
 #include "ext2_sb_ops.h"
 
+static superblock_ops_t ext2_sb_ops = {
+    .alloc_inode = EXT2AllocInode,
+    .free_inode = NULL,
+    .read_inode = EXT2ReadInode,
+    .write_inode = EXT2WriteInode,
+    .mount = EXT2Mount,
+    .unmount = EXT2Umount,
+    .sync = EXT2Sync,
+    .stat = NULL
+};
+
+
 superblock_t* EXT2MountRoot() {
     superblock_t* sb = (superblock_t*) kmalloc(sizeof(superblock_t));
     int64_t ret = EXT2FindRoot(sb);
@@ -61,8 +73,7 @@ int64_t EXT2ReadBGDT(superblock_t* sb) {
 
     uint32_t raw_size = vol->block_group_count * sizeof(ext2_block_group_desc_disk_t);
     uint32_t raw_size_pages = (raw_size + PAGE_SIZE - 1) / PAGE_SIZE;
-    ext2_block_group_desc_disk_t* buf = (ext2_block_group_desc_disk_t*) AddKernelPages(raw_size_pages);
-    EXT2ReadBlocks(sb, bgdt_block, (raw_size + sb->block_size - 1) / sb->block_size, (void*)buf);
+    ext2_block_group_desc_disk_t* buf = bread(sb, bgdt_block);
 
     vol->bgdt = (ext2_block_group_t*) kmalloc(vol->block_group_count * sizeof(ext2_block_group_t));
 
@@ -74,8 +85,6 @@ int64_t EXT2ReadBGDT(superblock_t* sb) {
         vol->bgdt[i].free_inodes_count = buf[i].free_inodes_count;
         vol->bgdt[i].used_dirs_count   = buf[i].used_dirs_count;
     }
-
-    RemoveKernelPages((uint64_t)buf, raw_size_pages);
  
     return 0;
 }
@@ -91,8 +100,7 @@ int64_t EXT2WriteBGDT(superblock_t* sb) {
 
     uint32_t raw_size = vol->block_group_count * sizeof(ext2_block_group_desc_disk_t);
     uint32_t raw_size_pages = (raw_size + PAGE_SIZE - 1) / PAGE_SIZE;
-    ext2_block_group_desc_disk_t* buf = (ext2_block_group_desc_disk_t*) AddKernelPages(raw_size_pages);
-    EXT2ReadBlocks(sb, bgdt_block, (raw_size + sb->block_size - 1) / sb->block_size, (void*)buf);
+    ext2_block_group_desc_disk_t* buf = bread(sb, bgdt_block);
 
     for (uint32_t i = 0; i < vol->block_group_count; i++) {
         buf[i].block_bitmap = vol->bgdt[i].block_bitmap;
@@ -103,8 +111,7 @@ int64_t EXT2WriteBGDT(superblock_t* sb) {
         buf[i].used_dirs_count = vol->bgdt[i].used_dirs_count;
     }
 
-    EXT2WriteBlocks(sb, bgdt_block, (raw_size + sb->block_size - 1) / sb->block_size, (void*)buf);
-    RemoveKernelPages((uint64_t)buf, raw_size_pages);
+    bwrite(sb, bgdt_block);
  
     return 0;
 }
@@ -118,6 +125,8 @@ int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
     ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
 
     sb->block_size = EXT2_BLOCK_SIZE(sbext);
+    sb->pages_in_block = (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE;
+
     vol->sectors_per_block = sb->block_size / sb->bdev->sector_size;
 
     vol->inodes_per_group = sbext->s_inodes_per_group;
@@ -180,6 +189,14 @@ int64_t EXT2Mount(superblock_t* sb) {
 
     RemoveKernelPages(buf, pages_count);
 
+    inode_t* root_inode = EXT2AllocInode(sb);
+    ext2_inode_data_t* root_data = (ext2_inode_data_t*) root_inode->fs_specific;
+    root_data->inode_number = EXT2_ROOT_INO;
+
+    EXT2ReadInode(root_inode);
+    sb->root_inode = root_inode;
+    sb->ops = &ext2_sb_ops;
+
     if (ret != 0) return ret + 1;
     return 0;
 }
@@ -188,27 +205,9 @@ int64_t EXT2Sync(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 1;
 
-    uint64_t sector_size = sb->bdev->sector_size;
+    bflush(sb);
+    // Complete later when we have more info about inodes and file ops, for now just flush the block cache and update the superblock state //
 
-    uint64_t blocks_offset = EXT2_SUPERBLOCK_OFFSET / sector_size;
-    uint64_t sectors_count = (EXT2_SUPERBLOCK_LENGTH + sector_size  - 1) / sector_size;
-    uint64_t pages_count = (EXT2_SUPERBLOCK_LENGTH + PAGE_SIZE - 1) / (PAGE_SIZE);
-    uint64_t buf = AddKernelPages(pages_count);
-    sb->bdev->read(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
-
-    uint64_t sector_offset = EXT2_SUPERBLOCK_OFFSET % sector_size;
-    ext2_superblock_disk_t* sbext = (ext2_superblock_disk_t*)(buf + sector_offset);
-    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
-
-    sbext->s_free_blocks_count = vol->free_blocks;
-    sbext->s_free_inodes_count = vol->free_inodes;
-
-    total_time_t total_time;
-    GetTotalTime(&total_time);
-    uint32_t wtime = CalculateUnixTimestamp(&total_time);
-    if (wtime != 0) sbext->s_wtime = wtime;
-
-    sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 
     return 0;
 }
@@ -216,6 +215,8 @@ int64_t EXT2Sync(superblock_t* sb) {
 int64_t EXT2Umount(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 1;
+
+    EXT2Sync(sb);
 
     uint64_t sector_size = sb->bdev->sector_size;
 
@@ -235,7 +236,8 @@ int64_t EXT2Umount(superblock_t* sb) {
 
     sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 
-    return 0; // IMPORTANT - Fill the rest when I know how to deal with inode, now just clean the sb//
+    RemoveKernelPages(buf, pages_count);
+    return 0; // IMPORTANT - Fill the rest when I know how to deal with inode, now just clean the sb
 }
 
 uint32_t EXT2InodeNumberToGroup(ext2_info_t* vol, uint32_t inode_number) {
@@ -349,9 +351,7 @@ int64_t EXT2ReadInode(inode_t* inode) {
 
     data->disk_offset = block_offset * sb->block_size + byte_offset;
 
-    uint8_t* buf = (uint8_t*) AddKernelPages((sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
-    
-    EXT2ReadBlocks(sb, inode_table + block_offset, 1, buf);
+    uint8_t* buf = (uint8_t*) bread(sb, inode_table + block_offset);
 
     ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
     PopulateInode(raw_inode, inode);
@@ -363,10 +363,8 @@ int64_t EXT2ReadInode(inode_t* inode) {
     if (unix_timestamp != 0) {
         data->accessed_at    = unix_timestamp;
         raw_inode->i_atime   = unix_timestamp;
-        EXT2WriteBlocks(sb, inode_table + block_offset, 1, buf);
+        bwrite(sb, inode_table + block_offset);
     }
-
-    RemoveKernelPages((uint64_t)buf, (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
     return 0;
 }
 
@@ -409,42 +407,12 @@ int64_t EXT2WriteInode(inode_t* inode) {
     uint32_t block_offset = (data->disk_offset + sb->block_size - 1) / sb->block_size;
     uint32_t byte_offset = data->disk_offset % sb->block_size;
 
-    uint8_t* buf = (uint8_t*) AddKernelPages((sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
-    
-    EXT2ReadBlocks(sb, inode_table + block_offset, 1, buf);
+    uint8_t* buf = (uint8_t*) bread(sb, inode_table + block_offset);
+
     ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
     PopulateRawInode(inode, raw_inode);
-    EXT2WriteBlocks(sb, inode_table + block_offset, 1, buf);
+    bwrite(sb, inode_table + block_offset);
 
-    RemoveKernelPages((uint64_t)buf, (sb->block_size + PAGE_SIZE - 1) / PAGE_SIZE);
     return 0;
-}
-
-uint32_t EXT2SectorsInBlock(superblock_t* sb) {
-    return sb->block_size / sb->bdev->sector_size;
-}
-
-uint64_t EXT2BlockToLba(superblock_t* sb, uint32_t block_idx) {
-    uint32_t sectors_per_block = sb->block_size / sb->bdev->sector_size;
-
-    return sb->start_lba + (block_idx * sectors_per_block);
-}
-
-int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
-    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
-
-    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
-    sb->bdev->read(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
-    return 0;
-
-}
-
-int64_t EXT2WriteBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
-    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
-
-    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
-    sb->bdev->write(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
-    return 0;
-
 }
 

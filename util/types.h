@@ -508,6 +508,7 @@ typedef struct mutex_t {
 typedef struct superblock_t {
     uint64_t magic;
     uint64_t block_size;
+    uint64_t pages_in_block;
     
     void* fs_info;             
     struct superblock_ops_t* ops;
@@ -802,3 +803,30 @@ typedef struct total_time {
     date_t date;
     time_t time;
 } total_time_t;
+
+typedef struct buffer_node {
+    bool is_valid;           
+    bool is_dirty;          
+    
+    uint32_t block_number;   
+    uint8_t *data;
+    uint64_t ref_count;          
+
+    struct buffer_node *prev;
+    struct buffer_node *next;
+    
+    struct buffer_node *hash_next; 
+
+    mutex_t mutex;
+} buffer_node_t;
+
+typedef struct buffer_cache {
+    buffer_node_t** hash_table;
+    buffer_node_t* lru_head;
+    buffer_node_t* lru_tail;
+
+    uint64_t capacity;
+    uint64_t size;
+
+    spinlock_t lock;
+} buffer_cache_t;
