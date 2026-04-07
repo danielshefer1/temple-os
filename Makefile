@@ -32,7 +32,7 @@ DATA_IMG = data.img
 COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
 INCDIRS = -I ./allocaters -I ./boot -I ./drivers -I ./file_system -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user -I ./util -I ./wrappers
 
-K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone $(INCDIRS)
+K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-sse2 $(INCDIRS)
 B_CFLAGS = $(COMMON_CFLAGS) -m32
 
 K_LDFLAGS = -m elf_x86_64 -T linker64.ld

@@ -541,6 +541,7 @@ typedef enum {
 } mount_type_t;
 
 typedef struct dentry_t {
+    
     mutex_t mutex;
 
     mount_type_t mount_type;

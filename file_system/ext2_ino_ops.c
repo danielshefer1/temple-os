@@ -484,22 +484,20 @@ int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     int64_t res = EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_DIR);
     if (res < 0) return res;
 
-    uint32_t test1 = 0, test2 = 0;
-
-    kprintf("ext2 mkdir: new inode = %, fs_specific = %x\n",
-        dentry->inode,
-        dentry->inode ? dentry->inode->fs_specific : NULL);
-
     // Add . and .. entries to the new directory
     dentry_t dot = {
-        .name = NULL,
-        .inode = NULL
+        .name = ".",
+        .inode = dentry->inode
+    };
+    dentry_t dotdot = {
+        .name = "..",
+        .inode = dir
     };
     int64_t dot_res = EXT2PopulateDirEntry(dentry->inode, &dot, VFS_TYPE_DIR);
     if (dot_res < 0) return dot_res;
 
-    //int64_t dotdot_res = EXT2PopulateDirEntry(dentry->inode, &dotdot, VFS_TYPE_DIR);
-    //if (dotdot_res < 0) return dotdot_res;
+    int64_t dotdot_res = EXT2PopulateDirEntry(dentry->inode, &dotdot, VFS_TYPE_DIR);
+    if (dotdot_res < 0) return dotdot_res;
 
     return 0;
 

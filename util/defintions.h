@@ -362,3 +362,7 @@
 #define BUFFER_CACHE_CAP 4096
 #define BUFFER_CACHE_SIZE 512
 // End Buffer Cache Definitions
+
+// Mutex Definitions
+#define MUTEX_INITIALIZER {0, 0, NULL}
+// End Mutex Definitions
