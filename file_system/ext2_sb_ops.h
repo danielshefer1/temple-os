@@ -8,6 +8,7 @@
 #include "string.h"
 #include "rtc.h"
 #include "blocks_buffer.h"
+#include "ext2_helpers.h"
 
 int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf);
 
@@ -15,6 +16,7 @@ int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, voi
 superblock_t* EXT2MountRoot();
 int64_t EXT2FindRoot(superblock_t* sb);
 int64_t EXT2Mount(superblock_t* sb);
+int64_t EXT2Sync(superblock_t* sb);
 
 int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb);
 int64_t EXT2Umount(superblock_t* sb);
@@ -23,3 +25,4 @@ int64_t EXT2WriteBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, vo
 
 inode_t* EXT2AllocInode(superblock_t* sb);
 int64_t EXT2ReadInode(inode_t* inode);
+int64_t EXT2WriteInode(inode_t* inode);

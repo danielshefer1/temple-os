@@ -502,9 +502,6 @@ typedef struct mutex_t {
     void* wait_queue;        
 } mutex_t;
 
-
-
-
 typedef struct superblock_t {
     uint64_t magic;
     uint64_t block_size;
@@ -520,8 +517,13 @@ typedef struct superblock_t {
 } superblock_t;
 
 typedef struct inode_t {
+    uint32_t owner_id;
+    uint32_t group_id;
+
+    uint64_t flags;
     uint64_t type;
     uint64_t size;
+    uint64_t permissions;
 
     struct inode_ops_t* ops;
     void* fs_specific;
@@ -768,15 +770,13 @@ typedef struct ext2_inode_data_t {
     uint32_t inode_number;
     uint32_t block_group;
     uint64_t disk_offset;
-    uint32_t permissions;
-    uint32_t owner_id;
-    uint32_t group_id;
+
     uint32_t ref_count;
     uint32_t changed_at;
     uint32_t modified_at;
     uint32_t accessed_at;
     uint32_t i_blocks;
-    uint32_t i_flags;
+
     uint32_t i_generation;
     uint32_t i_file_acl;
     uint32_t i_dir_acl;

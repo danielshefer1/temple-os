@@ -198,6 +198,17 @@
 #define ENOTEMPTY    39   // directory not empty (tried to rmdir non-empty dir)
 #define ENOTSUP      95   // operation not supported
 
+#define S_SYNC        1   // Writes are synced at once
+#define S_IMMUTABLE   2   // Immutable file
+#define S_APPEND      4   // Append-only file
+#define S_NOATIME     8   // Do not update access times
+#define S_NODUMP     16   // Do not dump
+
+#define IS_SYNC(inode)      ((inode)->flags & S_SYNC)
+#define IS_IMMUTABLE(inode) ((inode)->flags & S_IMMUTABLE)
+#define IS_APPEND(inode)    ((inode)->flags & S_APPEND)
+#define IS_NOATIME(inode)   ((inode)->flags & S_NOATIME)
+#define IS_NODUMP(inode)    ((inode)->flags & S_NODUMP)
 // End VFS Definitons
 
 // Dcache Definitions
@@ -276,6 +287,15 @@
 #define EXT2_S_IFCHR   0x2000
 #define EXT2_S_IFIFO   0x1000
 
+#define EXT2_FT_UNKNOWN  0
+#define EXT2_FT_REG_FILE 1
+#define EXT2_FT_DIR      2
+#define EXT2_FT_CHRDEV   3
+#define EXT2_FT_BLKDEV   4
+#define EXT2_FT_FIFO     5
+#define EXT2_FT_SOCK     6
+#define EXT2_FT_SYMLINK  7
+
 // i_mode permission bits
 #define EXT2_S_ISUID   0x0800       // setuid
 #define EXT2_S_ISGID   0x0400       // setgid
@@ -319,6 +339,7 @@
 
 #define EXT2_BLOCK_SIZE(sb)         (1024 << (sb)->s_log_block_size)
 #define EXT2_BLOCKS_PER_BLOCK(sb)     (sb->block_size / sizeof(uint32_t))
+#define EXT2_DIRENT_ALIGN(size) (((size) + 3) & ~3)
 // End EXT2 Definitions
 
 // RTC Definitions

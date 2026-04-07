@@ -29,7 +29,6 @@ DATA_IMG = data.img
 # ============================================================================
 # Flags
 # ============================================================================
-# -mno-red-zone is mandatory for 64-bit kernels to prevent stack corruption
 COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
 INCDIRS = -I ./allocaters -I ./boot -I ./drivers -I ./file_system -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user -I ./util -I ./wrappers
 
@@ -50,7 +49,7 @@ QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machin
 			 #-device qemu-xhci,id=xhci \
 			 -device usb-kbd,bus=xhci.0 \
 			 -device usb-mouse,bus=xhci.0 \
-			 
+
 
 # ============================================================================
 # Source & Object Definitions
@@ -60,7 +59,7 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc
                 util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c drivers/acpi.c \
                 util/memory.c drivers/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c drivers/pci.c \
 				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c drivers/rtc.c drivers/fadt.c file_system/ext2_ino_ops.c \
-				file_system/blocks_buffer.c
+				file_system/blocks_buffer.c file_system/ext2_helpers.c
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm
 
 BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c
@@ -83,7 +82,7 @@ $(DATA_IMG):
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
 	@mke2fs -t ext2 -L "MYOS_ROOT" $(DATA_IMG)
 	@echo "✅ $(DATA_IMG) is ready."
-	
+
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
 	@mkdir -p $(dir $@)
@@ -128,7 +127,7 @@ $(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/boot.asm boot/stage2.asm boot/s
 	@$(AS) $(ASFLAGS_BIN) boot/boot.asm -o $(BUILD_DIR)/boot.bin
 	@$(AS) $(ASFLAGS_BIN) boot/stage2.asm -o $(BUILD_DIR)/stage2.bin
 	@$(AS) $(ASFLAGS_BIN) boot/stage3.asm -o $(BUILD_DIR)/stage3.bin
-	
+
 	@$(OBJCOPY64) -O binary -R .bss  $(KERNEL_ELF) $(BUILD_DIR)/kernel.bin
 	@$(OBJCOPY32) -O binary \
     	-j .stage4 -j .text -j .data -j .bss \
@@ -137,7 +136,7 @@ $(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/boot.asm boot/stage2.asm boot/s
 
 	truncate -s %512 build/bootstrap.bin
 	truncate -s %512 build/kernel.bin
-	
+
 	cat $(BUILD_DIR)/bootstrap.bin $(BUILD_DIR)/kernel.bin > $(PAYLOAD)
 
 	dd if=/dev/zero of=$(DISK_IMG) bs=1M count=20
@@ -160,7 +159,7 @@ run: $(DISK_IMG) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 
 debug: $(DISK_IMG) $(KERNEL_ELF) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & 
+	qemu-system-x86_64 $(QEMU_FLAGS) -s -S &
 	gdb $(KERNEL_ELF) \
 		-ex "target remote localhost:1234" \
 		-ex "set pagination off" \

@@ -20,3 +20,13 @@ bool IsPowerOfTwo(uint64_t num) {
     if (num == 0) return false;
     return (num & (num - 1)) == 0;
 }
+
+int64_t FindFirstUnsetInBuffer(uint64_t* buffer, uint64_t size) {
+    for (uint64_t i = 0; i < size; i++) {
+        if (buffer[i] != UINT64_MAX) {
+            uint8_t bit = SmallestBit(~buffer[i]);
+            return i * 64 + bit;
+        }
+    }
+    return -1;
+}

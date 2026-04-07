@@ -159,6 +159,16 @@ int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
     return 0;
 }
 
+int64_t CopyInternalToSbExt(superblock_t* sb, ext2_superblock_disk_t* sbext) {
+    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
+
+    sbext->s_free_inodes_count = vol->free_inodes;
+    sbext->s_free_blocks_count = vol->free_blocks;
+
+    EXT2WriteBGDT(sb);
+    return 0;
+}
+
 int64_t EXT2Mount(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 2;
@@ -231,8 +241,7 @@ int64_t EXT2Umount(superblock_t* sb) {
     ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
 
     sbext->s_state = EXT2_VALID_FS;
-
-    EXT2WriteBGDT(sb);
+    CopyInternalToSbExt(sb, sbext);
 
     sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 
@@ -240,9 +249,7 @@ int64_t EXT2Umount(superblock_t* sb) {
     return 0; // IMPORTANT - Fill the rest when I know how to deal with inode, now just clean the sb
 }
 
-uint32_t EXT2InodeNumberToGroup(ext2_info_t* vol, uint32_t inode_number) {
-    return (inode_number - 1) / vol->inodes_per_group;
-}
+
 
 inode_t* EXT2AllocInode(superblock_t* sb) {
     if (sb == NULL) return NULL;
@@ -270,48 +277,23 @@ void EXT2FreeInode(inode_t* inode) {
     // IMPORTANT - Fill later when we have more inode and file ops! //
 }
 
-uint64_t EXT2ModeToType(uint16_t mode) {
-    switch (mode & 0xF000) {
-        case EXT2_S_IFREG: return VFS_TYPE_FILE;
-        case EXT2_S_IFDIR: return VFS_TYPE_DIR;
-        case EXT2_S_IFLNK: return VFS_TYPE_SYMLINK;
-        case EXT2_S_IFCHR: return VFS_TYPE_CHARDEV;
-        case EXT2_S_IFBLK: return VFS_TYPE_BLOCKDEV;
-        case EXT2_S_IFIFO: return VFS_TYPE_FIFO;
-        case EXT2_S_IFSOCK: return VFS_TYPE_SOCKET;
-        default:     return VFS_TYPE_UNKNOWN;
-    }
-}
-
-uint32_t EXT2TypeToMode(uint64_t type) {
-    switch (type) {
-        case VFS_TYPE_FILE: return EXT2_S_IFREG;
-        case VFS_TYPE_DIR: return EXT2_S_IFDIR;
-        case VFS_TYPE_SYMLINK: return EXT2_S_IFLNK;
-        case VFS_TYPE_CHARDEV: return EXT2_S_IFCHR;
-        case VFS_TYPE_BLOCKDEV: return EXT2_S_IFBLK;
-        case VFS_TYPE_FIFO: return EXT2_S_IFIFO;
-        case VFS_TYPE_SOCKET: return EXT2_S_IFSOCK;
-        default:     return 0;
-    }
-}
-
 void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
 
     inode->size        = raw->i_size;
     inode->type        = EXT2ModeToType(raw->i_mode);
 
-    data->permissions  = raw->i_mode & 0x0FFF;
-    data->owner_id     = raw->i_uid;
-    data->group_id     = raw->i_gid;
+    inode->permissions = raw->i_mode & 0x0FFF;
+    inode->owner_id    = raw->i_uid;
+    inode->group_id    = raw->i_gid;
+    inode->flags      = EXT2FlagsToVFSFlags(raw->i_flags);
+
     data->ref_count    = raw->i_links_count;
     data->changed_at   = raw->i_ctime;
     data->modified_at  = raw->i_mtime;
     data->accessed_at  = raw->i_atime;
 
     data->i_blocks     = raw->i_blocks;
-    data->i_flags      = raw->i_flags;
     data->i_generation = raw->i_generation;
     data->i_file_acl   = raw->i_file_acl;
     data->i_dir_acl    = raw->i_dir_acl;
@@ -372,16 +354,18 @@ void PopulateRawInode(inode_t* inode, ext2_inode_disk_t* raw) {
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
 
     raw->i_size        = inode->size;
-    raw->i_mode        = EXT2TypeToMode(inode->type) | (data->permissions & 0x0FFF);
-    raw->i_uid         = data->owner_id;
-    raw->i_gid         = data->group_id;
+    raw->i_mode        = EXT2TypeToMode(inode->type) | (inode->permissions & 0x0FFF);
+    raw->i_uid         = inode->owner_id;
+    raw->i_gid         = inode->group_id;
+    raw->i_flags       = EXT2VFSFlagsToIFlags(inode->flags);
+
     raw->i_links_count = data->ref_count;
     raw->i_ctime       = data->changed_at;
     raw->i_mtime       = data->modified_at;
     raw->i_atime       = data->accessed_at;
 
     raw->i_blocks      = data->i_blocks;
-    raw->i_flags       = data->i_flags;
+    
     raw->i_generation  = data->i_generation;
     raw->i_file_acl    = data->i_file_acl;
     raw->i_dir_acl     = data->i_dir_acl;
@@ -401,6 +385,10 @@ int64_t EXT2WriteInode(inode_t* inode) {
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
     ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
     superblock_t* sb = inode->sb;
+
+    total_time_t total_time;
+    GetTotalTime(&total_time);
+    data->changed_at = CalculateUnixTimestamp(&total_time);
 
     uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
     uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;

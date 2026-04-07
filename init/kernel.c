@@ -6,11 +6,11 @@ void kmain() {
     superblock_t* sb = EXT2MountRoot();
 
     dentry_t dentry;
-    dentry.name = "test.txt";
+    dentry.name = "test1.txt";
     dentry.inode = NULL;
 
-    EXT2Lookup(sb->root_inode, &dentry);
+    EXT2Create(sb->root_inode, &dentry, 0644);
 
-    EXT2Umount(sb);
+    sb->ops->unmount(sb);
     end();
 }
