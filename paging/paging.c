@@ -4,6 +4,7 @@ page_entry_t pml4[512] __attribute__((aligned(4096)));
 
 page_entry_t kernel_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t kernel_pd[512] __attribute__((aligned(4096)));
+page_entry_t kernel_pt[512] __attribute__((aligned(4096)));
 
 page_entry_t identity_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t identity_pd[512] __attribute__((aligned(4096)));
@@ -13,6 +14,7 @@ static uint64_t curr_addr_prim;
 void InitPaging() {
     uint64_t kernel_size = (uint64_t)&__kernel_size_bytes;
     uint64_t text_size = (uint64_t)&__text_size;
+    uint64_t stack_bottom = (uint64_t)&_stack_bottom; 
 
     uint64_t kernel_big_pages = (kernel_size + TABLE_SIZE - 1) / TABLE_SIZE;
     uint64_t text_big_pages = (text_size + TABLE_SIZE - 1) / TABLE_SIZE;
@@ -50,7 +52,7 @@ void InitPaging() {
     identity_pd[0].address = 0;
 
     // Start PD Mapping
-    for (uint64_t i = 0; i < kernel_big_pages + 1; i++) {
+    for (uint64_t i = 0; i < kernel_big_pages; i++) {
         uint64_t idx = base_idx + i;
 
         if (i == 0) {
@@ -66,6 +68,34 @@ void InitPaging() {
         kernel_pd[idx].address = (2*MB * i) >> 12;
         kernel_pd[idx].global = 1;
     }
+
+    // Last big page mapped with 4KB pages to not fragment and add a guard page before stack
+    uint64_t remaining_kernel_size = kernel_size - ((kernel_big_pages - 1) * TABLE_SIZE);
+    uint64_t num_small_pages = (remaining_kernel_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    if (num_small_pages == 0) {
+        switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS((uint64_t)pml4));
+        return;
+    }
+    page_entry_t* last_pd_entry = &kernel_pd[base_idx + kernel_big_pages];
+    last_pd_entry->present = 1;
+    last_pd_entry->writable = 1;
+    last_pd_entry->address = KERNEL_VIRT_TO_PHYS((uint64_t)kernel_pt) >> 12;
+    last_pd_entry->global = 1;
+    last_pd_entry->no_execute = (text_big_pages == kernel_big_pages) ? 0 : 1;
+
+    for (uint64_t i = 0; i < num_small_pages; i++) {
+        kernel_pt[i].present = 1;
+        kernel_pt[i].writable = ((text_big_pages == kernel_big_pages) && (i*PAGE_SIZE < text_size % TABLE_SIZE)) ? 1 : 0;
+        kernel_pt[i].address = (2*MB * (kernel_big_pages) + i*PAGE_SIZE) >> 12;
+        kernel_pt[i].global = 1;
+        kernel_pt[i].no_execute = ((text_big_pages == kernel_big_pages) && (i*PAGE_SIZE < text_size % TABLE_SIZE)) ? 0 : 1;
+
+        if ((2*MB * (kernel_big_pages) + i*PAGE_SIZE) < stack_bottom && (2*MB * (kernel_big_pages) + (i+1)*PAGE_SIZE) >= stack_bottom) {
+            kernel_pt[i].present = 0; // Set guard page before the stack, NEED TO MAKE SURE THERE'S PADDING IN THE BSS
+        }
+    }
+
+
     // End PD Mapping    
     switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS((uint64_t)pml4));
 }

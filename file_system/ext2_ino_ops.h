@@ -10,3 +10,4 @@
 
 int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry);
 int64_t EXT2Create(inode_t* dir, dentry_t* dentry, uint64_t permissions);
+int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions);

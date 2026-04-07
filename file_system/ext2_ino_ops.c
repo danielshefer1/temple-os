@@ -315,6 +315,11 @@ int64_t EXT2FindLastDirEntryLocation(inode_t* dir, uint32_t* out_block_idx, uint
     uint32_t block_size = dir->sb->block_size;
     uint32_t dir_blocks = dir->size / block_size;
 
+    if (dir_blocks == 0) {
+        *out_block_idx = 0;
+        *out_block_offset = 0;
+        return -1;
+    }
     int64_t block_number = FindDataBlock(dir, dir_blocks - 1);
 
     ext2_dir_entry_t* entries = (ext2_dir_entry_t*) bread(dir->sb, block_number);
@@ -332,10 +337,11 @@ int64_t EXT2FindLastDirEntryLocation(inode_t* dir, uint32_t* out_block_idx, uint
         offset += entry->rec_len;
     }
     brelse(dir->sb, block_number);
-    return -1;
+    return -2;
 }
 
 int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
+    ext2_dir_entry_t new_entry;
     total_time_t curr_total_time;
     GetTotalTime(&curr_total_time);
     ((ext2_inode_data_t*)dir->fs_specific)->accessed_at = CalculateUnixTimestamp(&curr_total_time);
@@ -346,13 +352,34 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
     uint32_t last_block_idx, last_bytes_offset;
 
     int64_t last_res = EXT2FindLastDirEntryLocation(dir, &last_block_idx, &last_bytes_offset);
-    if (last_res < 0) return last_res;
+    if (last_res < 0 && last_res != -1) return last_res;
+
+    if (last_res == -1) {
+        // An empty dir, we need to allocate the first block
+        last_block_idx = EXT2AllocBlock(dir->sb, ((ext2_inode_data_t*)dir->fs_specific)->block_group);
+        if (last_block_idx == 0) return -ENOSPC;
+        EXT2AddBlockToInode(dir, last_block_idx);
+        last_bytes_offset = 0;
+        dir->size += dir->sb->block_size;
+
+        new_entry = (ext2_dir_entry_t) {
+            .inode = ((ext2_inode_data_t*)dentry->inode->fs_specific)->inode_number,
+            .rec_len = dir->sb->block_size,
+            .name_len = name_len,
+            .file_type = EXT2TypeToFT(type)
+         };
+        ext2_dir_entry_t* new_entry_ptr = (ext2_dir_entry_t*) bread(dir->sb, last_block_idx);
+        *new_entry_ptr = new_entry;
+        memcpy((void*)(new_entry_ptr->name), dentry->name, name_len);
+        bwrite(dir->sb, last_block_idx);
+        dir->sb->ops->write_inode(dir);
+        return 0;
+    }
 
     ext2_dir_entry_t* last_entry = (ext2_dir_entry_t*) ((uint64_t)bread(dir->sb, last_block_idx) + last_bytes_offset);
 
     uint32_t last_entry_actual_size = EXT2_DIRENT_ALIGN(sizeof(ext2_dir_entry_t) + last_entry->name_len);
     uint32_t free_space = last_entry->rec_len - last_entry_actual_size;
-#define EXT2_DIRENT_ALIGN(size) (((size) + 3) & ~3)
     uint32_t new_entry_block, new_entry_offset;
 
     if (free_space < req_space) {
@@ -375,7 +402,7 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
     GetTotalTime(&curr_total_time);
     ((ext2_inode_data_t*)dir->fs_specific)->modified_at = CalculateUnixTimestamp(&curr_total_time);
 
-    ext2_dir_entry_t new_entry = {
+    new_entry = (ext2_dir_entry_t) {
         .inode = ((ext2_inode_data_t*)dentry->inode->fs_specific)->inode_number,
         .rec_len = dir->sb->block_size - new_entry_offset,
         .name_len = name_len,
@@ -457,20 +484,22 @@ int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     int64_t res = EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_DIR);
     if (res < 0) return res;
 
+    uint32_t test1 = 0, test2 = 0;
+
+    kprintf("ext2 mkdir: new inode = %, fs_specific = %x\n",
+        dentry->inode,
+        dentry->inode ? dentry->inode->fs_specific : NULL);
+
     // Add . and .. entries to the new directory
     dentry_t dot = {
-        .name = ".",
-        .inode = dentry->inode
-    };
-    dentry_t dotdot = {
-        .name = "..",
-        .inode = dir
+        .name = NULL,
+        .inode = NULL
     };
     int64_t dot_res = EXT2PopulateDirEntry(dentry->inode, &dot, VFS_TYPE_DIR);
     if (dot_res < 0) return dot_res;
 
-    int64_t dotdot_res = EXT2PopulateDirEntry(dentry->inode, &dotdot, VFS_TYPE_DIR);
-    if (dotdot_res < 0) return dotdot_res;
+    //int64_t dotdot_res = EXT2PopulateDirEntry(dentry->inode, &dotdot, VFS_TYPE_DIR);
+    //if (dotdot_res < 0) return dotdot_res;
 
     return 0;
 

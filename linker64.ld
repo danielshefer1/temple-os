@@ -42,6 +42,7 @@ SECTIONS
         *(.bss)
         *(COMMON)
         . = ALIGN(4K);        
+        . += 4096;
         _stack_bottom = .;
         . += 16384;      
         _stack_top = .;
