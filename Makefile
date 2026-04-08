@@ -43,7 +43,7 @@ ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
 
 QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
-			 -drive format=raw,file=$(DISK_IMG) -serial stdio \
+			 -drive format=raw,file=$(DISK_IMG),cache=directsync -serial stdio \
 			 -drive index=1,format=raw,file=$(DATA_IMG) \
 			 -rtc clock=host,driftfix=slew \
 			 #-device qemu-xhci,id=xhci \
