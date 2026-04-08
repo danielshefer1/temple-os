@@ -42,19 +42,16 @@ void DeleteNodeFromLRU(buffer_node_t* node) {
 
     if (node->prev != NULL) {
         node->prev->next = node->next;
-    }
-    else {
-        buffer_cache.lru_head = node->next;
-    }
-    if (node == buffer_cache.lru_tail) {
+
+    } else {
         buffer_cache.lru_tail = node->next;
     }
 
     if (node->next != NULL) {
         node->next->prev = node->prev;
-    }
-    else {
-        buffer_cache.lru_tail = node->prev;
+
+    } else {
+        buffer_cache.lru_head = node->prev;
     }
 }
 
@@ -144,8 +141,9 @@ void* bread(superblock_t* sb, uint32_t block_number) {
 
             if (del_node->is_dirty) {
                 EXT2WriteBlocks(sb, del_node->block_number, 1, del_node->data);
-                RemoveKernelPages((uint64_t)del_node->data, sb->pages_in_block);
             }
+            RemoveKernelPages((uint64_t)del_node->data, sb->pages_in_block);
+
             DeleteNodeFromLRU(del_node);
             DeleteNodeFromHash(del_node);
 

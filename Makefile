@@ -155,6 +155,13 @@ $(BUILD_DIR) $(K_OBJ_DIR) $(B_OBJ_DIR):
 clean:
 	rm -rf $(BUILD_DIR)
 
+clean-data:
+	rm -rf data.img
+
+clean-all:
+	rm -rf $(BUILD_DIR)
+	rm -rf data.img
+
 run: $(DISK_IMG) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 

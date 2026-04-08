@@ -156,7 +156,7 @@ uint32_t EXT2AllocBlock(superblock_t* sb, uint32_t block_group) {
     bwrite(sb, block_bitmap_block);
     brelse(sb, block_bitmap_block);
 
-    return block_group * vol->blocks_per_group + bit_idx + vol->first_data_block;
+    return block_group * vol->blocks_per_group + bit_idx + vol->first_data_block + 1;
 }
 
 uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
@@ -285,6 +285,8 @@ uint32_t EXT2AddBlockToInode(inode_t* inode, uint32_t block_number) {
 
     uint32_t block_idx = inode->size / inode->sb->block_size;
 
+    data->i_blocks += inode->sb->block_size / 512;
+
     if (block_idx < 12) {
         data->i_block[block_idx] = block_number;
         inode->sb->ops->write_inode(inode);
@@ -371,7 +373,10 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
         ext2_dir_entry_t* new_entry_ptr = (ext2_dir_entry_t*) bread(dir->sb, last_block_idx);
         *new_entry_ptr = new_entry;
         memcpy((void*)(new_entry_ptr->name), dentry->name, name_len);
+
         bwrite(dir->sb, last_block_idx);
+        brelse(dir->sb, last_block_idx);
+
         dir->sb->ops->write_inode(dir);
         return 0;
     }
@@ -397,6 +402,7 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
 
         last_entry->rec_len = last_entry_actual_size;
         bwrite(dir->sb, last_block_idx);
+        brelse(dir->sb, last_block_idx);
     }
 
     GetTotalTime(&curr_total_time);
@@ -413,6 +419,7 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
     *new_entry_ptr = new_entry;
     memcpy((void*)(new_entry_ptr->name), dentry->name, name_len);
     bwrite(dir->sb, new_entry_block);
+    brelse(dir->sb, new_entry_block);
 
     dir->sb->ops->write_inode(dir);
     return 0;
@@ -499,6 +506,14 @@ int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     int64_t dotdot_res = EXT2PopulateDirEntry(dentry->inode, &dotdot, VFS_TYPE_DIR);
     if (dotdot_res < 0) return dotdot_res;
 
-    return 0;
+    // The .. entry is a hard link to the parent; increment parent's link count
+    ((ext2_inode_data_t*)dir->fs_specific)->ref_count++;
+    dir->sb->ops->write_inode(dir);
 
+    // Track the new directory in the block group descriptor
+    ext2_info_t* vol = (ext2_info_t*) dir->sb->fs_info;
+    uint32_t bg = ((ext2_inode_data_t*)dentry->inode->fs_specific)->block_group;
+    vol->bgdt[bg].used_dirs_count++;
+
+    return 0;
 }

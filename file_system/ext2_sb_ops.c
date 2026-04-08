@@ -242,6 +242,7 @@ int64_t EXT2Umount(superblock_t* sb) {
 
     sbext->s_state = EXT2_VALID_FS;
     CopyInternalToSbExt(sb, sbext);
+    bflush(sb);
 
     sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
 
@@ -326,18 +327,25 @@ int64_t EXT2ReadInode(inode_t* inode) {
 
     if (data->block_group == UINT32_MAX) data->block_group = EXT2InodeNumberToGroup(vol, data->inode_number);
 
-    uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
-    uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
-    uint32_t block_offset   = (inode_index * vol->inode_size) / sb->block_size;
-    uint32_t byte_offset    = (inode_index * vol->inode_size) % sb->block_size;
+    if (data->disk_offset == 0) {
+        uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
+        uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
+        uint32_t block_offset   = (inode_index * vol->inode_size) / sb->block_size;
+        uint32_t byte_offset    = (inode_index * vol->inode_size) % sb->block_size;
 
-    data->disk_offset = block_offset * sb->block_size + byte_offset;
+        data->disk_offset = (inode_table + block_offset) * sb->block_size + byte_offset;
+    }
+    uint32_t block_offset, bytes_offset;
 
-    uint8_t* buf = (uint8_t*) bread(sb, inode_table + block_offset);
+    block_offset = data->disk_offset / sb->block_size;
+    bytes_offset = data->disk_offset % sb->block_size;
 
-    ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
+    
+
+    uint8_t* buf = (uint8_t*) bread(sb, block_offset);
+    ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + bytes_offset);
+
     PopulateInode(raw_inode, inode);
-
     total_time_t total_time;
     GetTotalTime(&total_time);
     uint32_t unix_timestamp = CalculateUnixTimestamp(&total_time);
@@ -345,7 +353,7 @@ int64_t EXT2ReadInode(inode_t* inode) {
     if (unix_timestamp != 0) {
         data->accessed_at    = unix_timestamp;
         raw_inode->i_atime   = unix_timestamp;
-        bwrite(sb, inode_table + block_offset);
+        bwrite(sb, block_offset);
     }
     return 0;
 }
@@ -390,16 +398,23 @@ int64_t EXT2WriteInode(inode_t* inode) {
     GetTotalTime(&total_time);
     data->changed_at = CalculateUnixTimestamp(&total_time);
 
-    uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
-    uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
-    uint32_t block_offset = (data->disk_offset + sb->block_size - 1) / sb->block_size;
-    uint32_t byte_offset = data->disk_offset % sb->block_size;
+    if (data->disk_offset == 0) {
+        uint32_t inode_index    = (data->inode_number - 1) % vol->inodes_per_group;
+        uint32_t inode_table    = vol->bgdt[data->block_group].inode_table;
+        uint32_t block_offset   = (inode_index * vol->inode_size) / sb->block_size;
+        uint32_t byte_offset    = (inode_index * vol->inode_size) % sb->block_size;
 
-    uint8_t* buf = (uint8_t*) bread(sb, inode_table + block_offset);
+        data->disk_offset = (inode_table + block_offset) * sb->block_size + byte_offset;
+    }
+
+    uint32_t block_offset   = data->disk_offset / sb->block_size;
+    uint32_t byte_offset    = data->disk_offset % sb->block_size;
+
+    uint8_t* buf = (uint8_t*) bread(sb, block_offset);
 
     ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
     PopulateRawInode(inode, raw_inode);
-    bwrite(sb, inode_table + block_offset);
+    bwrite(sb, block_offset);
 
     return 0;
 }

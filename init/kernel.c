@@ -5,11 +5,11 @@ void kmain() {
     superblock_t* sb = EXT2MountRoot();
 
     dentry_t dentry = {
-        .name = "test2",
+        .name = "test",
         .inode = NULL,
     };
 
-    EXT2Mkdir(sb->root_inode, &dentry, 0644);
+    EXT2Create(sb->root_inode, &dentry, 0644);
 
     sb->ops->unmount(sb);
     end();
