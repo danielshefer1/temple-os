@@ -80,7 +80,7 @@ all: $(DISK_IMG) $(DATA_IMG)
 $(DATA_IMG):
 	@echo "🗄️ Creating persistent data disk..."
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
-	@mke2fs -t ext2 -L "MYOS_ROOT" $(DATA_IMG)
+	@mke2fs -t ext2 -L "TEMPLE_OS_ROOT" $(DATA_IMG)
 	@echo "✅ $(DATA_IMG) is ready."
 
 # --- Kernel Rules ---

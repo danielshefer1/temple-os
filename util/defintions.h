@@ -256,7 +256,7 @@
 // End AHCI Definitions
 
 // FAT32 Definitions
-#define ROOT_LABEL "MYOS_ROOT"
+#define ROOT_LABEL "TEMPLE_OS_ROOT"
 #define ROOT_LABEL_LENGTH 9
 
 #define FAT32_BAD     0x0FFFFFF7  
