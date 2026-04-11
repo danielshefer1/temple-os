@@ -9,14 +9,15 @@ void kmain() {
         .inode = NULL,
     };
 
-    EXT2Mkdir(sb->root_inode, &dir, 0644);
+    EXT2Lookup(sb->root_inode, &dir);
 
     dentry_t file = {
         .name = "test_file",
         .inode = NULL,
     };
+    EXT2Lookup(dir.inode, &file);
 
-    EXT2Create(dir.inode, &file, 0644);
+    EXT2Unlink(dir.inode, &file);
 
     sb->ops->unmount(sb);
     end();

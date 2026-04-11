@@ -517,3 +517,77 @@ int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
 
     return 0;
 }
+
+int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
+    if (inode == NULL) return -1;
+    if (inode->fs_specific == NULL) return -1;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
+    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
+
+
+    ext2_block_group_t* bg = &vol->bgdt[data->block_group];
+
+    uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->inode_bitmap);
+
+    uint32_t inode_idx_inside_bitmap = data->inode_number - vol->inodes_per_group * data->block_group;
+    uint64_t u64_idx = inode_idx_inside_bitmap / 64, bit_idx = inode_idx_inside_bitmap % 64;
+
+    bitmap[u64_idx] &= ~(1 << bit_idx);
+    bwrite(inode->sb, bg->inode_bitmap);
+    brelse(inode->sb, bg->inode_bitmap);
+
+    bg->free_inodes_count++;
+
+}
+
+int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
+    if (dir == NULL || dentry == NULL) return -1;
+    if (dir->fs_specific == NULL || dentry->name == NULL) return -1;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)dir->fs_specific;
+    data->ref_count--;
+    
+    uint32_t dir_blocks = dir->size / dir->sb->block_size;
+
+    for (uint32_t i = 0; i < dir_blocks; i++) {
+        int64_t block_number = FindDataBlock(dir, i);
+        if (block_number == 0) continue;
+
+        ext2_dir_entry_t* entries = (ext2_dir_entry_t*) bread(dir->sb, block_number), *p1, *p2;
+        p1 = (ext2_dir_entry_t*)((uint64_t)entries);
+        
+        if (strncmp(p1->name, dentry->name, p1->name_len) == 0) {
+            p1->inode = 0;
+            brelse(dir->sb, block_number);
+            goto end_of_nested;
+        }
+
+        uint32_t offset = 0;
+
+        while (offset + p1->rec_len < dir->sb->block_size) {
+            
+            p2 = (ext2_dir_entry_t*)((uint64_t)p1 + p1->rec_len);
+
+            if (p2->inode != 0 && strncmp(p2->name, dentry->name, p2->name_len) == 0) {
+                p1->rec_len += p2->rec_len;
+                bwrite(dir->sb, block_number);
+                brelse(dir->sb, block_number);
+
+                goto end_of_nested;
+            }
+            offset += p1->rec_len;
+            p1 = (ext2_dir_entry_t*)((uint64_t)entries + offset);
+
+        }
+
+        brelse(dir->sb, block_number);
+    }
+    end_of_nested:
+
+    if (data->ref_count == 0) {
+        EXT2DeleteInodeFromBG(dentry->inode);
+    }
+
+    return 0;
+}
