@@ -275,10 +275,11 @@ inode_t* EXT2AllocInode(superblock_t* sb) {
     return inode;
 }
 
-void EXT2FreeInode(inode_t* inode) {
+int64_t EXT2FreeInode(inode_t* inode) {
     // IMPORTANT - Fill later when we have more inode and file ops! //
     kfree(inode->fs_specific, sizeof(ext2_inode_data_t));
     kfree(inode, sizeof(inode_t));
+    return 0;
 }
 
 void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {

@@ -134,7 +134,7 @@ int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
         }
         brelse(dir->sb, block_number);
     }
-    return -1;
+    return -ENOENT;
 }
 
 
@@ -544,6 +544,7 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
     bwrite(inode->sb, bg->inode_bitmap);
     brelse(inode->sb, bg->inode_bitmap);
 
+    if (inode->type == VFS_TYPE_DIR) bg->used_dirs_count--;
     bg->free_inodes_count++;
     return 0;
 }
@@ -600,15 +601,13 @@ int64_t SetDeleteTime(inode_t* inode) {
     return 0;
 }
 
-int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
+int64_t EXT2RemoveFromDir(inode_t* dir, dentry_t* dentry) {
     if (dir == NULL || dentry == NULL) return -1;
     if (dir->fs_specific == NULL || dentry->name == NULL) return -1;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)dir->fs_specific;
-    data->ref_count--;
     
     uint32_t dir_blocks = dir->size / dir->sb->block_size;
-    uint32_t inode_number;
 
     for (uint32_t i = 0; i < dir_blocks; i++) {
         int64_t block_number = FindDataBlock(dir, i);
@@ -620,7 +619,7 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
         if (strncmp(p1->name, dentry->name, p1->name_len) == 0) {
             p1->inode = 0;
             brelse(dir->sb, block_number);
-            goto end_of_nested;
+            return 0;
         }
 
         uint32_t offset = 0;
@@ -631,28 +630,29 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
 
             if (p2->inode != 0 && strncmp(p2->name, dentry->name, p2->name_len) == 0) {
                 p1->rec_len += p2->rec_len;
-                inode_number = p2->inode;
 
                 bwrite(dir->sb, block_number);
                 brelse(dir->sb, block_number);
-                
-                goto end_of_nested;
+                return 0;
             }
             offset += p1->rec_len;
             p1 = (ext2_dir_entry_t*)((uint64_t)entries + offset);
 
         }
-
         brelse(dir->sb, block_number);
     }
-    end_of_nested:
+    return -ENOENT;
+}
 
-    if (inode_number == 0) return 0;
+int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
+    int64_t lookup_ret = EXT2Lookup(dir, dentry);
+    if (lookup_ret < 0) return lookup_ret;
+    if (dentry->inode->type == VFS_TYPE_DIR) return -EISDIR;
 
-    inode_t* del = dir->sb->ops->alloc_inode(dir->sb);
-    ext2_inode_data_t* del_data = (ext2_inode_data_t*)del->fs_specific;
-    del_data->inode_number = inode_number;
-    dir->sb->ops->read_inode(del);
+    EXT2RemoveFromDir(dir, dentry);
+
+    ext2_inode_data_t* del_data = (ext2_inode_data_t*) dentry->inode->fs_specific;
+    inode_t* del = dentry->inode;
     del_data->ref_count--;
 
     if (del_data->ref_count == 0) {
@@ -663,5 +663,44 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
         del->sb->ops->free_inode(del);
     }
 
+    return 0;
+}
+
+int64_t EXT2Rmdir(inode_t* dir, dentry_t* dentry) {
+    int64_t lookup_ret = EXT2Lookup(dir, dentry);
+    if (lookup_ret < 0) return lookup_ret;
+
+    if (dentry->inode->type != VFS_TYPE_DIR) return -ENOTDIR;
+    if (((ext2_inode_data_t*)dentry->inode->fs_specific)->inode_number == EXT2_ROOT_INO) return -EACCES;
+
+    uint32_t last_entry_block, last_entry_byte;
+    int64_t last_entry_ret = EXT2FindLastDirEntryLocation(dentry->inode, &last_entry_block, &last_entry_byte);
+
+    if (last_entry_ret < 0) return last_entry_ret;
+
+    ext2_dir_entry_t* last_entry = (ext2_dir_entry_t*) ((uint64_t)bread(dir->sb, last_entry_block) + last_entry_byte);
+
+    if (last_entry->inode == 0) return -1;
+    if (last_entry->name_len != 2) return -ENOTEMPTY;
+    if (strncmp(last_entry->name, "..", 2) != 0) return -ENOTEMPTY;
+
+    EXT2RemoveFromDir(dir, dentry);
+
+    ext2_inode_data_t* del_data = (ext2_inode_data_t*) dentry->inode->fs_specific;
+    inode_t* del = dentry->inode;
+    del_data->ref_count--;
+
+    if (del_data->ref_count == 1) {
+        del_data->ref_count == 0;
+        EXT2DeleteInodeFromBG(del);
+        EXT2DeleteDataBlocksFromBG(del);
+        SetDeleteTime(del);
+        del->sb->ops->write_inode(del);
+        del->sb->ops->free_inode(del);
+    }
+
+    ext2_inode_data_t* dir_data = (ext2_inode_data_t*)dir->fs_specific;
+    dir_data->ref_count--;
+    dir->sb->ops->write_inode(dir);
     return 0;
 }
