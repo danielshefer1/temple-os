@@ -312,7 +312,7 @@ uint64_t AddNonCachableKernelPages(uint64_t num_pages) {
 void RemoveKernelPages(uint64_t start, uint64_t num_pages) {
     uint64_t curr_addr = start, pages_in_big = 2*MB/PAGE_SIZE;
 
-    FreeBuddy((void*) start, false);
+    FreeBuddy((void*) KERNEL_VIRT_TO_PHYS(start), false);
     while (num_pages >= pages_in_big) {
         RemovePage(curr_addr, true);
         num_pages -= pages_in_big;
