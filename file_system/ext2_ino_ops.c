@@ -531,13 +531,13 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
     ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-
+    if (data->inode_number == 0) return -1;
 
     ext2_block_group_t* bg = &vol->bgdt[data->block_group];
 
     uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->inode_bitmap);
 
-    uint32_t inode_idx_inside_bitmap = data->inode_number - vol->inodes_per_group * data->block_group;
+    uint32_t inode_idx_inside_bitmap = (data->inode_number - 1) - vol->inodes_per_group * data->block_group;
     uint64_t u64_idx = inode_idx_inside_bitmap / 64, bit_idx = inode_idx_inside_bitmap % 64;
 
     bitmap[u64_idx] &= ~(1 << bit_idx);
@@ -556,6 +556,7 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
     data->ref_count--;
     
     uint32_t dir_blocks = dir->size / dir->sb->block_size;
+    uint32_t inode_number;
 
     for (uint32_t i = 0; i < dir_blocks; i++) {
         int64_t block_number = FindDataBlock(dir, i);
@@ -578,9 +579,11 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
 
             if (p2->inode != 0 && strncmp(p2->name, dentry->name, p2->name_len) == 0) {
                 p1->rec_len += p2->rec_len;
+                inode_number = p2->inode;
+
                 bwrite(dir->sb, block_number);
                 brelse(dir->sb, block_number);
-
+                
                 goto end_of_nested;
             }
             offset += p1->rec_len;
@@ -592,8 +595,16 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
     }
     end_of_nested:
 
-    if (data->ref_count == 0) {
-        EXT2DeleteInodeFromBG(dentry->inode);
+    if (inode_number == 0) return 0;
+
+    inode_t* del = dir->sb->ops->alloc_inode(dir->sb);
+    ext2_inode_data_t* del_data = (ext2_inode_data_t*)del->fs_specific;
+    del_data->inode_number = inode_number;
+    dir->sb->ops->read_inode(del);
+    del_data->ref_count--;
+
+    if (del_data->ref_count == 0) {
+        EXT2DeleteInodeFromBG(del);
     }
 
     return 0;

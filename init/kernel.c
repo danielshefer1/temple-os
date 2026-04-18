@@ -5,12 +5,11 @@ void kmain() {
 
     superblock_t* sb = EXT2MountRoot();
 
-    dentry_t dir = {
-        .name = "dir",
-        .inode = NULL,
+    dentry_t file = {
+        .name = "file"
     };
 
-    EXT2Lookup(sb->root_inode, &dir);
+    EXT2Unlink(sb->root_inode, &file);
 
     sb->ops->unmount(sb);
     end();
