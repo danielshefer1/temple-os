@@ -54,7 +54,7 @@ int64_t EXT2FindRoot(superblock_t* sb) {
                 return 0;
             }
         }
-        
+        RemoveKernelPages(buf, pages_count);
         p = p->next;
     }
     if (buf != 0 && pages_count != 0) RemoveKernelPages(buf, pages_count);
@@ -353,8 +353,6 @@ int64_t EXT2ReadInode(inode_t* inode) {
 
     if (unix_timestamp != 0) {
         data->accessed_at    = unix_timestamp;
-        raw_inode->i_atime   = unix_timestamp;
-        bwrite(sb, block_offset);
     }
     brelse(sb, block_offset);
 

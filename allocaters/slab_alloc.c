@@ -59,7 +59,7 @@ void* SearchCache(cache_t* cache, uint64_t cache_idx) {
                 continue;
             }
             uint64_t bit_pos = GetEmptyBit(s_p->bitmap[i]);
-            s_p->bitmap[i] = s_p->bitmap[i] ^ (1 << bit_pos);
+            s_p->bitmap[i] = s_p->bitmap[i] ^ (1ULL << bit_pos);
             s_p->free_count--;
             if (s_p->free_count == 0) {
                 cache->partial_slabs = DeleteSlab(cache->partial_slabs, s_p);

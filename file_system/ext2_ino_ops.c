@@ -101,6 +101,8 @@ int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
     
     uint32_t dir_blocks = dir->size / dir->sb->block_size;
 
+    uint64_t dentry_namelen = strlen(dentry->name);
+
     for (uint32_t i = 0; i < dir_blocks; i++) {
         int64_t block_number = FindDataBlock(dir, i);
         if (block_number == 0) continue;
@@ -111,7 +113,12 @@ int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
         while (offset < dir->sb->block_size) {
             ext2_dir_entry_t* entry = (ext2_dir_entry_t*)((uint64_t)entries + offset);
 
-            if (entry->inode != 0 && strncmp(entry->name, dentry->name, entry->name_len) == 0) {
+            if (dentry_namelen != entry->name_len || entry->inode == 0) {
+                offset += entry->rec_len;
+                continue;
+            }
+
+            if (strncmp(entry->name, dentry->name, entry->name_len) == 0) {
                 inode_t* inode = dir->sb->ops->alloc_inode(dir->sb);
                 ext2_inode_data_t* inode_data = (ext2_inode_data_t*) inode->fs_specific;
 
