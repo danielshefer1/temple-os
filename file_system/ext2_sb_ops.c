@@ -2,7 +2,7 @@
 
 static superblock_ops_t ext2_sb_ops = {
     .alloc_inode = EXT2AllocInode,
-    .free_inode = NULL,
+    .free_inode = EXT2FreeInode,
     .read_inode = EXT2ReadInode,
     .write_inode = EXT2WriteInode,
     .mount = EXT2Mount,
@@ -277,6 +277,8 @@ inode_t* EXT2AllocInode(superblock_t* sb) {
 
 void EXT2FreeInode(inode_t* inode) {
     // IMPORTANT - Fill later when we have more inode and file ops! //
+    kfree(inode->fs_specific, sizeof(ext2_inode_data_t));
+    kfree(inode, sizeof(inode_t));
 }
 
 void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {

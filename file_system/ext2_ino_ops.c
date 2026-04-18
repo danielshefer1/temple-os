@@ -545,7 +545,59 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
     brelse(inode->sb, bg->inode_bitmap);
 
     bg->free_inodes_count++;
+    return 0;
+}
 
+int64_t EXT2DeleteBlockFromBG(inode_t* inode, uint64_t block_idx) {
+    if (inode == NULL || block_idx == 0) return -1;
+    if (inode->fs_specific == NULL) return -1;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
+    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
+    if (data->inode_number == 0) return -1;
+
+    uint32_t bg_idx = block_idx / vol->blocks_per_group;
+    ext2_block_group_t* bg = &vol->bgdt[bg_idx];
+    bg->free_blocks_count++;
+    
+    uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->block_bitmap);
+
+    uint32_t block_idx_inside_bitmap = (block_idx - vol->first_data_block) - vol->blocks_per_group * bg_idx;
+    uint64_t u64_idx = block_idx_inside_bitmap / 64, bit_idx = block_idx_inside_bitmap % 64;
+
+    bitmap[u64_idx] &= ~(1 << bit_idx);
+    bwrite(inode->sb, bg->block_bitmap);
+    brelse(inode->sb, bg->block_bitmap);
+
+    return 0;
+}
+
+int64_t EXT2DeleteDataBlocksFromBG(inode_t* inode) {
+    if (inode == NULL) return -1;
+    if (inode->fs_specific == NULL) return -1;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
+    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
+    if (data->inode_number == 0) return -1;
+
+    ext2_block_group_t* bg = &vol->bgdt[data->block_group];
+
+    uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->block_bitmap);
+    uint64_t data_blocks_num = (inode->size + inode->sb->block_size - 1) / inode->sb->block_size, data_block;
+
+    for (uint64_t i = 0; i < data_blocks_num; i++) {
+        data_block = FindDataBlock(inode, i);
+        EXT2DeleteBlockFromBG(inode, data_block);
+    }
+}
+
+int64_t SetDeleteTime(inode_t* inode) {
+    total_time_t t;
+    GetTotalTime(&t);
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+    data->i_dtime = CalculateUnixTimestamp(&t);
+    return 0;
 }
 
 int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
@@ -605,6 +657,10 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
 
     if (del_data->ref_count == 0) {
         EXT2DeleteInodeFromBG(del);
+        EXT2DeleteDataBlocksFromBG(del);
+        SetDeleteTime(del);
+        del->sb->ops->write_inode(del);
+        del->sb->ops->free_inode(del);
     }
 
     return 0;
