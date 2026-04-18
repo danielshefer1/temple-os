@@ -9,6 +9,7 @@
 
 uint64_t PageDirAddrV();
 void InitPaging();
+void DisableIdentityMapping();
 uint64_t AddKernelPages(uint64_t num_pages);
 void RemoveKernelPages(uint64_t start, uint64_t num_pages);
 uint64_t AddKernelPagesPrimitive(uint64_t num_pages);

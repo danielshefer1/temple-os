@@ -2,24 +2,29 @@
 
 static buddy_bin_t user_bins[MAX_ORDER];
 static buddy_bin_t kernel_bins[MAX_ORDER];
-static uint64_t user_lowest_vaild;
-static uint64_t kernel_lowest_vaild;
+static uint64_t user_lowest_vaild = UINT64_MAX;
+static uint64_t kernel_lowest_vaild = UINT64_MAX;
 
 void AddToBuddyAlloc(uint64_t start, uint64_t size, bool user) {
     uint64_t bit, start_order, size_order;
     buddy_bin_t* bins = user ? user_bins : kernel_bins;
+    uint64_t* lowest_valid = user ? &user_lowest_vaild : &kernel_lowest_vaild;
 
-    while (size > 0) {
+    while (size >= PAGE_SIZE) {
         start_order = SmallestBit(start);
         size_order = BiggestBit(size);
         bit = (start_order < size_order) ? start_order : size_order;
 
-        if (bit < PAGE_SIZE_LOG2) break;
+        if (bit < PAGE_SIZE_LOG2) {
+            start += 1ULL << bit;
+            size -= 1ULL << bit;
+            continue;
+        };
         size -= 1ULL << bit;
         buddy_node_t* node = CreateBuddyNode((void*)start, bit);
         InsertSortedBuddyNode(&bins[bit], node, true);
         start += 1ULL << bit;
-        if (bit < user_lowest_vaild) {user_lowest_vaild = bit;}
+        if (bit < *lowest_valid) {*lowest_valid = bit;}
     }
 }
 
@@ -214,7 +219,7 @@ void* RequestBuddy(uint64_t size, bool user) {
     uint64_t order = BiggestBit(size), tmp;
     if (!IsPowerOfTwo(size)) order++;
 
-    if (order < PAGE_SIZE_LOG2) {
+    if (order < PAGE_SIZE_LOG2 + 1) {
         order = PAGE_SIZE_LOG2;
     }
 

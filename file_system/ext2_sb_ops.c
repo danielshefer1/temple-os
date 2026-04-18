@@ -86,6 +86,7 @@ int64_t EXT2ReadBGDT(superblock_t* sb) {
         vol->bgdt[i].used_dirs_count   = buf[i].used_dirs_count;
     }
  
+    brelse(sb, bgdt_block);
     return 0;
 }
 
@@ -355,6 +356,8 @@ int64_t EXT2ReadInode(inode_t* inode) {
         raw_inode->i_atime   = unix_timestamp;
         bwrite(sb, block_offset);
     }
+    brelse(sb, block_offset);
+
     return 0;
 }
 
@@ -415,6 +418,7 @@ int64_t EXT2WriteInode(inode_t* inode) {
     ext2_inode_disk_t* raw_inode = (ext2_inode_disk_t*) (buf + byte_offset);
     PopulateRawInode(inode, raw_inode);
     bwrite(sb, block_offset);
+    brelse(sb, block_offset);
 
     return 0;
 }

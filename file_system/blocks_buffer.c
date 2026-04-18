@@ -5,6 +5,7 @@ static buffer_cache_t buffer_cache = {
     .hash_table = hash_table,
     .size = 0,
     .capacity = BUFFER_CACHE_CAP,
+    .hash_table_length = BUFFER_CACHE_SIZE,
     .lru_head = NULL,
     .lru_tail = NULL
 };
@@ -93,7 +94,7 @@ void AddNodeToLRUHead(buffer_node_t* node) {
     }
 }
 
-void SwitchTOLRUHead(buffer_node_t* node) {
+void SwitchNodeToLRUHead(buffer_node_t* node) {
     if (node == NULL || buffer_cache.lru_head == node) return;
 
     DeleteNodeFromLRU(node);
@@ -116,8 +117,7 @@ void* bread(superblock_t* sb, uint32_t block_number) {
             void* data = node->data;
             node->ref_count++;
 
-            DeleteNodeFromLRU(node);
-            AddNodeToLRUHead(node);
+            SwitchNodeToLRUHead(node);
 
             spin_unlock(&buffer_cache.lock);
             return data;
@@ -156,6 +156,8 @@ void* bread(superblock_t* sb, uint32_t block_number) {
         avi_node = (buffer_node_t*) kmalloc(sizeof(buffer_node_t));
         avi_node->hash_next = buffer_cache.hash_table[hash_idx];
         buffer_cache.hash_table[hash_idx] = avi_node;
+
+        AddNodeToLRUHead(avi_node);
     }
 
     avi_node->is_valid = true;
@@ -163,7 +165,7 @@ void* bread(superblock_t* sb, uint32_t block_number) {
     avi_node->data = ret;
     avi_node->ref_count = 1;
 
-    AddNodeToLRUHead(avi_node);
+    SwitchNodeToLRUHead(avi_node);
     spin_unlock(&buffer_cache.lock);
 
     EXT2ReadBlocks(sb, block_number, 1, ret);
@@ -200,7 +202,7 @@ void bwrite(superblock_t* sb, uint32_t block_number) {
     while (node != NULL) {
         if (node->block_number == block_number && node->is_valid) {
             node->is_dirty = true;
-            SwitchTOLRUHead(node);
+            SwitchNodeToLRUHead(node);
 
             spin_unlock(&buffer_cache.lock);
             return;
@@ -223,6 +225,36 @@ void bflush(superblock_t* sb) {
         }
         node = node->prev;
     }
+
+    spin_unlock(&buffer_cache.lock);
+}
+
+void bclean(superblock_t* sb) {
+    if (sb == NULL) return;
+
+    spin_lock(&buffer_cache.lock);
+
+    buffer_node_t* p = buffer_cache.lru_head, *p1;
+    while (p->prev != NULL) {
+        if (p->is_dirty) {
+            EXT2WriteBlocks(sb, p->block_number, 1, p->data);
+        }
+        RemoveKernelPages((uint64_t)p->data, sb->block_size / PAGE_SIZE);
+
+        p1 = p->prev;
+        kfree(p, sizeof(buffer_node_t));
+        p = p1;
+    }
+    if (p->is_dirty) {
+        EXT2WriteBlocks(sb, p->block_number, 1, p->data);
+    }
+    RemoveKernelPages((uint64_t)p->data, sb->block_size / PAGE_SIZE);
+    kfree(p, sizeof(buffer_node_t));
+
+    memset(buffer_cache.hash_table, 0, buffer_cache.hash_table_length * sizeof(void*));
+    buffer_cache.lru_head = NULL;
+    buffer_cache.lru_tail = NULL;
+    buffer_cache.size = 0;
 
     spin_unlock(&buffer_cache.lock);
 }

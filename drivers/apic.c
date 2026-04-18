@@ -41,6 +41,7 @@ uint64_t FindLapicTimerInitalCount() {
     lapic[0x380 / 4] = 0; 
 
     DisablePic();
+    CliHelper();
 
     uint64_t elapsed = initial_count - current_count;
     return elapsed / (1000 / PIC_TIMER_FREQUENCY);

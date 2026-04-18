@@ -10,3 +10,4 @@ void* bread(superblock_t* sb, uint32_t block_number);
 void brelse(superblock_t* sb, uint32_t block_number);
 void bwrite(superblock_t* sb, uint32_t block_number);
 void bflush(superblock_t* sb);
+void bclean(superblock_t* sb);

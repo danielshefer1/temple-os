@@ -108,7 +108,7 @@ uint64_t PageDirAddrV() {
 
 void DisableIdentityMapping() {
     pml4[0].present = 0;
-    InvlpgHelper(0);
+    switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS(pml4));
 }
 
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {

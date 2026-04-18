@@ -828,6 +828,7 @@ typedef struct buffer_cache {
 
     uint64_t capacity;
     uint64_t size;
+    uint64_t hash_table_length;
 
     spinlock_t lock;
 } buffer_cache_t;

@@ -19,8 +19,8 @@ void start() {
     InitMcfg();
     InitFadt();
     EnableLapic();
-    InitTimer(TIMER_TICK_PER_MS);
 
+    InitTimer(TIMER_TICK_PER_MS);
     InitKeyboard();
     //InitVFS();
 
@@ -31,6 +31,8 @@ void start() {
     BootCores();
 
     sleep(100); // Wait for APs to finish initializing
+
+    DisableIdentityMapping();
 
     InitVGA();
     kprintf("Kernel Initialized Successfully\n");

@@ -33,6 +33,7 @@
 
 #define AHCI_VIRTUAL 0xFFFFFFFFE0000000
 
+#define CORE_VIRTUAL 0xFFFFFFFFF0000000
 
 #define PML4_IDX(addr) (((uint64_t)(addr) >> 39) & 0x1FF)
 #define PDPT_IDX(addr) (((uint64_t)(addr) >> 30) & 0x1FF)

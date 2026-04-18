@@ -108,6 +108,7 @@ void FindMadt(rsdt_t* rsdt) {
             madt = (madt_t*)entry;
             kprintf("Found MADT!\n");
             lapic = (volatile uint32_t*)((uint64_t)madt->local_apic_address);
+            
             return;
         }
     }
@@ -126,7 +127,7 @@ void ParseMadt(madt_t* madt) {
                 
                 local_apic_t* ptr = (local_apic_t*) entry;
                 kprintf("Cpu %d ID: %d\t", cpu_count, ptr->acpi_processor_id);
-                cpu_ids[cpu_count] = ptr->acpi_processor_id;;
+                cpu_ids[cpu_count] = ptr->acpi_processor_id;
                 cpu_count++;
                 break;
             case 1:
@@ -205,8 +206,11 @@ void InitMadt() {
     kprintf("Found %d CPUs!\n", cpu_count);
     kprintf("Local APIC's address is: %x\n", (uint64_t)lapic);
     kprintf("I/O APIC's address is: %x\n", (uint64_t)ioapic);
-    FillPageDirectoryIdentityMapping(lapic, PAGE_SIZE);
-    FillPageDirectoryIdentityMapping(ioapic, PAGE_SIZE);
+    map_page_to_virt(CORE_VIRTUAL, (uint64_t)lapic, RW_MMIO, false);
+    lapic = (volatile uint32_t*)(CORE_VIRTUAL);
+
+    map_page_to_virt(CORE_VIRTUAL + PAGE_SIZE, (uint64_t)ioapic, RW_MMIO, false);
+    ioapic = (volatile uint32_t*) (CORE_VIRTUAL + PAGE_SIZE);
 }
 
 void InitMcfg() {
