@@ -9,17 +9,14 @@ void kmain() {
         .name = "dir"
     };
 
-    dentry_t new_file1 = {
-        .name = "new_file_link"
-    };
-    dentry_t new_file = {
-        .name = "new_file"
+    dentry_t symlink = {
+        .name = "symlink"
     };
 
-    EXT2Lookup(sb->root_inode, &dir);
-    EXT2Lookup(sb->root_inode, &new_file);
-    EXT2HardLink(dir.inode, new_file.inode, &new_file1);
+    char testname[2];
+    EXT2Lookup(sb->root_inode, &symlink);
 
+    EXT2ReadLink(symlink.inode, testname, sizeof(testname));
 
     sb->ops->unmount(sb);
     end();

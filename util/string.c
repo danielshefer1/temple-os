@@ -113,7 +113,8 @@ int32_t strncmp(char* str1, char* str2, uint64_t n) {
     return 0;
 }
 
-uint64_t strlen(char* str) {
+uint64_t strlen(const char* str) {
+    if (str == NULL) return 0;
     uint64_t idx = 0;
     while (str[idx] != '\0') idx++;
     return idx;

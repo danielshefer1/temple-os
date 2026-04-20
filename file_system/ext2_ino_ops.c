@@ -718,13 +718,73 @@ int64_t EXT2Rename(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, den
     return 0;
 }
 
-int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* new_dentry) {
-    if (dir == NULL || existing_inode == NULL || new_dentry == NULL) return -EINVAL;
+int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* dentry) {
+    if (dir == NULL || existing_inode == NULL || dentry == NULL) return -EINVAL;
     
-    new_dentry->inode = existing_inode;
-    EXT2PopulateDirEntry(dir, new_dentry, new_dentry->inode->type);
+    dentry->inode = existing_inode;
+    EXT2PopulateDirEntry(dir, dentry, dentry->inode->type);
 
-    ext2_inode_data_t* data = (ext2_inode_data_t*)new_dentry->inode->fs_specific;
+    ext2_inode_data_t* data = (ext2_inode_data_t*)dentry->inode->fs_specific;
     data->ref_count++;
-    new_dentry->inode->sb->ops->write_inode(new_dentry->inode);
+    dentry->inode->sb->ops->write_inode(dentry->inode);
+}
+
+int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target) {
+    if (dir == NULL || dentry == NULL || target == NULL) return -EINVAL;
+
+    uint64_t name_len = strlen(target);
+    if (name_len > dir->sb->block_size) return -EINVAL;
+
+    int64_t create_ret = EXT2CreateGeneric(dir, dentry, 0777, VFS_TYPE_SYMLINK);
+    if (create_ret < 0) return create_ret;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)dentry->inode->fs_specific;
+
+    
+    if (name_len <= MAX_FAST_SYMLINK_LENGTH) {
+        memcpy(data->i_block, target, name_len);
+        dentry->inode->size = name_len;
+        dentry->inode->sb->ops->write_inode(dentry->inode);
+        return 0;
+    }
+
+    uint32_t new_block = EXT2AllocBlock(dentry->inode->sb, data->block_group);
+    if (new_block == 0) return -ENOSPC;
+    int64_t addblock_ret = EXT2AddBlockToInode(dentry->inode, new_block);
+    if (addblock_ret < 0) return addblock_ret;
+
+    void* buf = (void*)bread(dentry->inode->sb, new_block);
+    memcpy(buf, target, name_len);
+    bwrite(dentry->inode->sb, new_block);
+
+    dentry->inode->size = name_len;
+    data->i_blocks = dentry->inode->sb->block_size / dentry->inode->sb->bdev->sector_size;
+    dentry->inode->sb->ops->write_inode(dentry->inode);
+}
+
+int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size) {
+    if (inode == NULL || buf == NULL || size == 0) return -EINVAL;
+    uint64_t cpy_size = (inode->size > size) ? size : inode->size;
+    ext2_inode_data_t* data = inode->fs_specific;
+
+    if (inode->size <= MAX_FAST_SYMLINK_LENGTH) {
+        memcpy(buf, data->i_block, cpy_size);
+        return cpy_size;
+    }
+
+    uint64_t num_blocks = (cpy_size + inode->sb->block_size - 1) / inode->sb->block_size;
+    uint64_t remain_size = cpy_size, specific_cpy;
+    uint32_t data_block;
+
+    for (uint64_t i = 0; i < num_blocks; i++) {
+        data_block = FindDataBlock(inode, i);
+        if (data_block == 0) continue;
+
+        void* src = bread(inode->sb, data_block);
+        specific_cpy = (remain_size > inode->sb->block_size) ? inode->sb->block_size : remain_size;
+
+        memcpy(buf, src, specific_cpy);
+        remain_size -= specific_cpy;
+    }
+    return cpy_size;
 }

@@ -329,6 +329,9 @@
 #define EXT2_ERROR_FS    0x0002   // not cleanly unmounted / has errors
 #define EXT2_ORPHAN_FS   0x0004   // orphan inodes being recovered
 
+#define EXT2_SYMLINK_PREM 0777
+#define MAX_FAST_SYMLINK_LENGTH 60
+
 // inode numbers reserved by ext2 (1-10)
 #define EXT2_BAD_INO            1      // bad blocks inode
 #define EXT2_ROOT_INO           2      // root directory

@@ -12,4 +12,4 @@ uint64_t atoi(char* str, uint64_t base);
 void cpystr(char* source, char* dst);
 int32_t strcmp(char* str1, char* str2);
 int32_t strncmp(char* str1, char* str2, uint64_t n);
-uint64_t strlen(char* str);
+uint64_t strlen(const char* str);
