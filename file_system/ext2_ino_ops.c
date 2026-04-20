@@ -434,7 +434,7 @@ int64_t EXT2PopulateDirEntry(inode_t* dir, dentry_t* dentry, uint64_t type) {
 
 
 int64_t EXT2PopulateNewInode(inode_t* inode, uint64_t type, uint64_t permissions) {
-    if (inode == NULL) return -1;
+    if (inode == NULL) return -EINVAL;
     if (inode->fs_specific == NULL) return -ENOMEM;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
@@ -526,12 +526,12 @@ int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
 }
 
 int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
-    if (inode == NULL) return -1;
-    if (inode->fs_specific == NULL) return -1;
+    if (inode == NULL) return -EINVAL;
+    if (inode->fs_specific == NULL) return -EINVAL;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
     ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-    if (data->inode_number == 0) return -1;
+    if (data->inode_number == 0) return -EINVAL;
 
     ext2_block_group_t* bg = &vol->bgdt[data->block_group];
 
@@ -550,12 +550,12 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
 }
 
 int64_t EXT2DeleteBlockFromBG(inode_t* inode, uint64_t block_idx) {
-    if (inode == NULL || block_idx == 0) return -1;
-    if (inode->fs_specific == NULL) return -1;
+    if (inode == NULL || block_idx == 0) return -EINVAL;
+    if (inode->fs_specific == NULL) return -EINVAL;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
     ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-    if (data->inode_number == 0) return -1;
+    if (data->inode_number == 0) return -EINVAL;
 
     uint32_t bg_idx = block_idx / vol->blocks_per_group;
     ext2_block_group_t* bg = &vol->bgdt[bg_idx];
@@ -574,12 +574,12 @@ int64_t EXT2DeleteBlockFromBG(inode_t* inode, uint64_t block_idx) {
 }
 
 int64_t EXT2DeleteDataBlocksFromBG(inode_t* inode) {
-    if (inode == NULL) return -1;
-    if (inode->fs_specific == NULL) return -1;
+    if (inode == NULL) return -EINVAL;
+    if (inode->fs_specific == NULL) return -EINVAL;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
     ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-    if (data->inode_number == 0) return -1;
+    if (data->inode_number == 0) return -EINVAL;
 
     ext2_block_group_t* bg = &vol->bgdt[data->block_group];
 
@@ -602,8 +602,8 @@ int64_t SetDeleteTime(inode_t* inode) {
 }
 
 int64_t EXT2RemoveFromDir(inode_t* dir, dentry_t* dentry) {
-    if (dir == NULL || dentry == NULL) return -1;
-    if (dir->fs_specific == NULL || dentry->name == NULL) return -1;
+    if (dir == NULL || dentry == NULL) return -EINVAL;
+    if (dir->fs_specific == NULL || dentry->name == NULL) return -EINVAL;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*)dir->fs_specific;
     
@@ -702,5 +702,18 @@ int64_t EXT2Rmdir(inode_t* dir, dentry_t* dentry) {
     ext2_inode_data_t* dir_data = (ext2_inode_data_t*)dir->fs_specific;
     dir_data->ref_count--;
     dir->sb->ops->write_inode(dir);
+    return 0;
+}
+
+int64_t EXT2Rename(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, dentry_t* new_dentry) {
+    if (old_dir == NULL || old_dentry == NULL || new_dir == NULL || new_dentry == NULL) return -EINVAL;
+    if (old_dentry->inode == NULL) return -EINVAL;
+
+    int64_t remv_ret = EXT2RemoveFromDir(old_dir, old_dentry);
+    if (remv_ret < 0) return remv_ret;
+    new_dentry->inode = old_dentry->inode;
+    
+    int64_t pop_ret = EXT2PopulateDirEntry(new_dir, new_dentry, new_dentry->inode->type);
+    if (pop_ret < 0) return pop_ret;
     return 0;
 }
