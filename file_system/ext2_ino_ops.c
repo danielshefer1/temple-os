@@ -717,3 +717,14 @@ int64_t EXT2Rename(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, den
     if (pop_ret < 0) return pop_ret;
     return 0;
 }
+
+int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* new_dentry) {
+    if (dir == NULL || existing_inode == NULL || new_dentry == NULL) return -EINVAL;
+    
+    new_dentry->inode = existing_inode;
+    EXT2PopulateDirEntry(dir, new_dentry, new_dentry->inode->type);
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*)new_dentry->inode->fs_specific;
+    data->ref_count++;
+    new_dentry->inode->sb->ops->write_inode(new_dentry->inode);
+}

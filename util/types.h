@@ -601,6 +601,7 @@ typedef struct inode_ops_t {
     int64_t  (*unlink)      (inode_t* dir, dentry_t* dentry);
     int64_t  (*rename)      (inode_t* old_dir, dentry_t* old_dentry,
                              inode_t* new_dir, dentry_t* new_dentry);
+    int64_t (*hardlink)     (inode_t* dir, inode_t* existing_inode, dentry_t* new_dentry);
 
     // symlink operations
     int64_t  (*symlink)     (inode_t* dir, dentry_t* dentry, const char* target);
