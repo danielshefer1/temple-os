@@ -59,7 +59,7 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc
                 util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c drivers/acpi.c \
                 util/memory.c drivers/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c drivers/pci.c \
 				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c drivers/rtc.c drivers/fadt.c file_system/ext2_ino_ops.c \
-				file_system/blocks_buffer.c file_system/ext2_helpers.c
+				file_system/blocks_buffer.c file_system/ext2_helpers.c file_system/ext2_file_ops.c
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm
 
 BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c

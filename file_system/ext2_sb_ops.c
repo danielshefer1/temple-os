@@ -150,6 +150,8 @@ int64_t CopySbExtToInternal(ext2_superblock_disk_t* sbext, superblock_t* sb) {
     vol->feature_incompat = sbext->s_feature_incompat;
     vol->feature_ro_compat = sbext->s_feature_ro_compat;
 
+    vol->state = sbext->s_state;
+
     memcpy(vol->hash_seed, sbext->s_hash_seed, sizeof(vol->hash_seed));
     vol->def_hash_version = sbext->s_def_hash_version;
 
@@ -165,6 +167,7 @@ int64_t CopyInternalToSbExt(superblock_t* sb, ext2_superblock_disk_t* sbext) {
 
     sbext->s_free_inodes_count = vol->free_inodes;
     sbext->s_free_blocks_count = vol->free_blocks;
+    sbext->s_state = vol->state;
 
     EXT2WriteBGDT(sb);
     return 0;
@@ -216,7 +219,16 @@ int64_t EXT2Sync(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 1;
 
-    bflush(sb);
+    void* buf = bread(sb, EXT2_SUPERBLOCK_OFFSET / sb->block_size);
+
+    uint64_t bytes_offset = EXT2_SUPERBLOCK_OFFSET % sb->block_size;
+    ext2_superblock_disk_t* sbext = (ext2_superblock_disk_t*)((uint64_t)buf + bytes_offset);
+
+    CopyInternalToSbExt(sb, sbext);
+    bwrite(sb, EXT2_SUPERBLOCK_OFFSET / sb->block_size);
+    brelse(sb, EXT2_SUPERBLOCK_OFFSET / sb->block_size);
+
+    bflush_all(sb);
     // Complete later when we have more info about inodes and file ops, for now just flush the block cache and update the superblock state //
 
 
@@ -227,27 +239,14 @@ int64_t EXT2Umount(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 1;
 
+    ext2_info_t* vol = (ext2_info_t*)sb->fs_info;
+    vol->state = EXT2_VALID_FS;
+
     EXT2Sync(sb);
+    bclean_all(sb);
 
-    uint64_t sector_size = sb->bdev->sector_size;
-
-    uint64_t blocks_offset = EXT2_SUPERBLOCK_OFFSET / sector_size;
-    uint64_t sectors_count = (EXT2_SUPERBLOCK_LENGTH + sector_size  - 1) / sector_size;
-    uint64_t pages_count = (EXT2_SUPERBLOCK_LENGTH + PAGE_SIZE - 1) / (PAGE_SIZE);
-    uint64_t buf = AddKernelPages(pages_count);
-    sb->bdev->read(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
-
-    uint64_t sector_offset = EXT2_SUPERBLOCK_OFFSET % sector_size;
-    ext2_superblock_disk_t* sbext = (ext2_superblock_disk_t*)(buf + sector_offset);
-    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
-
-    sbext->s_state = EXT2_VALID_FS;
-    CopyInternalToSbExt(sb, sbext);
-    bflush(sb);
-
-    sb->bdev->write(sb->bdev, sb->start_lba + blocks_offset, sectors_count, (void*)KERNEL_VIRT_TO_PHYS(buf));
-
-    RemoveKernelPages(buf, pages_count);
+    kfree(sb->fs_info, sizeof(ext2_info_t));
+    kfree(sb, sizeof(superblock_t));
     return 0; // IMPORTANT - Fill the rest when I know how to deal with inode, now just clean the sb
 }
 

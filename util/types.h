@@ -566,13 +566,18 @@ typedef struct {
 } fs_stat_t;
 
 typedef struct file_t {
-    inode_t*      inode;        
-    dentry_t*     dentry;       
-    struct file_ops_t*   ops;          
-    uint64_t      position;     
-    uint64_t      flags;        
-    uint64_t      ref_count;    
-    void*         driver_data;  
+    inode_t* inode;        
+    dentry_t* dentry;       
+    struct file_ops_t* ops;          
+    
+    mutex_t  lock;
+    uint64_t position;
+    
+    uint32_t flags;
+    uint32_t mode;
+    
+    _Atomic uint64_t ref_count;
+    void* private_data;
 } file_t;
 
 typedef struct superblock_ops_t {
@@ -618,6 +623,7 @@ typedef struct file_ops_t {
     int64_t  (*read)        (file_t* file, void* buf, uint64_t size);
     int64_t  (*write)       (file_t* file, const void* buf, uint64_t size);
     int64_t  (*seek)        (file_t* file, int64_t offset, int64_t whence);
+    int64_t  (*truncate)    (file_t* file, uint64_t new_size);
 
     // directory I/O
     int64_t  (*readdir)     (file_t* file, dentry_t* out);
@@ -763,6 +769,8 @@ typedef struct ext2_info_t {
     uint32_t feature_compat;
     uint32_t feature_incompat;
     uint32_t feature_ro_compat;
+
+    uint32_t state;
 
     uint32_t hash_seed[4];
     uint8_t def_hash_version;

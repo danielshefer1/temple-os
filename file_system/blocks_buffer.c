@@ -21,7 +21,7 @@ uint64_t EXT2BlockToLba(superblock_t* sb, uint32_t block_idx) {
 }
 
 int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
-    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
+    if (sb == NULL || buf == NULL || count == 0) return 1;
 
     uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
     sb->bdev->read(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
@@ -30,7 +30,7 @@ int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, voi
 }
 
 int64_t EXT2WriteBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
-    if (sb == NULL || buf == NULL || count == 0 || block_idx == 0) return 1;
+    if (sb == NULL || buf == NULL || count == 0) return 1;
 
     uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
     sb->bdev->write(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
@@ -212,7 +212,29 @@ void bwrite(superblock_t* sb, uint32_t block_number) {
     spin_unlock(&buffer_cache.lock);
 }
 
-void bflush(superblock_t* sb) {
+void bflush(superblock_t* sb, uint32_t block_number) {
+    if (sb == NULL) return;
+    uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
+
+    spin_lock(&buffer_cache.lock);
+
+    buffer_node_t* node = buffer_cache.hash_table[hash_idx];
+    while (node != NULL) {
+        if (node->block_number == block_number && node->is_valid) {
+            if (node->is_dirty) {
+                EXT2WriteBlocks(sb, node->block_number, 1, node->data);
+                node->is_dirty = false;
+            }
+            SwitchNodeToLRUHead(node);
+            spin_unlock(&buffer_cache.lock);
+            return;
+        }
+        node = node->hash_next;
+    }
+    spin_unlock(&buffer_cache.lock);
+}
+
+void bflush_all(superblock_t* sb) {
     if (sb == NULL) return;
 
     spin_lock(&buffer_cache.lock);
@@ -229,7 +251,34 @@ void bflush(superblock_t* sb) {
     spin_unlock(&buffer_cache.lock);
 }
 
-void bclean(superblock_t* sb) {
+void bclean(superblock_t* sb, uint32_t block_number) {
+    if (sb == NULL) return;
+    uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
+
+    spin_lock(&buffer_cache.lock);
+
+    buffer_node_t* node = buffer_cache.hash_table[hash_idx];
+    while (node != NULL) {
+        if (node->block_number != block_number || node->is_valid) {
+            node = node->hash_next;
+            continue;
+        }
+
+        if (node->is_dirty) {
+            EXT2WriteBlocks(sb, node->block_number, 1, node->data);
+            node->is_dirty = false;
+        }   
+        DeleteNodeFromHash(node);
+        DeleteNodeFromLRU(node);
+        kfree(node, sizeof(buffer_node_t));
+
+        spin_unlock(&buffer_cache.lock);
+        return;
+    }
+    spin_unlock(&buffer_cache.lock);
+}
+
+void bclean_all(superblock_t* sb) {
     if (sb == NULL) return;
 
     spin_lock(&buffer_cache.lock);
