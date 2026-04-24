@@ -46,35 +46,6 @@ int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
     return -ENOENT;
 }
 
-
-
-uint32_t EXT2AllocBlock(superblock_t* sb, uint32_t block_group) {
-    ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
-    ext2_block_group_t* bg = &vol->bgdt[block_group];
-
-    if (bg->free_blocks_count == 0) return 0;
-
-    uint32_t block_bitmap_block = bg->block_bitmap;
-    uint8_t* buf = (uint8_t*) bread(sb, block_bitmap_block);
-
-    uint32_t u64_inside_block = sb->block_size / sizeof(uint64_t);
-    uint64_t* bitmap = (uint64_t*) buf;
-
-    int64_t bit_idx = FindFirstUnsetInBuffer(bitmap, u64_inside_block);
-    if (bit_idx == -1) {
-        brelse(sb, block_bitmap_block);
-        return 0;
-    }
-    vol->free_blocks--;
-    vol->bgdt[block_group].free_blocks_count--;
-
-    bitmap[bit_idx / 64] |= (1ULL << (bit_idx % 64));
-    bwrite(sb, block_bitmap_block);
-    brelse(sb, block_bitmap_block);
-
-    return block_group * vol->blocks_per_group + bit_idx + vol->first_data_block + 1;
-}
-
 uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
     ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
     ext2_block_group_t* bg = &vol->bgdt[block_group];
@@ -100,133 +71,6 @@ uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
     vol->bgdt[block_group].free_inodes_count--;
 
     return block_group * vol->inodes_per_group + bit_idx + 1;
-}
-
-int64_t AddIndirect(inode_t* inode, uint32_t block_idx, uint32_t block_number) {
-    if (inode == NULL) return -1;
-    if (inode->fs_specific == NULL) return -1;
-
-    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
-
-    uint32_t indirect_block = data->i_block[12];
-    if (indirect_block == 0) return 0;
-
-    uint32_t* buf = (uint32_t*) bread(inode->sb, indirect_block);
-    uint32_t block = (block_idx - 12) % EXT2_BLOCKS_PER_BLOCK(inode->sb);
-    buf[block] = block_number;
-    bwrite(inode->sb, indirect_block);  
-    brelse(inode->sb, indirect_block);
-    
-    return 0;
-}
-
-int64_t AddDoubleIndirect(inode_t* inode, uint32_t block_idx, uint32_t block_number) {
-    if (inode == NULL) return 0;
-    if (inode->fs_specific == NULL) return 0;
-
-    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
-
-    uint32_t double_indirect_block = data->i_block[13];
-
-    uint32_t indirect_idx = (block_idx - 12 - EXT2_BLOCKS_PER_BLOCK(inode->sb)) / EXT2_BLOCKS_PER_BLOCK(inode->sb);
-    uint32_t double_indirect_idx = (block_idx - 12 - EXT2_BLOCKS_PER_BLOCK(inode->sb)) % EXT2_BLOCKS_PER_BLOCK(inode->sb);
-
-    uint32_t* buf = (uint32_t*) bread(inode->sb, double_indirect_block);
-    uint32_t indirect_block = buf[indirect_idx];
-
-    if (indirect_block == 0) {
-        indirect_block = EXT2AllocBlock(inode->sb, ((ext2_inode_data_t*)inode->fs_specific)->block_group);
-        buf[indirect_idx] = indirect_block;
-        bwrite(inode->sb, double_indirect_block);
-    }
-
-    uint32_t* buf2 = (uint32_t*) bread(inode->sb, indirect_block);
-    buf2[double_indirect_idx] = block_number;
-    bwrite(inode->sb, indirect_block);
-
-    brelse(inode->sb, double_indirect_block);
-    brelse(inode->sb, indirect_block);
-
-    return 0;
-}
-
-int64_t AddTripleIndirect(inode_t* inode, uint32_t block_idx, uint32_t block_number) {
-    if (inode == NULL) return 0;
-    if (inode->fs_specific == NULL) return 0;
-
-    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
-
-    uint32_t triple_indirect_block = data->i_block[14];
-    if (triple_indirect_block == 0) return 0;
-
-    uint32_t blocks_per_block = EXT2_BLOCKS_PER_BLOCK(inode->sb);
-
-    uint32_t indirect_idx = (block_idx - 12 - blocks_per_block - blocks_per_block * blocks_per_block) % blocks_per_block;
-    uint32_t double_indirect_idx = ((block_idx - 12 - blocks_per_block - blocks_per_block * blocks_per_block) / blocks_per_block) % blocks_per_block;
-    uint32_t triple_indirect_idx = (block_idx - 12 - blocks_per_block - blocks_per_block * blocks_per_block) / (blocks_per_block * blocks_per_block);
-
-    uint32_t* buf = (uint32_t*) bread(inode->sb, triple_indirect_block);
-    uint32_t double_indirect_block = buf[triple_indirect_idx];
-    if (double_indirect_block == 0) {
-        double_indirect_block = EXT2AllocBlock(inode->sb, ((ext2_inode_data_t*)inode->fs_specific)->block_group);
-        buf[triple_indirect_idx] = double_indirect_block;
-        bwrite(inode->sb, triple_indirect_block);
-    }
-
-    uint32_t* buf2 = (uint32_t*) bread(inode->sb, double_indirect_block);
-    uint32_t indirect_block = buf2[double_indirect_idx];
-    if (indirect_block == 0) {
-        indirect_block = EXT2AllocBlock(inode->sb, ((ext2_inode_data_t*)inode->fs_specific)->block_group);
-        buf2[double_indirect_idx] = indirect_block;
-        bwrite(inode->sb, double_indirect_block);
-    }
-
-    uint32_t* buf3 = (uint32_t*) bread(inode->sb, indirect_block);
-    buf3[indirect_idx] = block_number;
-    bwrite(inode->sb, indirect_block);
-
-    brelse(inode->sb, triple_indirect_block);
-    brelse(inode->sb, double_indirect_block);
-    brelse(inode->sb, indirect_block);
-
-    return 0;
-}
-
-uint32_t EXT2AddBlockToInode(inode_t* inode, uint32_t block_number) {
-    if (inode == NULL) return 0;
-    if (inode->fs_specific == NULL) return 0;
-
-    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
-    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-
-    uint32_t block_idx = inode->size / inode->sb->block_size;
-
-    data->i_blocks += inode->sb->block_size / 512;
-
-    if (block_idx < 12) {
-        data->i_block[block_idx] = block_number;
-        inode->sb->ops->write_inode(inode);
-        return 0;
-    }
-    if (block_idx < 12 + EXT2_BLOCKS_PER_BLOCK(inode->sb)) {
-        int64_t res = AddIndirect(inode, block_idx, block_number);
-        if (res < 0) return res;
-
-        inode->sb->ops->write_inode(inode);
-        return 0;
-    }
-    if (block_idx < 12 + EXT2_BLOCKS_PER_BLOCK(inode->sb) + EXT2_BLOCKS_PER_BLOCK(inode->sb) * EXT2_BLOCKS_PER_BLOCK(inode->sb)) {
-        int64_t res = AddDoubleIndirect(inode, block_idx, block_number);
-        if (res < 0) return res;
-
-        inode->sb->ops->write_inode(inode);
-        return 0;
-    }
-    int64_t res = AddTripleIndirect(inode, block_idx, block_number);
-    if (res < 0) return res;
-
-    inode->sb->ops->write_inode(inode);
-    return 0;
 }
 
 int64_t EXT2FindLastDirEntryLocation(inode_t* dir, uint32_t* out_block_idx, uint32_t* out_block_offset) {
@@ -390,6 +234,8 @@ int64_t EXT2PopulateInodeEntry(inode_t* dir, inode_t** out, uint64_t type, uint6
     return 0;
 }
 int64_t EXT2CreateGeneric(inode_t* dir, dentry_t* dentry, uint64_t permissions, uint64_t type) {
+    if (EXT2Lookup(dir, dentry) == 0) return -EEXIST;
+
     int64_t inode_entry_res = EXT2PopulateInodeEntry(dir, &dentry->inode, type, permissions);
     if (inode_entry_res < 0) return inode_entry_res;
 
@@ -469,13 +315,14 @@ int64_t EXT2DeleteBlockFromBG(inode_t* inode, uint64_t block_idx) {
     uint32_t bg_idx = block_idx / vol->blocks_per_group;
     ext2_block_group_t* bg = &vol->bgdt[bg_idx];
     bg->free_blocks_count++;
+    vol->free_blocks++;
     
     uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->block_bitmap);
 
-    uint32_t block_idx_inside_bitmap = (block_idx - vol->first_data_block) - vol->blocks_per_group * bg_idx;
+    uint32_t block_idx_inside_bitmap = (block_idx - vol->first_data_block - 1) - vol->blocks_per_group * bg_idx;
     uint64_t u64_idx = block_idx_inside_bitmap / 64, bit_idx = block_idx_inside_bitmap % 64;
 
-    bitmap[u64_idx] &= ~(1 << bit_idx);
+    bitmap[u64_idx] &= ~(1ULL << bit_idx);
     bwrite(inode->sb, bg->block_bitmap);
     brelse(inode->sb, bg->block_bitmap);
 
@@ -483,22 +330,10 @@ int64_t EXT2DeleteBlockFromBG(inode_t* inode, uint64_t block_idx) {
 }
 
 int64_t EXT2DeleteDataBlocksFromBG(inode_t* inode) {
-    if (inode == NULL) return -EINVAL;
-    if (inode->fs_specific == NULL) return -EINVAL;
+    if (inode == NULL || inode->fs_specific == NULL) return -EINVAL;
+    if (((ext2_inode_data_t*)inode->fs_specific)->inode_number == 0) return -EINVAL;
 
-    ext2_inode_data_t* data = (ext2_inode_data_t*)inode->fs_specific;
-    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
-    if (data->inode_number == 0) return -EINVAL;
-
-    ext2_block_group_t* bg = &vol->bgdt[data->block_group];
-
-    uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->block_bitmap);
-    uint64_t data_blocks_num = (inode->size + inode->sb->block_size - 1) / inode->sb->block_size, data_block;
-
-    for (uint64_t i = 0; i < data_blocks_num; i++) {
-        data_block = FindDataBlock(inode, i);
-        EXT2DeleteBlockFromBG(inode, data_block);
-    }
+    return EXT2FreeBlocksFrom(inode, 0);
 }
 
 int64_t SetDeleteTime(inode_t* inode) {

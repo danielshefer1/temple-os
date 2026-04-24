@@ -40,6 +40,7 @@ void start() {
 
 
 void end() {
+    kprintf("Kernel has finished! Press Shift + Q to shutdown!");
     while (true) {
         HltHelper();
     }

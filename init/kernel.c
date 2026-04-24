@@ -5,22 +5,20 @@ void kmain() {
 
     superblock_t* sb = EXT2MountRoot();
 
-    dentry_t dir = {
-        .name = "dir"
+    dentry_t file = {
+        .name = "file"
     };
 
-    EXT2Lookup(sb->root_inode, &dir);
+    EXT2Create(sb->root_inode, &file, 0644);
 
-    file_t file_dir_instance = {
-        .dentry = &dir,
-        .inode = dir.inode,
-        .position = 50,
-        .ref_count = 1
+    file_t file_instance = {
+        .dentry = &file,
+        .inode = file.inode,
+        .position = 0,
+        .ref_count = 0
     };
-    char buf[20];
-
-    EXT2Read(&file_dir_instance, buf, 20);
-
+    EXT2Truncate(&file_instance, sb->block_size * 5 - sb->block_size / 2);
+    
     sb->ops->unmount(sb);
     end();
 }

@@ -13,3 +13,4 @@ void bflush(superblock_t* sb, uint32_t block_number);
 void bflush_all(superblock_t* sb);
 void bclean(superblock_t* sb, uint32_t block_number);
 void bclean_all(superblock_t* sb);
+void binvalidate(superblock_t* sb, uint32_t block_number);

@@ -251,6 +251,33 @@ void bflush_all(superblock_t* sb) {
     spin_unlock(&buffer_cache.lock);
 }
 
+void binvalidate(superblock_t* sb, uint32_t block_number) {
+    if (sb == NULL) return;
+    uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
+
+    spin_lock(&buffer_cache.lock);
+
+    buffer_node_t* node = buffer_cache.hash_table[hash_idx];
+    while (node != NULL) {
+        if (node->block_number != block_number || !node->is_valid) {
+            node = node->hash_next;
+            continue;
+        }
+
+        node->is_dirty = false;
+        node->is_valid = false;
+        DeleteNodeFromHash(node);
+        DeleteNodeFromLRU(node);
+        RemoveKernelPages((uint64_t)node->data, sb->pages_in_block);
+        kfree(node, sizeof(buffer_node_t));
+        buffer_cache.size--;
+
+        spin_unlock(&buffer_cache.lock);
+        return;
+    }
+    spin_unlock(&buffer_cache.lock);
+}
+
 void bclean(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
