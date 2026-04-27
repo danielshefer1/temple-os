@@ -1,10 +1,4 @@
 #include "vfs_syscalls.h"
-#include "fd_table.h"
-#include "vfs.h"
-#include "defintions.h"
-#include "vga.h"
-#include "keyboard.h"
-#include "global.h"
 
 // TODO: when user paging exists, replace direct pointer use with copy_from_user.
 
