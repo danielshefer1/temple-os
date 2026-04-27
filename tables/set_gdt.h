@@ -11,3 +11,4 @@ void SetGDTEntry(uint64_t base, uint64_t limit, uint8_t present, uint8_t privile
      uint8_t long_mode, uint8_t default_big, uint8_t granularity, uint64_t idx);
 void SetGDT();
 gdt_ptr_t* getGdtPointer();
+void SetTSSDescriptor(uint64_t base, uint32_t limit, uint64_t slot_idx);

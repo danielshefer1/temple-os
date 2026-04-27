@@ -1,4 +1,5 @@
 #include "ap_start.h"
+#include "cpu_local.h"
 
 void CopyTrampoline() {
     void* trampoline_binary_addr = (void*)&trampoline_binary;
@@ -34,10 +35,12 @@ void SendStartupIPI(uint32_t apic_id, uint8_t vector) {
 
 void BootCore(uint8_t cpu_id, bool trampoline_set) {
     bool found_cpu = false;
+    uint64_t idx = 0;
 
     for (uint64_t i = 1; i < cpu_count; i++) {
         if (cpu_ids[i] == cpu_id) {
             found_cpu = true;
+            idx = i;
             break;
         }
     }
@@ -48,7 +51,9 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     if (!trampoline_set) CopyTrampoline();
 
     uint64_t* inputs = (uint64_t*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL + trampoline_size);
-    inputs[0] = AddStack(); // this cpu's stack
+    uint64_t stack_base = AddStack();
+    cpu_locals[idx].kstack_top = stack_base + STACK_PAGES * PAGE_SIZE;
+    inputs[0] = stack_base; // this cpu's stack (consumed by trampoline)
     inputs[1] = (uint64_t)((void*)ap_kmain); 
     inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 

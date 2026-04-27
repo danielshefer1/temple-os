@@ -97,13 +97,28 @@ check_interrupts:
     and rax, 1
     ret
 
-global load_tss
-load_tss:
+global LoadTSS
+LoadTSS:
+    mov ax, di
+    ltr ax
+    ret
 
+global rdmsr
+rdmsr:
+    mov ecx, edi
+    rdmsr
+    shl rdx, 32
+    or  rax, rdx
+    ret
 
-global switch_to_user_mode
-switch_to_user_mode:
-
+global wrmsr
+wrmsr:
+    mov ecx, edi
+    mov rax, rsi
+    mov rdx, rsi
+    shr rdx, 32
+    wrmsr
+    ret
 
 global get_cpuid
 get_cpuid:
@@ -199,14 +214,6 @@ isr_apic_stub_%1:
     jmp isr_apic_stub
 %endmacro
 
-%macro ISR_SYSCALL_STUB 1
-global isr_stub_%1
-isr_stub_%1:
-    push 0
-    push %1
-    jmp isr_syscall_stub
-%endmacro
-
 global isr_spurious
 isr_spurious:
     iret
@@ -274,7 +281,6 @@ ISR_PIC_STUB 32
 ISR_APIC_STUB 32
 ISR_APIC_STUB 33
 ISR_APIC_STUB 64
-ISR_SYSCALL_STUB 128
 
 
 global isr_common_stub
@@ -348,25 +354,3 @@ isr_apic_stub:
 
     iretq
 
-global isr_syscall_stub
-isr_syscall_stub:
-    PUSHAQ
-    push fs
-    push gs
-
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    mov rdi, rsp    
-    call syscall_handler
-
-    pop gs
-    pop fs
-    POPAQ
-
-    add rsp, 16
-
-    iretq

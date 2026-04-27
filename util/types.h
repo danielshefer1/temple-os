@@ -147,19 +147,33 @@ typedef struct timed_key_t {
     char c;
 } timed_key_t;
 
-struct tss_entry_struct {
-    uint64_t prev_tss;   // Previous TSS (not used in software switching)
-    uint64_t esp0;       // The stack pointer to load when switching to Ring 0
-    uint64_t ss0;        // The stack segment to load when switching to Ring 0
-    uint64_t esp1; uint64_t ss1; uint64_t esp2; uint64_t ss2; // Not used
-    uint64_t cr3; uint64_t eip; uint64_t eflags;
-    uint64_t eax; uint64_t ecx; uint64_t edx; uint64_t ebx;
-    uint64_t esp; uint64_t ebp; uint64_t esi; uint64_t rdi;
-    uint64_t es; uint64_t cs; uint64_t ss; uint64_t ds; uint64_t fs; uint64_t gs;
-    uint64_t ldt; uint16_t trap; uint16_t iomap_base;
-} __attribute__((packed)) ;
+typedef struct tss64_t {
+    uint32_t reserved0;
+    uint64_t rsp0;
+    uint64_t rsp1;
+    uint64_t rsp2;
+    uint64_t reserved1;
+    uint64_t ist1;
+    uint64_t ist2;
+    uint64_t ist3;
+    uint64_t ist4;
+    uint64_t ist5;
+    uint64_t ist6;
+    uint64_t ist7;
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t iopb_offset;
+} __attribute__((packed)) tss64_t;
 
-typedef struct tss_entry_struct tss_entry_t;
+typedef struct cpu_local_t {
+    uint64_t self;              // offset 0  — &cpu_locals[i] (gs:[0])
+    uint64_t kernel_rsp;        // offset 8  — top of kernel stack (== tss.rsp0)
+    uint64_t scratch_user_rsp;  // offset 16 — syscall_entry saves user RSP here
+    uint32_t cpu_index;         // offset 24
+    uint32_t apic_id;           // offset 28
+    tss64_t* tss;               // offset 32
+    uint64_t kstack_top;        // offset 40
+} __attribute__((packed)) cpu_local_t;
 
 
 typedef struct rsdp_t {

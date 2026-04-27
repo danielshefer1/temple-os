@@ -1,4 +1,5 @@
 #include "utility.h"
+#include "cpu_local.h"
 
 void start() {
     SetGDT();
@@ -18,6 +19,12 @@ void start() {
     InitMadt();
     InitMcfg();
     InitFadt();
+
+    // BSP per-CPU init: TSS + SYSCALL/SYSRET MSRs. Must come after MADT
+    // parsing fills cpu_ids[]/apic_to_index[].
+    cpu_locals[0].kstack_top = (uint64_t)&_stack_top;
+    cpu_init_late(0);
+
     EnableLapic();
 
     InitTimer(TIMER_TICK_PER_MS);

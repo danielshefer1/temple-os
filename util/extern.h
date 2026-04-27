@@ -31,8 +31,6 @@ extern void outl(uint16_t port, uint32_t val);
 
 
 extern bool check_interrupts();
-extern void load_tss();
-extern void switch_to_user_mode(uint64_t eip, uint64_t esp);
 extern uint8_t get_cpuid();
 extern void enable_paging(void* pd);
 extern void enable_sse();
@@ -67,6 +65,5 @@ extern void isr_stub_21();
 extern void isr_pic_stub_32();
 extern void isr_apic_stub_32();
 extern void isr_apic_stub_33();
-extern void isr_stub_128();
 extern void isr_apic_stub_64();
 extern void isr_spurious();

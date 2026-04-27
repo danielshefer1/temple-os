@@ -14,7 +14,9 @@ static int64_t valid_fd(int64_t fd) {
 
 int64_t fd_alloc(file_t* f) {
     if (f == NULL) return -EINVAL;
-    for (int64_t i = 0; i < FD_MAX; i++) {
+    // fds 0/1/2 are reserved for stdin/stdout/stderr; the syscall layer handles
+    // them directly without touching this table.
+    for (int64_t i = STDERR_FILENO + 1; i < FD_MAX; i++) {
         if (fd_table[i].file == NULL) {
             fd_table[i].file = f;
             fd_table[i].flags = 0;

@@ -1,6 +1,13 @@
 #pragma once
 
 #include "types.h"
+#include "defintions.h"
+
+#include "fd_table.h"
+#include "vfs.h"
+#include "vga.h"
+#include "keyboard.h"
+#include "global.h"
 
 int64_t SysOpen     (interrupt_frame_t* f);
 int64_t SysClose    (interrupt_frame_t* f);

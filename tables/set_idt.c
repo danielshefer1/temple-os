@@ -28,14 +28,13 @@ static void* handlers[] = {
     (void*)isr_pic_stub_32,
     (void*)isr_apic_stub_33,
     (void*)isr_apic_stub_64,
-    (void*)isr_stub_128,
     (void*)isr_spurious
 };
 
 static uint64_t handlers_idx[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
     10, 11, 12, 13, 14, 16, 17, 18, 19, 20,
-    21, 32, 33, 64, 128, 0xFF
+    21, 32, 33, 64, 0xFF
 };
 
 static uint64_t num_handlers = sizeof(handlers) / sizeof(handlers[0]);
@@ -85,11 +84,6 @@ void InitIDT() {
     for (uint64_t i = 0; i < num_handlers; i++) {
         if (handlers[i] == 0) {
             kerror("Handler %d is NULL\n", i);    
-        }
-        if (handlers_idx[i] == 128) {
-            SetIDTEntry((uint64_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
-                PRIVILEGE_USER, IDT_TYPE_TRAP_GATE, handlers_idx[i]);
-            continue;
         }
         SetIDTEntry((uint64_t)handlers[i], GDT_CODE_SEGMENT, PRESENT,
          PRIVILEGE_USER, IDT_TYPE_INTERRUPT_GATE, handlers_idx[i]);

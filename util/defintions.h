@@ -126,8 +126,6 @@
 
 // System Calls Definitions
 #define EXIT_SYSCALL 1
-#define WRITE_SYSCALL 2
-#define READ_SYSCALL 3
 #define FLUSH_BUFFER_SYSCALL 4
 #define MMAP_SYSCALL 5
 #define MUNMAP_SYSCALL 6
@@ -148,6 +146,10 @@
 #define IOCTL_SYSCALL      21
 
 #define FD_MAX             64
+
+#define STDIN_FILENO   0
+#define STDOUT_FILENO  1
+#define STDERR_FILENO  2
 // System Calls Definitions End
 
 // Keyboard Definitions

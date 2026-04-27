@@ -1,4 +1,5 @@
 #include "acpi.h"
+#include "cpu_local.h"
 
 static rsdp_t* rsdp;
 static rsdt_t* rsdt;
@@ -128,6 +129,7 @@ void ParseMadt(madt_t* madt) {
                 local_apic_t* ptr = (local_apic_t*) entry;
                 kprintf("Cpu %d ID: %d\t", cpu_count, ptr->acpi_processor_id);
                 cpu_ids[cpu_count] = ptr->acpi_processor_id;
+                apic_to_index[ptr->acpi_processor_id] = (uint8_t)cpu_count;
                 cpu_count++;
                 break;
             case 1:

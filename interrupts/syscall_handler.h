@@ -12,10 +12,8 @@
 void syscall_handler(interrupt_frame_t* frame);
 
 // SysCall Handlers
-int32_t WriteHandler(interrupt_frame_t* frame);
-int32_t ReadHandler(interrupt_frame_t* frame);
-int32_t MmapHandler(interrupt_frame_t* frame);
-int32_t MunmapHandler(interrupt_frame_t* frame);
-int32_t UnknownSysCall();
-int32_t ExitHandler();
-int32_t FlushBufferHandler();
+int64_t MmapHandler(interrupt_frame_t* frame);
+int64_t MunmapHandler(interrupt_frame_t* frame);
+int64_t UnknownSysCall();
+int64_t ExitHandler();
+int64_t FlushBufferHandler();
