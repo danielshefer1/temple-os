@@ -2,7 +2,7 @@
 
 int64_t EXT2Read(file_t* file, void* buf, uint64_t size) {
     if (file == NULL || buf == NULL) return -EINVAL;
-    if (file->inode == NULL || file->dentry == NULL) return -EINVAL;
+    if (file->inode == NULL) return -EINVAL;
     if (UINT64_MAX - size < file->position) return -EINVAL;
 
 
@@ -59,7 +59,7 @@ int64_t AddBlocksToInode(inode_t* inode, uint64_t count) {
 
 int64_t CheckSizeForWrite(file_t* file, uint64_t size) {
     if (file == NULL) return -EINVAL;
-    if (file->inode == NULL || file->dentry == NULL) return -EINVAL;
+    if (file->inode == NULL) return -EINVAL;
     if (UINT64_MAX - size < file->position) return -EINVAL;
 
     uint64_t end_offset = file->position + size;
@@ -73,7 +73,7 @@ int64_t CheckSizeForWrite(file_t* file, uint64_t size) {
 
 int64_t EXT2Write(file_t* file, const void* buf, uint64_t size) {
     if (file == NULL || buf == NULL) return -EINVAL;
-    if (file->inode == NULL || file->dentry == NULL) return -EINVAL;
+    if (file->inode == NULL) return -EINVAL;
     if (UINT64_MAX - size < file->position) return -EINVAL;
 
     int64_t blockscheck_ret = CheckSizeForWrite(file, size);

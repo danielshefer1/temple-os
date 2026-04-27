@@ -138,7 +138,6 @@ int64_t vfs_open_path(const char* path, uint32_t flags, uint64_t mode,
         kfree(f, sizeof(file_t));
         return r;
     }
-    f->dentry = d;
     f->flags = flags;
     f->mode = (uint32_t) mode;
 

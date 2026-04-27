@@ -18,10 +18,9 @@
 #include "pci.h"
 #include "ahci_driver.h"
 #include "mbr.h"
-#include "ext2_sb_ops.h"
 #include "rtc.h"
-#include "blocks_buffer.h"
-#include "ext2_ino_ops.h"
-#include "ext2_file_ops.h"
+#include "vfs_mount.h"
+#include "ext2_sb_ops.h"
+#include "vfs_path_ops.h"
 
 void kmain();

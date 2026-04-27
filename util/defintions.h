@@ -131,6 +131,23 @@
 #define FLUSH_BUFFER_SYSCALL 4
 #define MMAP_SYSCALL 5
 #define MUNMAP_SYSCALL 6
+#define OPEN_SYSCALL       7
+#define CLOSE_SYSCALL      8
+#define FREAD_SYSCALL      9
+#define FWRITE_SYSCALL     10
+#define LSEEK_SYSCALL      11
+#define TRUNCATE_SYSCALL   12
+#define UNLINK_SYSCALL     13
+#define MKDIR_SYSCALL      14
+#define RMDIR_SYSCALL      15
+#define RENAME_SYSCALL     16
+#define SYMLINK_SYSCALL    17
+#define READLINK_SYSCALL   18
+#define STAT_SYSCALL       19
+#define SYNC_SYSCALL       20
+#define IOCTL_SYSCALL      21
+
+#define FD_MAX             64
 // System Calls Definitions End
 
 // Keyboard Definitions
@@ -192,6 +209,7 @@
 #define EBUSY        16   // device or resource busy
 #define EEXIST       17   // file already exists
 #define ENOTDIR      20   // not a directory
+#define EMFILE       24   // too many open files
 #define EISDIR       21   // is a directory (tried to read a dir as a file)
 #define EINVAL       22   // invalid argument
 #define ENOSPC       28   // no space left on device
@@ -215,7 +233,7 @@
 // VFS limits
 #define VFS_NAME_MAX     255
 #define VFS_PATH_MAX     4096
-#define VFS_SYMLINK_MAX  8
+#define VFS_SYMLINK_MAX  40
 
 // seek whence
 #define SEEK_SET     0   // from start of file

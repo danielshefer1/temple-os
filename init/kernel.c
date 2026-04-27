@@ -3,22 +3,30 @@
 void kmain() {
     start();
 
-    superblock_t* sb = EXT2MountRoot();
+    file_t* root_f;
+    vfs_open_path("/", 0, 0, &root_f);
 
-    dentry_t file = {
-        .name = "file"
-    };
+    char input[50];
+    memset(input, 0, sizeof(input));
+    kprintf("input a cmd: ");
+    kscanf("%s", input);
+    while (strcmp(input, "q") != 0) {
+        if (strcmp(input, "ls") == 0) {
+            vfs_close(root_f);
+            vfs_open_path("/", 0, 0, &root_f);
+            vfs_ls(root_f);
+        }
+        else if (memcmp(input, "touch", 6)) {
+            vfs_create_path(&input[6], 0644);
+        }
+        else {
+            kprintf("not a recognized cmd!");
+        }
+        kprintf("\nnext: ");
+        memset(input, 0, sizeof(input));
+        kscanf("%s", input);
+    }
 
-    EXT2Create(sb->root_inode, &file, 0644);
-
-    file_t file_instance = {
-        .dentry = &file,
-        .inode = file.inode,
-        .position = 0,
-        .ref_count = 0
-    };
-    EXT2Truncate(&file_instance, sb->block_size * 5 - sb->block_size / 2);
     
-    sb->ops->unmount(sb);
     end();
 }

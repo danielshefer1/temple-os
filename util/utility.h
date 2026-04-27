@@ -18,6 +18,8 @@
 #include "pci.h"
 #include "ahci_driver.h"
 #include "mbr.h"
+#include "vfs_mount.h"
+#include "ext2_sb_ops.h"
 
 void start();
 void end();

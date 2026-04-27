@@ -232,9 +232,6 @@ int64_t EXT2Sync(superblock_t* sb) {
     brelse(sb, EXT2_SUPERBLOCK_OFFSET / sb->block_size);
 
     bflush_all(sb);
-    // Complete later when we have more info about inodes and file ops, for now just flush the block cache and update the superblock state //
-
-
     return 0;
 }
 
@@ -279,7 +276,6 @@ inode_t* EXT2AllocInode(superblock_t* sb) {
 }
 
 int64_t EXT2FreeInode(inode_t* inode) {
-    // IMPORTANT - Fill later when we have more inode and file ops! //
     kfree(inode->fs_specific, sizeof(ext2_inode_data_t));
     kfree(inode, sizeof(inode_t));
     return 0;

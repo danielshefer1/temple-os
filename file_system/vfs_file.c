@@ -55,7 +55,6 @@ int64_t vfs_open(inode_t* in, file_t* f) {
     if (in->file_ops == NULL) return -ENOTSUP;
 
     f->inode = in;
-    f->dentry = NULL;
     f->ops = in->file_ops;
     f->position = 0;
     f->flags = 0;
@@ -112,13 +111,28 @@ int64_t vfs_iterate(file_t* f, vfs_dir_cb cb, void* ctx) {
     if (f->inode->type != VFS_TYPE_DIR) return -ENOTDIR;
 
     dentry_t entry;
-    int64_t ret;
+    int64_t ret, cb_ret;
     for (;;) {
         memset(&entry, 0, sizeof(entry));
         ret = VFS_CALL(f->ops, readdir, f, &entry);
-        if (ret < 0) return ret;
-        if (ret == 0) return 0;          // EOD
-        ret = cb(&entry, ctx);
-        if (ret < 0) return ret;
+        if (ret <= 0) return ret;        // <0 error, 0 EOD
+        cb_ret = cb(&entry, ctx);
+
+        // readdir populates entry->name (kmalloc) and entry->inode (alloc_inode);
+        // release both before the next iteration regardless of cb outcome.
+        if (entry.inode != NULL) vfs_iput(entry.inode);
+        vfs_strfree(entry.name);
+
+        if (cb_ret < 0) return cb_ret;
     }
+}
+
+int64_t vfs_print_entry_name_with_tab(dentry_t* dentry, void* ctx) {
+    if (dentry == NULL || dentry->name == NULL) return -EINVAL;
+    kprintf("%s\t", dentry->name);
+    return 0;
+}
+
+int64_t vfs_ls(file_t* f) {
+    return vfs_iterate(f, vfs_print_entry_name_with_tab, NULL);
 }

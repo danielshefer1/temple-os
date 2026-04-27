@@ -7,6 +7,7 @@
 #include "keyboard.h"
 #include "global.h"
 #include "buddy_alloc.h"
+#include "vfs_syscalls.h"
 
 void syscall_handler(interrupt_frame_t* frame);
 

@@ -568,7 +568,6 @@ typedef struct {
 
 typedef struct file_t {
     inode_t* inode;        
-    dentry_t* dentry;       
     struct file_ops_t* ops;          
     
     mutex_t  lock;

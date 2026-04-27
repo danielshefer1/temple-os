@@ -22,11 +22,13 @@ void start() {
 
     InitTimer(TIMER_TICK_PER_MS);
     InitKeyboard();
-    //InitVFS();
 
     PciEnumeration();
     AhciInit();
     ParseDevicesMbrs();
+
+    superblock_t* sb = EXT2MountRoot();
+    vfs_mount_root(sb);
 
     BootCores();
 
@@ -40,6 +42,8 @@ void start() {
 
 
 void end() {
+    vfs_unmount_root();
+
     kprintf("Kernel has finished! Press Shift + Q to shutdown!");
     while (true) {
         HltHelper();
