@@ -532,3 +532,17 @@ int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size) {
     }
     return cpy_size;
 }
+
+inode_ops_t ext2_inode_ops = {
+    .lookup   = EXT2Lookup,
+    .create   = EXT2Create,
+    .mkdir    = EXT2Mkdir,
+    .rmdir    = EXT2Rmdir,
+    .unlink   = EXT2Unlink,
+    .rename   = EXT2Rename,
+    .hardlink = EXT2HardLink,
+    .symlink  = EXT2SymLink,
+    .readlink = EXT2ReadLink,
+    .getattr  = NULL,
+    .setattr  = NULL,
+};

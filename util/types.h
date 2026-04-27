@@ -526,6 +526,7 @@ typedef struct inode_t {
     uint64_t permissions;
 
     struct inode_ops_t* ops;
+    struct file_ops_t* file_ops;
     void* fs_specific;
 
     char* syslink_name;
@@ -796,6 +797,18 @@ typedef struct ext2_inode_data_t {
     uint32_t i_dtime;
     uint32_t i_block[15];
 } ext2_inode_data_t;
+
+typedef struct u64_node_t {
+    uint64_t value;
+    struct u64_node_t* next;
+} u64_node_t;
+
+typedef struct ext2_private_file_t {
+    uint32_t dir_blocks_offset;
+    uint32_t dir_bytes_offset;
+
+    u64_node_t* cached_blocks;
+} ext2_private_file_t;
 
 typedef struct date {
     uint8_t day;

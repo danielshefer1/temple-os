@@ -1,5 +1,8 @@
 #include "ext2_sb_ops.h"
 
+extern inode_ops_t ext2_inode_ops;
+extern file_ops_t  ext2_file_ops;
+
 static superblock_ops_t ext2_sb_ops = {
     .alloc_inode = EXT2AllocInode,
     .free_inode = EXT2FreeInode,
@@ -267,7 +270,8 @@ inode_t* EXT2AllocInode(superblock_t* sb) {
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
 
     inode->sb = sb;
-    inode->ops = NULL; // IMPORTANT - fill in with ext2 ops later - IMPORTANT
+    inode->ops = &ext2_inode_ops;
+    inode->file_ops = &ext2_file_ops;
 
     data->block_group = UINT32_MAX;
 
