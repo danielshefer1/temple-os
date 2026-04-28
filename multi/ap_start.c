@@ -57,8 +57,6 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     inputs[1] = (uint64_t)((void*)ap_kmain); 
     inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 
-    //CliHelper();
-
     SendInitIPI(cpu_id);
     
     sleep(10); 
@@ -70,9 +68,7 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
         PauseHelper();
     }
 
-    //SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
-
-    //StiHelper();
+    SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
 }
 
 void BootCores() {

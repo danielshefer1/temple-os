@@ -13,6 +13,6 @@ void ap_kmain() {
     kprintf("Core %d woke up!\n", cpu_id);
     cpus_active++;
 
-    CliHelper();
+    //CliHelper();
     while (true) HltHelper();
 }
