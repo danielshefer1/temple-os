@@ -9,15 +9,11 @@ start:
     sti
     mov [boot_drive], dl    ; Save the drive ID passed by BIOS
 
-    ; Load Stage 2 from disk
-    mov ah, 0x02              ; BIOS read sector function
-    mov al, 8                 ; Number of sectors to read (Stage 2 + Stage 3 size)
-    mov ch, 0                 ; Cylinder 0
-    mov cl, 2                 ; Start at sector 2 (sector 1 is boot sector)
-    mov dh, 0                 ; Head 0
+    ; Load Stage 2 from disk via LBA (INT 0x13, AH=0x42)
+    mov si, dap
+    mov ah, 0x42
     mov dl, [boot_drive]
-    mov bx, 0x7E00            ; Load to 0x7E00 (right after Stage 1)
-    int 0x13                  ; BIOS disk interrupt
+    int 0x13
 
     jc error                  ; Jump if carry flag set (error)
 
@@ -45,7 +41,15 @@ print_string:
 
 boot_drive db 0
 
-times 446-($-$$) db 0   
+dap:
+    db 0x10        ; size of packet
+    db 0           ; reserved
+    dw 8           ; sectors to read (stage 2 + stage 3)
+    dw 0x7E00      ; transfer offset
+    dw 0           ; transfer segment
+    dq 1           ; starting LBA (sector 2 = LBA 1)
+
+times 446-($-$$) db 0
 
 ; Partition Entry 1 (16 bytes)
 db 0x80                 ; Bootable

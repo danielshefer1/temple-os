@@ -281,7 +281,6 @@ real_entry:
 .setup:
     mov al, 1
     mov byte [bx], al
-    call get_drive_geometry
     call load_stage4
     jmp switch_to_protected_mode1
 .loading:
@@ -320,13 +319,16 @@ load_stage4:
 
     xor ax, ax
     mov es, ax
-    mov bx, STAGE4_BASE
-    mov cl, STAGE4_SECTOR
-    mov al, 1
-    mov dh, 0
+
+    mov word [dap + 2], 1
+    mov word [dap + 4], STAGE4_BASE
+    mov word [dap + 6], 0
+    mov dword [dap + 8], STAGE4_SECTOR
+    mov dword [dap + 12], 0
+
+    mov si, dap
+    mov ah, 0x42
     mov dl, [boot_drive]
-    mov ch, 0
-    mov ah, 0x02
     int 0x13
     jc .error
 
@@ -349,35 +351,13 @@ load_section:
     xor eax, eax
     mov es, ax
 
-    
-    mov eax, [start_sector]     ; Load 32-bit LBA
-    xor edx, edx                ; CLEAR EDX (Critical for 32-bit div!)
-    movzx ebx, word [MAX_SECTOR]; Load 16-bit limit into 32-bit reg
-    div ebx                     ; EDX:EAX / EBX
-    test edx, edx
-    jnz .isnt_63
-    inc edx
-
-.isnt_63:
-    mov [current_sector_val], dx ; Save standard sector number for later
-
-    ; SafeCount = MAX_SECTOR - CurrentSector
-    mov cx, [MAX_SECTOR]
-    sub cx, dx                  ; Remaining sectors after this one
-    inc cx                      ; Include this one
-    cmp cx, 16
-    jle .limit_calculated
-    mov cx, 16                  
-
-.limit_calculated:
-    movzx ecx, cx
+    ; Determine sector count: min(16, remaining)
+    mov ecx, 16
     mov ebx, [bootstrap_sectors_left]
     test ebx, ebx
     jz .kernel_sub
     cmp ebx, ecx
     jge .con
-
-.bootstrap_end:
     mov ecx, ebx
     jmp .con
 
@@ -388,43 +368,27 @@ load_section:
     mov ecx, ebx
 
 .con:
-    push cx                     ; Save [Count] for INT 0x13
-    
-    xor edx, edx                
-    movzx ebx, word [MAX_HEAD]
-    div ebx
-    
-    
-    ; CH = Cylinder Low, DH = Head, CL = Sector
-    mov dh, dl                  
-    mov ch, al                  
+    ; Build DAP for LBA read
+    mov [dap + 2], cx
+    mov word [dap + 4], 0xA000
+    mov word [dap + 6], 0
+    mov eax, [start_sector]
+    mov [dap + 8], eax
+    mov dword [dap + 12], 0
 
-    ; Handle Cylinder High Bits
-    mov dl, ah                  ; Get Cylinder High bits
-    shl dl, 6                   ; Shift to top position
-    
-    mov cl, [current_sector_val] ; Sector (1-63)
-    and cl, 0x3F                 ; Ensure only 6 bits
-    mov al, ch                   ; Get Cylinder low byte
-    mov ch, al                   ; This is already correct
-    ; If you have > 1024 cylinders, you'd move high bits of Cyl to CL bits 6-7 here                
-    
-    pop ax                      
-    mov ah, 0x02                
-    mov dl, [boot_drive]        
-    mov bx, 0xA000              
-    
+    mov si, dap
+    mov ah, 0x42
+    mov dl, [boot_drive]
     int 0x13
     jc .error
 
-
-    movzx eax, al               ; Zero-extend AL to 32-bit
-    add [start_sector], eax     
+    movzx eax, cx               ; Sectors actually requested
+    add [start_sector], eax
     mov [bootstrap_sectors_loaded], eax
     mov ebx, [bootstrap_sectors_left]
     test ebx, ebx
     jz .sub_from_kernel
-    sub [bootstrap_sectors_left], eax 
+    sub [bootstrap_sectors_left], eax
     jmp .end_of_func
 
 .sub_from_kernel:
@@ -444,51 +408,15 @@ load_section:
     cli
     hlt
 
-current_sector_val dw 0
-
-; Function: get_drive_geometry
-; Returns:
-;   BL = Drive Type
-;   CH = Max Cylinder (low 8 bits)
-;   CL = Max Sector (bits 0-5), Max Cylinder (high 2 bits in 6-7)
-;   DH = Max Head
-get_drive_geometry:
-    push es             ; BIOS might change ES
-    xor di, di          ; Set DI to 0 to avoid BIOS bugs
-    mov es, di
-    mov ah, 0x08        ; Get drive parameters
-    mov dl, [boot_drive]; Usually 0x80
-    int 0x13
-    jc .error           ; Carry flag set on error
-    
-    ; Extracting values:
-    ; Sectors per track are in CL bits 0-5
-    push cx
-    and cx, 0x003F      ; Keep only bits 0-5 for max sector
-    mov [MAX_SECTOR], cx
-    pop cx
-    
-    movzx dx, dh
-    inc dx              ; DH is 'Max Head Index', so Heads = DH + 1
-    mov [MAX_HEAD], dx
-
-    and cl, 0xC0
-    xor ax, ax
-    mov al, cl
-    shl ax, 2
-    mov al, ch
-    mov [MAX_CYLINDER], ax
-    
-    pop es
-    ret
-
-.error:
-    mov si, error_msg
-    call print_string
-    mov al, ah
-    call print_hex_byte
-    cli
-    hlt
+; Disk Address Packet for INT 0x13 / AH=0x42
+align 4
+dap:
+    db 0x10        ; size of packet
+    db 0           ; reserved
+    dw 0           ; sector count
+    dw 0           ; transfer offset
+    dw 0           ; transfer segment
+    dq 0           ; starting LBA
 
 print_tab:
     mov cx, 4
@@ -574,8 +502,8 @@ print_hex_digit:
 BOOTSTRAP_LOADING_ADDRESS equ 0x100000
 KERNEL_LOADING_ADDRESS equ 0x200000
 BOOT_DRIVE equ 0x85F0
-STAGE4_SECTOR equ 10
-START_SECTOR equ 11
+STAGE4_SECTOR equ 9
+START_SECTOR equ 10
 STAGE4_BASE equ 0x8E00
 VGA_TEXT equ 0xB8000
 
@@ -591,10 +519,6 @@ bootstrap_sectors_loaded dd 0
 
 current_kernel_loading_address dd KERNEL_LOADING_ADDRESS
 current_bootstrap_loading_address dd BOOTSTRAP_LOADING_ADDRESS
-
-MAX_SECTOR dw 0
-MAX_HEAD dw 0
-MAX_CYLINDER dw 0
 
 bss_start dd 0
 bss_end dd 0
