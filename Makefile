@@ -25,6 +25,7 @@ TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
 LONG_MODE_INIT_BIN = $(BUILD_DIR)/long_mode_init.bin
 
 DATA_IMG = data.img
+ISO_IMG = $(BUILD_DIR)/os.iso
 
 # ============================================================================
 # Flags
@@ -42,8 +43,9 @@ ASFLAGS_ELF32 = -f elf32
 ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
 
-QEMU_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
-			 -drive format=raw,file=$(DISK_IMG),cache=directsync -serial stdio \
+QEMU_IMG_FLAGS = -drive format=raw,file=$(DISK_IMG),cache=directsync -serial stdio
+QEMU_ISO_FLAGS = -cdrom $(ISO_IMG)
+QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
 			 -drive index=1,format=raw,file=$(DATA_IMG) \
 			 -rtc clock=host,driftfix=slew \
 			 #-device qemu-xhci,id=xhci \
@@ -127,8 +129,9 @@ $(LONG_MODE_INIT_BIN) : $(BUILD_DIR)
 	@$(AS) $(ASFLAGS_BIN) boot/long_mode_init.asm -o $(LONG_MODE_INIT_BIN)
 
 # --- Image Generation ---
-$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/boot.asm boot/stage2.asm boot/stage3.asm multi/trampoline.asm | $(BUILD_DIR)
+$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/mbr.asm boot/boot.asm boot/stage2.asm boot/stage3.asm multi/trampoline.asm | $(BUILD_DIR)
 	@echo "📦 Constructing Disk Image"
+	@$(AS) $(ASFLAGS_BIN) boot/mbr.asm -o $(BUILD_DIR)/mbr.bin
 	@$(AS) $(ASFLAGS_BIN) boot/boot.asm -o $(BUILD_DIR)/boot.bin
 	@$(AS) $(ASFLAGS_BIN) boot/stage2.asm -o $(BUILD_DIR)/stage2.bin
 	@$(AS) $(ASFLAGS_BIN) boot/stage3.asm -o $(BUILD_DIR)/stage3.bin
@@ -145,17 +148,30 @@ $(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/boot.asm boot/stage2.asm boot/s
 	cat $(BUILD_DIR)/bootstrap.bin $(BUILD_DIR)/kernel.bin > $(PAYLOAD)
 
 	dd if=/dev/zero of=$(DISK_IMG) bs=1M count=20
-	dd if=$(BUILD_DIR)/boot.bin of=$(DISK_IMG) bs=512 seek=0 conv=notrunc
-	dd if=$(BUILD_DIR)/stage2.bin of=$(DISK_IMG) bs=512 seek=1 conv=notrunc
-	dd if=$(BUILD_DIR)/stage3.bin of=$(DISK_IMG) bs=512 seek=5 conv=notrunc
-	dd if=$(PAYLOAD) of=$(DISK_IMG) bs=512 seek=9 conv=notrunc
+	dd if=$(BUILD_DIR)/mbr.bin of=$(DISK_IMG) bs=512 seek=0 conv=notrunc
+	dd if=$(BUILD_DIR)/boot.bin of=$(DISK_IMG) bs=512 seek=1 conv=notrunc
+	dd if=$(BUILD_DIR)/stage2.bin of=$(DISK_IMG) bs=512 seek=2 conv=notrunc
+	dd if=$(BUILD_DIR)/stage3.bin of=$(DISK_IMG) bs=512 seek=6 conv=notrunc
+	dd if=$(PAYLOAD) of=$(DISK_IMG) bs=512 seek=10 conv=notrunc
 	@echo "✅ Disk image created successfully!"
+
+$(ISO_IMG): $(DISK_IMG)
+	@echo "💿 Building ISO"
+	@mkdir -p $(BUILD_DIR)/iso_root
+	@xorriso -as mkisofs \
+	    -o $(ISO_IMG) \
+	    -b $(notdir $(DISK_IMG)) \
+	    -hard-disk-boot \
+	    -graft-points $(notdir $(DISK_IMG))=$(DISK_IMG) \
+	    $(BUILD_DIR)/iso_root/
 
 # ============================================================================
 # Utilities
 # ============================================================================
 $(BUILD_DIR) $(K_OBJ_DIR) $(B_OBJ_DIR):
 	@mkdir -p $@
+
+iso: $(ISO_IMG)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -168,10 +184,10 @@ clean-all:
 	rm -rf data.img
 
 run: $(DISK_IMG) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_FLAGS)
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_IMG_FLAGS)
 
 debug: $(DISK_IMG) $(KERNEL_ELF) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_FLAGS) -s -S &
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_IMG_FLAGS) -s -S &
 	gdb $(KERNEL_ELF) \
 		-ex "target remote localhost:1234" \
 		-ex "set pagination off" \
@@ -180,14 +196,17 @@ debug: $(DISK_IMG) $(KERNEL_ELF) $(DATA_IMG)
 		-ex "hbreak kmain" \
 		-ex "continue"
 
-debug-bootstrap: $(DISK_IMG) $(BOOTSTRAP_ELF) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_FLAGS) -s -S & \
-	gdb -ex "set architecture i386:x86-64" \
-		-tui \
+iso-run: $(ISO_IMG) $(DATA_IMG)
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_ISO_FLAGS)
+
+iso-debug: $(ISO_IMG) $(KERNEL_ELF) $(DATA_IMG)
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_ISO_FLAGS) -s -S &
+	gdb $(KERNEL_ELF) \
+		-ex "target remote localhost:1234" \
+		-ex "set pagination off" \
+		-ex "set architecture x86-64" \
 		-ex "layout src" \
-	    -ex "target remote localhost:1234" \
-	    -ex "symbol-file $(BOOTSTRAP_ELF)" \
-	    -ex "hbreak bootstrap_kmain" \
+		-ex "hbreak kmain" \
 		-ex "continue"
 
 # Include dependencies
