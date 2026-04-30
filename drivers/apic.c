@@ -3,8 +3,21 @@
 static uint64_t ticks_per_ms;
 
 void DisablePic() {
+    // ICW1: start init, expect ICW4
+    outb(0x20, 0x11);
+    outb(0xA0, 0x11);
+    // ICW2: vector offsets (master -> 0x20, slave -> 0x28)
+    outb(MASTER_PIC, 0x20);
+    outb(SLAVE_PIC,  0x28);
+    // ICW3: cascade wiring (slave on master IRQ2)
+    outb(MASTER_PIC, 0x04);
+    outb(SLAVE_PIC,  0x02);
+    // ICW4: 8086 mode
+    outb(MASTER_PIC, 0x01);
+    outb(SLAVE_PIC,  0x01);
+    // Mask everything; EnablePitTimer will selectively unmask IRQ 0
     outb(MASTER_PIC, 0xFF);
-    outb(SLAVE_PIC, 0xFF);
+    outb(SLAVE_PIC,  0xFF);
 }
 void EnablePitTimer() {
     outb(MASTER_PIC, 0xFE);

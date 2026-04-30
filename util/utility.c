@@ -4,7 +4,9 @@
 void start() {
     SetGDT();
     InitPaging();
+    DisablePic();
     InitIDT();
+    InitVGA();
     enable_sse();
 
     uint64_t kernel_size = (uint64_t)&__total_pages;
@@ -43,7 +45,6 @@ void start() {
 
     DisableIdentityMapping();
 
-    InitVGA();
     kprintf("Kernel Initialized Successfully\n");
 }
 

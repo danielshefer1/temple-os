@@ -1,206 +1,149 @@
 # ============================================================================
 # Toolchains
 # ============================================================================
-CC32 = i686-elf-gcc
-LD32 = i686-elf-ld
 CC64 = x86_64-elf-gcc
 LD64 = x86_64-elf-ld
 AS   = nasm
-OBJCOPY32 = i686-elf-objcopy
-OBJCOPY64 = x86_64-elf-objcopy
 
 # ============================================================================
 # Paths and Filenames
 # ============================================================================
 BUILD_DIR = build
 K_OBJ_DIR = $(BUILD_DIR)/kernel
-B_OBJ_DIR = $(BUILD_DIR)/bootstrap
+ISO_ROOT  = $(BUILD_DIR)/iso_root
 
-DISK_IMG  = $(BUILD_DIR)/os.img
-KERNEL_ELF = $(BUILD_DIR)/kernel.elf
-BOOTSTRAP_ELF = $(BUILD_DIR)/bootstrap.elf
-
-PAYLOAD = $(BUILD_DIR)/payload.bin
+KERNEL_ELF     = $(BUILD_DIR)/kernel.elf
+ISO_IMG        = $(BUILD_DIR)/os.iso
+DATA_IMG       = data.img
 TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
-LONG_MODE_INIT_BIN = $(BUILD_DIR)/long_mode_init.bin
 
-DATA_IMG = data.img
-ISO_IMG = $(BUILD_DIR)/os.iso
+LIMINE_DIR = boot/limine
+LIMINE_BIN = $(LIMINE_DIR)/limine
 
 # ============================================================================
 # Flags
 # ============================================================================
 COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
-INCDIRS = -I ./allocaters -I ./boot -I ./drivers -I ./file_system -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user -I ./util -I ./wrappers
+INCDIRS = -I ./allocaters -I ./boot -I ./boot/limine -I ./drivers -I ./file_system \
+          -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user \
+          -I ./util -I ./wrappers
 
-K_CFLAGS = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-sse2 $(INCDIRS)
-B_CFLAGS = $(COMMON_CFLAGS) -m32
-
+K_CFLAGS  = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-sse2 $(INCDIRS)
 K_LDFLAGS = -m elf_x86_64 -T linker64.ld
-B_LDFLAGS = -m elf_i386   -T linker32.ld
 
-ASFLAGS_ELF32 = -f elf32
 ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
 
-QEMU_IMG_FLAGS = -drive format=raw,file=$(DISK_IMG),cache=directsync -serial stdio
-QEMU_ISO_FLAGS = -cdrom $(ISO_IMG)
 QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
-			 -drive index=1,format=raw,file=$(DATA_IMG) \
-			 -rtc clock=host,driftfix=slew \
-			 #-device qemu-xhci,id=xhci \
-			 -device usb-kbd,bus=xhci.0 \
-			 -device usb-mouse,bus=xhci.0 \
-
+                    -drive index=1,format=raw,file=$(DATA_IMG) \
+                    -rtc clock=host,driftfix=slew \
+                    -serial stdio
 
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
-                tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c wrappers/keyboard.c util/global.c \
-                util/string.c interrupts/syscall_handler.c file_system/vfs.c file_system/dcache.c drivers/acpi.c \
-                util/memory.c drivers/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c multi/ap_main.c drivers/pci.c \
-				drivers/ahci_driver.c file_system/mbr.c file_system/ext2_sb_ops.c drivers/rtc.c drivers/fadt.c file_system/ext2_ino_ops.c \
-				file_system/blocks_buffer.c file_system/ext2_helpers.c file_system/ext2_file_ops.c \
-				file_system/vfs_sb.c file_system/vfs_inode.c file_system/vfs_file.c \
-				file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
-				file_system/vfs_path_ops.c \
-				interrupts/fd_table.c interrupts/vfs_syscalls.c \
-				multi/cpu_local.c
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c init/limine_entry.c \
+                allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
+                tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
+                wrappers/keyboard.c util/global.c util/string.c interrupts/syscall_handler.c \
+                file_system/vfs.c file_system/dcache.c drivers/acpi.c util/memory.c \
+                drivers/apic.c interrupts/irq_handler.c util/utility.c multi/ap_start.c \
+                multi/ap_main.c drivers/pci.c drivers/ahci_driver.c file_system/mbr.c \
+                file_system/ext2_sb_ops.c drivers/rtc.c drivers/fadt.c \
+                file_system/ext2_ino_ops.c file_system/blocks_buffer.c \
+                file_system/ext2_helpers.c file_system/ext2_file_ops.c \
+                file_system/vfs_sb.c file_system/vfs_inode.c file_system/vfs_file.c \
+                file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
+                file_system/vfs_path_ops.c \
+                interrupts/fd_table.c interrupts/vfs_syscalls.c \
+                multi/cpu_local.c
+
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm
 
-BOOTSTRAP_C_SRCS = boot/bootstrapper.c boot/paging_bootstrap.c
-BOOTSTRAP_ASM_SRCS = boot/stage4.asm
-
-OFFSETS = offsets.inc
-
-# Generate object paths
 K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
-B_OBJS = $(addprefix $(B_OBJ_DIR)/, $(BOOTSTRAP_C_SRCS:.c=.o) $(BOOTSTRAP_ASM_SRCS:.asm=.o))
-
 
 # ============================================================================
 # Build Rules
 # ============================================================================
-all: $(DISK_IMG) $(DATA_IMG)
+all: $(ISO_IMG) $(DATA_IMG)
 
 $(DATA_IMG):
-	@echo "🗄️ Creating persistent data disk..."
+	@echo "Creating persistent data disk..."
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
 	@mke2fs -t ext2 -L "TEMPLE_OS_ROOT" $(DATA_IMG)
-	@echo "✅ $(DATA_IMG) is ready."
+	@echo "$(DATA_IMG) is ready."
 
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
 	@mkdir -p $(dir $@)
-	@echo "⚙️  [K64] Compiling $<"
+	@echo "[K64] Compiling $<"
 	@$(CC64) $(K_CFLAGS) -MMD -MP -c $< -o $@
 
 $(K_OBJ_DIR)/%.o: %.asm | $(K_OBJ_DIR) $(TRAMPOLINE_BIN)
-	@echo "💻 [K64] Assembling $<"
+	@mkdir -p $(dir $@)
+	@echo "[K64] Assembling $<"
 	@$(AS) $(ASFLAGS_ELF64) $< -o $@
 
-$(KERNEL_ELF): $(K_OBJS)
-	@echo "🔗 Linking Kernel ELF"
+$(KERNEL_ELF): $(K_OBJS) linker64.ld
+	@echo "Linking Kernel ELF"
 	@$(LD64) $(K_LDFLAGS) -o $@ $(K_OBJS)
 
-# --- Bootstrap Rules ---
-$(B_OBJ_DIR)/%.o: %.c | $(B_OBJ_DIR)
-	@mkdir -p $(dir $@)
-	@echo "⚙️  [B32] Compiling $<"
-	@$(CC32) $(B_CFLAGS) -MMD -MP -c $< -o $@
+$(TRAMPOLINE_BIN): multi/trampoline.asm | $(BUILD_DIR)
+	@$(AS) $(ASFLAGS_BIN) $< -o $@
 
-$(B_OBJ_DIR)/%.o: %.asm | $(B_OBJ_DIR) $(OFFSETS) $(LONG_MODE_INIT_BIN)
-	@echo "💻 [B32] Assembling $<"
-	@$(AS) $(ASFLAGS_ELF32) $< -o $@
+# --- Limine Helper ---
+$(LIMINE_BIN):
+	@$(MAKE) -s -C $(LIMINE_DIR)
 
-$(BOOTSTRAP_ELF): $(B_OBJS)
-	@echo "🔗 Linking Bootstrap ELF"
-	@$(LD32) $(B_LDFLAGS) -o $@ $(B_OBJS)
-
-$(OFFSETS) : $(KERNEL_ELF) $(B_OBJ_DIR)
-	@ offsets.bash
-
-$(TRAMPOLINE_BIN) : $(BUILD_DIR)
-	@mkdir -p $(dir $(TRAMPOLINE_BIN))
-	@$(AS) $(ASFLAGS_BIN) multi/trampoline.asm -o $(TRAMPOLINE_BIN)
-
-$(LONG_MODE_INIT_BIN) : $(BUILD_DIR)
-	@$(AS) $(ASFLAGS_BIN) boot/long_mode_init.asm -o $(LONG_MODE_INIT_BIN)
-
-# --- Image Generation ---
-$(DISK_IMG): $(KERNEL_ELF) $(BOOTSTRAP_ELF) boot/mbr.asm boot/boot.asm boot/stage2.asm boot/stage3.asm multi/trampoline.asm | $(BUILD_DIR)
-	@echo "📦 Constructing Disk Image"
-	@$(AS) $(ASFLAGS_BIN) boot/mbr.asm -o $(BUILD_DIR)/mbr.bin
-	@$(AS) $(ASFLAGS_BIN) boot/boot.asm -o $(BUILD_DIR)/boot.bin
-	@$(AS) $(ASFLAGS_BIN) boot/stage2.asm -o $(BUILD_DIR)/stage2.bin
-	@$(AS) $(ASFLAGS_BIN) boot/stage3.asm -o $(BUILD_DIR)/stage3.bin
-
-	@$(OBJCOPY64) -O binary -R .bss  $(KERNEL_ELF) $(BUILD_DIR)/kernel.bin
-	@$(OBJCOPY32) -O binary \
-    	-j .stage4 -j .text -j .data -j .bss \
-    	--set-section-flags .bss=alloc,load,contents \
-    	$(BOOTSTRAP_ELF) $(BUILD_DIR)/bootstrap.bin
-
-	truncate -s %512 build/bootstrap.bin
-	truncate -s %512 build/kernel.bin
-
-	cat $(BUILD_DIR)/bootstrap.bin $(BUILD_DIR)/kernel.bin > $(PAYLOAD)
-
-	dd if=/dev/zero of=$(DISK_IMG) bs=1M count=20
-	dd if=$(BUILD_DIR)/mbr.bin of=$(DISK_IMG) bs=512 seek=0 conv=notrunc
-	dd if=$(BUILD_DIR)/boot.bin of=$(DISK_IMG) bs=512 seek=1 conv=notrunc
-	dd if=$(BUILD_DIR)/stage2.bin of=$(DISK_IMG) bs=512 seek=2 conv=notrunc
-	dd if=$(BUILD_DIR)/stage3.bin of=$(DISK_IMG) bs=512 seek=6 conv=notrunc
-	dd if=$(PAYLOAD) of=$(DISK_IMG) bs=512 seek=10 conv=notrunc
-	@echo "✅ Disk image created successfully!"
-
-$(ISO_IMG): $(DISK_IMG)
-	@echo "💿 Building ISO"
-	@mkdir -p $(BUILD_DIR)/iso_root
-	@xorriso -as mkisofs \
-	    -o $(ISO_IMG) \
-	    -b $(notdir $(DISK_IMG)) \
-	    -hard-disk-boot \
-	    -graft-points $(notdir $(DISK_IMG))=$(DISK_IMG) \
-	    $(BUILD_DIR)/iso_root/
+# --- ISO Image ---
+$(ISO_IMG): $(KERNEL_ELF) $(LIMINE_BIN) boot/limine.conf | $(BUILD_DIR)
+	@echo "Building ISO image"
+	@rm -rf $(ISO_ROOT)
+	@mkdir -p $(ISO_ROOT)/boot/limine $(ISO_ROOT)/EFI/BOOT
+	@cp $(KERNEL_ELF) $(ISO_ROOT)/boot/kernel.elf
+	@cp boot/limine.conf $(ISO_ROOT)/boot/limine/limine.conf
+	@cp $(LIMINE_DIR)/limine-bios.sys \
+	    $(LIMINE_DIR)/limine-bios-cd.bin \
+	    $(LIMINE_DIR)/limine-uefi-cd.bin \
+	    $(ISO_ROOT)/boot/limine/
+	@cp $(LIMINE_DIR)/BOOTX64.EFI $(ISO_ROOT)/EFI/BOOT/
+	@xorriso -as mkisofs -R -r -J \
+	    -b boot/limine/limine-bios-cd.bin \
+	    -no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
+	    -apm-block-size 2048 \
+	    --efi-boot boot/limine/limine-uefi-cd.bin \
+	    -efi-boot-part --efi-boot-image --protective-msdos-label \
+	    $(ISO_ROOT) -o $(ISO_IMG)
+	@$(LIMINE_BIN) bios-install $(ISO_IMG)
+	@echo "ISO ready: $(ISO_IMG)"
 
 # ============================================================================
 # Utilities
 # ============================================================================
-$(BUILD_DIR) $(K_OBJ_DIR) $(B_OBJ_DIR):
+$(BUILD_DIR) $(K_OBJ_DIR):
 	@mkdir -p $@
-
-iso: $(ISO_IMG)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
+clean-limine:
+	$(MAKE) -s -C $(LIMINE_DIR) clean
+
 clean-data:
-	rm -rf data.img
+	rm -f data.img
 
-clean-all:
-	rm -rf $(BUILD_DIR)
-	rm -rf data.img
+clean-all: clean clean-data clean-limine
 
-run: $(DISK_IMG) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_IMG_FLAGS)
+run: $(ISO_IMG) $(DATA_IMG)
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
 
-debug: $(DISK_IMG) $(KERNEL_ELF) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_IMG_FLAGS) -s -S &
-	gdb $(KERNEL_ELF) \
-		-ex "target remote localhost:1234" \
-		-ex "set pagination off" \
-		-ex "set architecture x86-64" \
-		-ex "layout src" \
-		-ex "hbreak kmain" \
-		-ex "continue"
+run-uefi: $(ISO_IMG) $(DATA_IMG)
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -bios /usr/share/edk2/x64/OVMF.4m.fd -cdrom $(ISO_IMG)
 
-iso-run: $(ISO_IMG) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_ISO_FLAGS)
-
-iso-debug: $(ISO_IMG) $(KERNEL_ELF) $(DATA_IMG)
-	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) $(QEMU_ISO_FLAGS) -s -S &
+debug: $(ISO_IMG) $(KERNEL_ELF) $(DATA_IMG)
+	@echo "Serial on tcp:127.0.0.1:4444 — attach from another terminal with: nc localhost 4444"
+	qemu-system-x86_64 $(filter-out -serial stdio,$(QEMU_COMMON_FLAGS)) \
+		-serial tcp:127.0.0.1:4444,server,nowait -cdrom $(ISO_IMG) -s -S &
 	gdb $(KERNEL_ELF) \
 		-ex "target remote localhost:1234" \
 		-ex "set pagination off" \
@@ -211,4 +154,3 @@ iso-debug: $(ISO_IMG) $(KERNEL_ELF) $(DATA_IMG)
 
 # Include dependencies
 -include $(K_OBJS:.o=.d)
--include $(B_OBJS:.o=.d)

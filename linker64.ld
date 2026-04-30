@@ -1,4 +1,4 @@
-ENTRY(kmain)
+ENTRY(limine_entry)
 OUTPUT_FORMAT(elf64-x86-64)
 
 SECTIONS

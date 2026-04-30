@@ -11,6 +11,7 @@
 #include "set_idt.h"
 #include "utility.h"
 
+void DisablePic();
 void EnableLapic();
 void InitTimer(uint64_t ms);
 void InitKeyboard();

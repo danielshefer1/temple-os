@@ -11,7 +11,6 @@
 #include "timer.h"
 #include "set_gdt.h"
 #include "apic.h"
-#include "bootstrap.h"
 #include "ap_main.h"
 
 void BootCores();
