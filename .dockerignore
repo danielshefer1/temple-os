@@ -1,0 +1,7 @@
+build/
+data.img
+.git/
+*.iso
+*.img
+!boot/limine/*.bin
+!boot/limine/*.sys
