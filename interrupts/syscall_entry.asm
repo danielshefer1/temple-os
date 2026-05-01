@@ -21,11 +21,11 @@ extern syscall_handler
 %define FRAME_RCX_OFFSET   128
 
 %macro PUSHAQ 0
-    sub rsp, 8
     push rax
     push rcx
     push rdx
     push rbx
+    sub rsp, 8          ; struct rsp slot (placeholder; gap matches interrupt_frame_t)
     push rbp
     push rsi
     push rdi
@@ -51,11 +51,11 @@ extern syscall_handler
     pop rdi
     pop rsi
     pop rbp
+    add rsp, 8          ; skip struct rsp slot
     pop rbx
     pop rdx
     pop rcx
     pop rax
-    add rsp, 8
 %endmacro
 
 global syscall_entry
@@ -87,8 +87,7 @@ syscall_entry:
     mov rdi, rsp
     call syscall_handler
 
-    pop gs
-    pop fs
+    add rsp, 16                             ; skip saved gs, fs (long mode: don't touch segregs)
     POPAQ
     add rsp, 16                             ; drop int_no + err_code
 
@@ -96,6 +95,6 @@ syscall_entry:
     pop rcx                                 ; user RIP -> RCX (sysretq target)
     add rsp, 8                              ; skip cs
     pop r11                                 ; user RFLAGS -> R11
-    mov rsp, [gs:CPU_LOCAL_SCRATCH_RSP]     ; restore user RSP
+    pop rsp                                 ; user RSP (skipping ss is fine, we switch stacks)
     swapgs
     o64 sysret                              ; REX.W sysretq

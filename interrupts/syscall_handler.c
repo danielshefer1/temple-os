@@ -57,7 +57,6 @@ int64_t FlushBufferHandler() {
 }
 
 int64_t ExitHandler() {
-    CliHelper();
-    HltHelper();
+    end();
     return 1;
 }

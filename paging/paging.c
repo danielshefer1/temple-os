@@ -117,6 +117,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     uint64_t pd_idx = PD_IDX(virt);
     uint64_t pt_idx = PT_IDX(virt);
 
+    bool is_user = (flags & USER_PAGE) ? true : false;
     page_entry_t* new_pdpt, *new_pd;
 
     if (pml4[pml4_idx].present == 0) {
@@ -126,6 +127,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pml4[pml4_idx].writable = 1;
         pml4[pml4_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pdpt) >> 12;
     }
+    if (is_user) pml4[pml4_idx].user = 1;
     page_entry_t* pdpt = (page_entry_t*) ((pml4[pml4_idx].address << 12) + KERNEL_VIRTUAL);
     if (pdpt[pdpt_idx].present == 0) {
         new_pd = (page_entry_t*) kmalloc(PAGE_SIZE);
@@ -134,6 +136,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pdpt[pdpt_idx].writable = 1;
         pdpt[pdpt_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pd) >> 12;
     }
+    if (is_user) pdpt[pdpt_idx].user = 1;
 
     page_entry_t* pd = (page_entry_t*) ((pdpt[pdpt_idx].address << 12) + KERNEL_VIRTUAL);
 
@@ -147,14 +150,14 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
             return;
         }
         pd[pd_idx].present = 1;
-        pd[pd_idx].writable = (flags & RW_PAGE_BIT) ? 1 : 0;
+        pd[pd_idx].writable = (flags & RW_PAGE) ? 1 : 0;
         pd[pd_idx].page_size = 1;
-        pd[pd_idx].user = (flags & USER_PAGE_BIT) ? 1 : 0;
+        pd[pd_idx].user = (flags & USER_PAGE) ? 1 : 0;
         pd[pd_idx].address = phy >> 12;
-        pd[pd_idx].no_execute = (flags & NX_PAGE_BIT) ? 1 : 0;
-        pd[pd_idx].pcd = (flags & CACHE_DIS_PAGE_BIT) ? 1 : 0;
-        pd[pd_idx].pwt = (flags & WRITE_THROUGH_PAGE_BIT) ? 1 : 0;
-        pd[pd_idx].global = (flags & GLOBAL_PAGE_BIT) ? 1 : 0;
+        pd[pd_idx].no_execute = (flags & NX_PAGE) ? 1 : 0;
+        pd[pd_idx].pcd = (flags & CACHE_DIS_PAGE) ? 1 : 0;
+        pd[pd_idx].pwt = (flags & WRITE_THROUGH_PAGE) ? 1 : 0;
+        pd[pd_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
         pd[pd_idx].page_size = 1;
         return;
     }
@@ -167,6 +170,7 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pd[pd_idx].writable = 1;
         pd[pd_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pt) >> 12;
     }
+    if (is_user) pd[pd_idx].user = 1;
 
     if (pd[pd_idx].page_size == 1) {
         //kprintf("Warning: ID 50\t");
@@ -176,13 +180,13 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     page_entry_t* pt = (page_entry_t*) ((pd[pd_idx].address << 12) + KERNEL_VIRTUAL);
 
     pt[pt_idx].present = 1;
-    pt[pt_idx].writable = (flags & RW_PAGE_BIT) ? 1 : 0;
-    pt[pt_idx].user = (flags & USER_PAGE_BIT) ? 1 : 0;
+    pt[pt_idx].writable = (flags & RW_PAGE) ? 1 : 0;
+    pt[pt_idx].user = (flags & USER_PAGE) ? 1 : 0;
     pt[pt_idx].address = phy >> 12;
-    pt[pt_idx].no_execute = (flags & NX_PAGE_BIT) ? 1 : 0;
-    pt[pt_idx].pcd = (flags & CACHE_DIS_PAGE_BIT) ? 1 : 0;
-    pt[pt_idx].pwt = (flags & WRITE_THROUGH_PAGE_BIT) ? 1 : 0;
-    pt[pt_idx].global = (flags & GLOBAL_PAGE_BIT) ? 1 : 0;
+    pt[pt_idx].no_execute = (flags & NX_PAGE) ? 1 : 0;
+    pt[pt_idx].pcd = (flags & CACHE_DIS_PAGE) ? 1 : 0;
+    pt[pt_idx].pwt = (flags & WRITE_THROUGH_PAGE) ? 1 : 0;
+    pt[pt_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
 }
 
 

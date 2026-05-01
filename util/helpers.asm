@@ -219,11 +219,11 @@ isr_spurious:
     iret
 
 %macro PUSHAQ 0
-    sub rsp, 8
     push rax
     push rcx
     push rdx
     push rbx
+    sub rsp, 8          ; struct rsp slot (placeholder; gap matches interrupt_frame_t)
     push rbp
     push rsi
     push rdi
@@ -249,11 +249,11 @@ isr_spurious:
     pop rdi
     pop rsi
     pop rbp
+    add rsp, 8          ; skip struct rsp slot
     pop rbx
     pop rdx
     pop rcx
     pop rax
-    add rsp, 8
 %endmacro
 
 ISR_STUB_NO_ERROR 0

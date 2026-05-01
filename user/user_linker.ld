@@ -1,20 +1,9 @@
-ENTRY(main)
-OUTPUT_FORMAT(elf32-i386)
+ENTRY(_start)
+OUTPUT_FORMAT(elf64-x86-64)
 
 SECTIONS {
-    /* Dummy starting point */
-    . = 0x1000;
-    .text : AT (.) {
-        *(.text.entry)
-        *(.text)
-        *(.rodata*)
-    }
-    . = ALIGN(4K);
-    .data : AT(.) {
-        *(.data)
-    }
-    .bss : AT(.) {
-        *(.bss);
-        *(COMMON);
-    }
+    . = 0x40000000;
+    .text   : { *(.text*) }
+    .rodata : { *(.rodata*) }
+    /DISCARD/ : { *(.comment) *(.note*) *(.eh_frame*) }
 }

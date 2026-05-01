@@ -56,9 +56,10 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c init/limine_entry.c \
                 file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
                 file_system/vfs_path_ops.c \
                 interrupts/fd_table.c interrupts/vfs_syscalls.c \
-                multi/cpu_local.c
+                multi/cpu_local.c init/user_launch.c
 
-KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm
+KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm \
+                  interrupts/user_enter.asm
 
 K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
 
@@ -123,16 +124,30 @@ $(ISO_IMG): $(KERNEL_ELF) $(LIMINE_BIN) boot/limine.conf | $(BUILD_DIR)
 $(BUILD_DIR) $(K_OBJ_DIR):
 	@mkdir -p $@
 
-clean:
+clean-raw:
 	rm -rf $(BUILD_DIR)
 
-clean-limine:
-	$(MAKE) -s -C $(LIMINE_DIR) clean
+clean-limine-raw:
+	$(MAKE) -s -C $(LIMINE_DIR) clean-raw
 
-clean-data:
+clean-data-raw:
 	rm -f data.img
 
-clean-all: clean clean-data clean-limine
+clean-all-raw: clean-raw clean-data-raw clean-limine-raw
+
+
+
+clean:
+	./docker-build.sh make clean-raw
+
+clean-limine:
+	./docker-build.sh make clean-limine-raw
+
+clean-data:
+	./docker-build.sh make clean-data-raw
+
+clean-all:
+	./docker-build.sh make clean-all-raw
 
 run: $(ISO_IMG) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
