@@ -31,6 +31,7 @@ extern void outl(uint16_t port, uint32_t val);
 
 extern bool check_interrupts();
 extern uint8_t get_cpuid();
+extern uint8_t init_gs_and_get_cpuid(void);
 extern void enable_paging(void* pd);
 extern void enable_sse();
 extern void spin_lock(spinlock_t* spinlock_addr);

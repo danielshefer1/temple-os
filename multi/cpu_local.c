@@ -14,6 +14,23 @@ cpu_local_t* this_cpu(void) {
     return &cpu_locals[apic_to_index[apic]];
 }
 
+// Slow path for get_cpuid: invoked when IA32_GS_BASE is still 0 (early BSP,
+// AP entry before cpu_init_late). Issues CPUID to read the APIC ID, resolves
+// this CPU's cpu_local_t, and programs IA32_GS_BASE so subsequent get_cpuid
+// calls hit the fast gs:[apic_id] path. cpu_init_late later re-issues the
+// wrmsr (and additionally programs KERNEL_GS_BASE, TSS, SYSCALL MSRs).
+uint8_t init_gs_and_get_cpuid(void) {
+    uint32_t ebx_val;
+    __asm__ volatile ("cpuid"
+                      : "=b"(ebx_val)
+                      : "a"(1)
+                      : "rcx", "rdx");
+    uint8_t apic = (uint8_t)(ebx_val >> 24);
+    cpu_local_t* c = &cpu_locals[apic_to_index[apic]];
+    wrmsr(IA32_GS_BASE, (uint64_t)c);
+    return apic;
+}
+
 void cpu_init_late(uint32_t idx) {
     cpu_local_t* c = &cpu_locals[idx];
     tss64_t* t = &tss_array[idx];
@@ -30,6 +47,7 @@ void cpu_init_late(uint32_t idx) {
     c->cpu_index = idx;
     c->apic_id = get_cpuid();
     c->tss = t;
+    c->current = NULL;
 
     // Install per-CPU TSS descriptor in the GDT (slot pair 5+2*idx, 5+2*idx+1).
     uint64_t base = (uint64_t)t;
@@ -47,8 +65,9 @@ void cpu_init_late(uint32_t idx) {
     wrmsr(IA32_LSTAR, (uint64_t)&syscall_entry);
     wrmsr(IA32_FMASK, RFLAGS_IF | RFLAGS_DF);
 
-    // Per-CPU pointer lives in KERNEL_GS_BASE; user GS is 0. SWAPGS in
-    // syscall_entry brings the per-CPU pointer into GS on entry.
+    // Per-CPU pointer lives in both GS_BASE (so kernel code can use gs:[off]
+    // directly — get_cpuid reads gs:[apic_id]) and KERNEL_GS_BASE (so SWAPGS
+    // on syscall entry continues to land the per-CPU pointer in GS).
+    wrmsr(IA32_GS_BASE,        (uint64_t)c);
     wrmsr(IA32_KERNEL_GS_BASE, (uint64_t)c);
-    wrmsr(IA32_GS_BASE, 0);
 }

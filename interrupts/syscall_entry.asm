@@ -3,7 +3,8 @@
 ; On entry from user mode:
 ;   RCX = user RIP, R11 = user RFLAGS, IF/DF cleared by FMASK.
 ;   CS = 0x08 (kernel), SS = 0x10 (kernel), but RSP still user.
-;   GS_BASE = 0 (user), KERNEL_GS_BASE = &cpu_locals[idx].
+;   GS_BASE = user value (whatever userspace had), KERNEL_GS_BASE = &cpu_locals[idx];
+;   SWAPGS below brings the per-CPU pointer into GS for the syscall window.
 ;
 ; ABI (Linux convention): syscall args in rax (number), rbx, r10, rdx, rsi, rdi, r8, r9.
 ; R10 takes the place of RCX because RCX is clobbered by SYSCALL.

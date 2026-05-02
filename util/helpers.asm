@@ -120,15 +120,22 @@ wrmsr:
     wrmsr
     ret
 
+extern init_gs_and_get_cpuid
+
 global get_cpuid
 get_cpuid:
-    mov eax, 0x01
-    cpuid
-    shr ebx, 24
-    xor rax, rax
-    mov al, bl
-
+    ; Fast path: IA32_GS_BASE points at this CPU's cpu_local_t. Read the
+    ; cached apic_id at offset 28. If GS_BASE is still 0 (early BSP, AP
+    ; entry pre-cpu_init_late), fall through to the C slow path which does
+    ; CPUID + wrmsr and returns the apic_id.
+    mov ecx, 0xC0000101         ; IA32_GS_BASE
+    rdmsr                       ; edx:eax = MSR; clobbers rcx/rdx (caller-saved)
+    or eax, edx
+    jz .uninit
+    movzx rax, byte [gs:28]     ; cpu_local_t.apic_id (offset 28, low byte)
     ret
+.uninit:
+    jmp init_gs_and_get_cpuid   ; tail call
 
 global enable_sse
 enable_sse:
