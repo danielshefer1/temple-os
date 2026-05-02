@@ -52,8 +52,13 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
 
     uint64_t* inputs = (uint64_t*)(TRAMPOLINE_ADDR + KERNEL_VIRTUAL + trampoline_size);
     uint64_t stack_base = AddStack();
-    cpu_locals[idx].kstack_top = stack_base + STACK_PAGES * PAGE_SIZE;
-    inputs[0] = stack_base; // this cpu's stack (consumed by trampoline)
+    uint64_t stack_top = stack_base + STACK_PAGES * PAGE_SIZE;
+    cpu_locals[idx].kstack_top = stack_top;
+    // Trampoline does `mov rsp, [inputs[0]]` and then pushes — RSP must start
+    // at the *top* of the allocated region so subsequent pushes stay in
+    // bounds. Passing stack_base sent RSP below the allocation, where pushes
+    // landed in whichever buddy block followed, corrupting other stacks.
+    inputs[0] = stack_top;
     inputs[1] = (uint64_t)((void*)ap_kmain); 
     inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 

@@ -1,4 +1,7 @@
 #include "syscall_handler.h"
+#include "elf64.h"
+#include "user_task.h"
+#include "scheduler.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
     uint64_t cs = frame->cs;
@@ -28,6 +31,7 @@ void syscall_handler(interrupt_frame_t* frame) {
         case STAT_SYSCALL:         ret = SysStat(frame);          break;
         case SYNC_SYSCALL:         ret = SysSync(frame);          break;
         case IOCTL_SYSCALL:        ret = SysIoctl(frame);         break;
+        case EXEC_SYSCALL:         ret = ExecHandler(frame);      break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -57,6 +61,21 @@ int64_t FlushBufferHandler() {
 }
 
 int64_t ExitHandler() {
-    end();
-    return 1;
+    task_exit();
+    return 1; // unreachable
+}
+
+int64_t ExecHandler(interrupt_frame_t* frame) {
+    const char* path = (const char*)frame->rbx;
+    if (!path) return -EINVAL;
+    // Reject obviously bad pointers (kernel half).
+    if ((uint64_t)path >= 0xFFFF800000000000ULL) return -EINVAL;
+
+    elf64_image_t img;
+    int64_t r = load_elf64(path, &img);
+    if (r < 0) return r;
+
+    task_t* t = create_user_task(&img, path);
+    if (!t) return -ENOMEM;
+    return (int64_t)t->pid;
 }

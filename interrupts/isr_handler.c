@@ -1,4 +1,6 @@
 #include "isr_handler.h"
+#include "cpu_local.h"
+#include "scheduler.h"
 
 
 
@@ -85,7 +87,24 @@ void ExecptionHandler(interrupt_frame_t* frame) {
             ControlProtectionExceptionHandler(frame);
             break;
     }
-    end();
+    cpu_local_t* c = this_cpu();
+    if (frame->cs == 0x23) {
+        // User-mode fault: kill the offending task and keep the kernel running.
+        // task_exit() marks current ZOMBIE and schedules; the next schedule()
+        // on this CPU reaps the kstack + task_t via drain_pending_reap.
+        kerror("KILL cpu=%d int=%d rip=%x task=%s\n",
+               c ? (uint64_t)c->cpu_index : (uint64_t)-1,
+               frame->int_no, frame->rip,
+               (c && c->current) ? c->current->name : "?");
+        task_exit();
+    }
+    // Kernel-mode fault: kernel state is suspect, halt this CPU. Calling end()
+    // would unmount the root FS and recursively fault, clobbering the printout.
+    kerror("PANIC cpu=%d int=%d rip=%x cs=%x task=%s\n",
+           c ? (uint64_t)c->cpu_index : (uint64_t)-1,
+           frame->int_no, frame->rip, frame->cs,
+           (c && c->current) ? c->current->name : "?");
+    while (1) { __asm__ volatile("cli; hlt"); }
 }
 
 

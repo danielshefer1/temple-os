@@ -40,3 +40,7 @@ void scheduler_attach_bootstrap(const char* name);
 // Implemented in switch.asm.
 extern void context_switch(task_t* prev, task_t* next);
 extern void task_entry_trampoline(void);
+
+// Allocate a zeroed task with PID, fxstate template, kernel stack, and home_cpu
+// filled in. Used by both create_kernel_task and create_user_task.
+task_t* alloc_blank_task(const char* name);

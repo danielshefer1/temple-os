@@ -144,6 +144,7 @@
 #define STAT_SYSCALL       19
 #define SYNC_SYSCALL       20
 #define IOCTL_SYSCALL      21
+#define EXEC_SYSCALL       22
 
 #define FD_MAX             64
 

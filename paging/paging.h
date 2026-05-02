@@ -22,6 +22,14 @@ void RemovePages(uint64_t addr, uint64_t num_pages, bool big_pages);
 uint64_t AddStack();
 void RemovePage(uint64_t addr, bool big_page);
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
+
+// Same as map_page_to_virt, but operates on a caller-supplied PML4. Used by
+// the ELF loader to populate per-task user address spaces without touching
+// the global kernel pml4. The PML4 base is the kernel-virt of the table page
+// (i.e. cr3_phys + KERNEL_VIRTUAL), since every page table this kernel
+// allocates is reachable at that alias.
+void map_page_to_virt_in(page_entry_t* pml4_base,
+                         uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
 uint64_t GetCurrPrimitveAddr();
 
 // Invalidate `addr` (single page) on the local TLB and broadcast a TLB

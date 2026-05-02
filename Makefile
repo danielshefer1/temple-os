@@ -25,7 +25,7 @@ LIMINE_BIN = $(LIMINE_DIR)/limine
 # ============================================================================
 COMMON_CFLAGS = -nostdlib -nostartfiles -ffreestanding -Wall -Wextra -g -fno-pic -fno-pie
 INCDIRS = -I ./allocaters -I ./boot -I ./boot/limine -I ./drivers -I ./file_system \
-          -I ./init -I ./interrupts -I ./multi -I ./paging -I ./tables -I ./user \
+          -I ./init -I ./interrupts -I ./loader -I ./multi -I ./paging -I ./tables -I ./user \
           -I ./util -I ./wrappers
 
 K_CFLAGS  = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-sse2 $(INCDIRS)
@@ -34,7 +34,7 @@ K_LDFLAGS = -m elf_x86_64 -T linker64.ld
 ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
 
-QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp cores=6,threads=2 -machine q35 \
+QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
                     -drive index=1,format=raw,file=$(DATA_IMG) \
                     -rtc clock=host,driftfix=slew \
                     -serial stdio
@@ -56,23 +56,46 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c init/limine_entry.c \
                 file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
                 file_system/vfs_path_ops.c \
                 interrupts/fd_table.c interrupts/vfs_syscalls.c \
-                multi/cpu_local.c init/user_launch.c multi/scheduler.c multi/mutex.c
+                multi/cpu_local.c init/user_launch.c multi/scheduler.c multi/mutex.c \
+                paging/pml4_clone.c loader/elf64.c multi/user_task.c
 
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm \
-                  interrupts/user_enter.asm multi/switch.asm
+                  interrupts/user_enter.asm multi/switch.asm multi/user_trampoline.asm
 
 K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
 
 # ============================================================================
 # Build Rules
 # ============================================================================
-all: $(ISO_IMG) $(DATA_IMG)
+USER_DIR     = $(BUILD_DIR)/user
+USER_HELLO   = $(USER_DIR)/hello.elf
+USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
+               -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
+               -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
+USER_LDFLAGS = -m elf_x86_64 -static -pie -nostdlib -T user/hello_linker.ld
+
+all: $(ISO_IMG) $(DATA_IMG) user-img
 
 $(DATA_IMG):
 	@echo "Creating persistent data disk..."
 	@dd if=/dev/zero of=$(DATA_IMG) bs=1G count=1
 	@mke2fs -t ext2 -L "TEMPLE_OS_ROOT" $(DATA_IMG)
 	@echo "$(DATA_IMG) is ready."
+
+# --- User Programs ---
+$(USER_DIR):
+	@mkdir -p $@
+
+$(USER_HELLO): user/hello.c user/syscall_inline.h user/hello_linker.ld | $(USER_DIR)
+	@echo "[USER] Building $@"
+	@$(CC64) $(USER_CFLAGS) -c user/hello.c -o $(USER_DIR)/hello.o
+	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/hello.o
+
+# Install built user programs into data.img (idempotent; rm-then-write).
+user-img: $(USER_HELLO) $(DATA_IMG)
+	@echo "[USER] Installing $(USER_HELLO) -> /hello on $(DATA_IMG)"
+	@debugfs -w -R "rm /hello" $(DATA_IMG) 2>/dev/null || true
+	@debugfs -w -R "write $(USER_HELLO) hello" $(DATA_IMG)
 
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
@@ -149,7 +172,7 @@ clean-data:
 clean-all:
 	./docker-build.sh make clean-all-raw
 
-run: $(ISO_IMG) $(DATA_IMG)
+run: $(ISO_IMG) $(DATA_IMG) user-img
 	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
 
 run-uefi: $(ISO_IMG) $(DATA_IMG)

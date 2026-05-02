@@ -144,11 +144,15 @@ void InitPaging() {
     last_pd_entry->no_execute = (text_big_pages == kernel_big_pages) ? 0 : 1;
 
     for (uint64_t i = 0; i < num_small_pages; i++) {
+        bool in_text = (text_big_pages == kernel_big_pages) && (i*PAGE_SIZE < text_size % TABLE_SIZE);
+        // When the last 2MB region is data/bss (text fits in earlier big pages),
+        // these small pages must be writable so kmalloc/global writes work.
+        bool is_data = (text_big_pages != kernel_big_pages);
         kernel_pt[i].present = 1;
-        kernel_pt[i].writable = ((text_big_pages == kernel_big_pages) && (i*PAGE_SIZE < text_size % TABLE_SIZE)) ? 1 : 0;
+        kernel_pt[i].writable = (in_text || is_data) ? 1 : 0;
         kernel_pt[i].address = (2*MB * (kernel_big_pages) + i*PAGE_SIZE) >> 12;
         kernel_pt[i].global = 1;
-        kernel_pt[i].no_execute = ((text_big_pages == kernel_big_pages) && (i*PAGE_SIZE < text_size % TABLE_SIZE)) ? 0 : 1;
+        kernel_pt[i].no_execute = in_text ? 0 : 1;
 
         if ((2*MB * (kernel_big_pages) + i*PAGE_SIZE) < stack_bottom && (2*MB * (kernel_big_pages) + (i+1)*PAGE_SIZE) >= stack_bottom) {
             kernel_pt[i].present = 0; // Set guard page before the stack, NEED TO MAKE SURE THERE'S PADDING IN THE BSS
@@ -156,7 +160,26 @@ void InitPaging() {
     }
 
 
-    // End PD Mapping    
+    // Headroom: pre-map extra big pages past the small-page region so the
+    // kernel buddy pool's working set is reachable via KERNEL_VIRTUAL+phys.
+    // AddKernelPages's big_page=true call to map_page_to_virt is a silent
+    // no-op once the kernel PD already has an entry, so any phys handed out
+    // by the buddy allocator must lie within an already-mapped range. The
+    // small-page region above used kernel_pd[base_idx + kernel_big_pages];
+    // continue from one entry past that.
+    uint64_t headroom_big_pages = 64;  // 128MB of pre-mapped data RAM
+    uint64_t headroom_start = base_idx + kernel_big_pages + 1;
+    for (uint64_t i = 0; i < headroom_big_pages && (headroom_start + i) < 512; i++) {
+        uint64_t idx = headroom_start + i;
+        kernel_pd[idx].present = 1;
+        kernel_pd[idx].page_size = 1;
+        kernel_pd[idx].writable = 1;
+        kernel_pd[idx].no_execute = 1;
+        kernel_pd[idx].address = (2*MB * (kernel_big_pages + 1 + i)) >> 12;
+        kernel_pd[idx].global = 1;
+    }
+
+    // End PD Mapping
     switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS((uint64_t)pml4));
 }
 
@@ -174,28 +197,29 @@ void DisableIdentityMapping() {
     tlb_flush_remote(0);
 }
 
-void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
+void map_page_to_virt_in(page_entry_t* pml4_base,
+                         uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
     uint64_t pml4_idx = PML4_IDX(virt);
     uint64_t pdpt_idx = PDPT_IDX(virt);
     uint64_t pd_idx = PD_IDX(virt);
     uint64_t pt_idx = PT_IDX(virt);
 
     bool is_user = (flags & USER_PAGE) ? true : false;
-    page_entry_t* new_pdpt, *new_pd;
+    page_entry_t* new_pdpt = NULL, *new_pd = NULL;
 
     bool ie = check_interrupts();
     CliHelper();
     spin_lock(&paging_lock);
 
-    if (pml4[pml4_idx].present == 0) {
+    if (pml4_base[pml4_idx].present == 0) {
         new_pdpt = (page_entry_t*) kmalloc(PAGE_SIZE);
         memset(new_pdpt, 0, PAGE_SIZE);
-        pml4[pml4_idx].present = 1;
-        pml4[pml4_idx].writable = 1;
-        pml4[pml4_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pdpt) >> 12;
+        pml4_base[pml4_idx].present = 1;
+        pml4_base[pml4_idx].writable = 1;
+        pml4_base[pml4_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pdpt) >> 12;
     }
-    if (is_user) pml4[pml4_idx].user = 1;
-    page_entry_t* pdpt = (page_entry_t*) ((pml4[pml4_idx].address << 12) + KERNEL_VIRTUAL);
+    if (is_user) pml4_base[pml4_idx].user = 1;
+    page_entry_t* pdpt = (page_entry_t*) ((pml4_base[pml4_idx].address << 12) + KERNEL_VIRTUAL);
     if (pdpt[pdpt_idx].present == 0) {
         new_pd = (page_entry_t*) kmalloc(PAGE_SIZE);
         memset(new_pd, 0, PAGE_SIZE);
@@ -209,9 +233,12 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 
     if (big_page) {
         if (new_pd == NULL) {
+            // PD already existed at this PDPT slot — can't drop a 2MB mapping
+            // on top of existing 4KB tables. Silently no-op; AddKernelPages
+            // relies on this when its single-page calls land in regions
+            // already covered by the boot-time big-page mappings.
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
-            kprintf("Tried to map a big page but page directory already exists!");
             return;
         }
         if (pt_idx != 0 && PT_IDX(phy) != 0) {
@@ -264,6 +291,10 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     pt[pt_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
     spin_unlock(&paging_lock);
     if (ie) StiHelper();
+}
+
+void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
+    map_page_to_virt_in(pml4, virt, phy, flags, big_page);
 }
 
 

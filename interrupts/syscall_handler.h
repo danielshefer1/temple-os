@@ -17,3 +17,4 @@ int64_t MunmapHandler(interrupt_frame_t* frame);
 int64_t UnknownSysCall();
 int64_t ExitHandler();
 int64_t FlushBufferHandler();
+int64_t ExecHandler(interrupt_frame_t* frame);

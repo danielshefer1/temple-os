@@ -268,8 +268,12 @@ void* RequestBuddy(uint64_t size, bool user) {
 }
 
 void* GetBuddyAddress(void* address, uint64_t order) {
+    // A block of order N spans 2^N bytes; its buddy is at addr ^ 2^N.
+    // Previously this used (order - 1), which gave the buddy of a 2^(N-1)
+    // block — meaning consecutive same-order allocations overlapped by half
+    // their size. Surfaced as kernel-stack clobbering on SMP under load.
     uint64_t addr = (uint64_t)address;
-    uint64_t buddy_addr = addr ^ (1 << (order - 1));
+    uint64_t buddy_addr = addr ^ (1ULL << order);
     return (void*)buddy_addr;
 }
 

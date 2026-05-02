@@ -84,11 +84,11 @@ void SchedulerInit(void) {
     next_assign_cpu = 0;
 }
 
-task_t* create_kernel_task(void (*entry)(void), const char* name) {
+task_t* alloc_blank_task(const char* name) {
     task_t* t = (task_t*)kmalloc(sizeof(task_t));
     memset(t, 0, sizeof(task_t));
 
-    uint64_t stack_base = AddStack();              // virtual addr (low end)
+    uint64_t stack_base = AddStack();
     uint64_t stack_top  = stack_base + STACK_PAGES * PAGE_SIZE;
 
     t->pid          = alloc_pid();
@@ -106,9 +106,13 @@ task_t* create_kernel_task(void (*entry)(void), const char* name) {
         for (uint64_t i = 0; i < 31 && name[i]; i++) t->name[i] = name[i];
     }
 
-    // fxrstor of all-zero state #GPs (reserved bits in MXCSR). Seed with the
-    // template captured by fpu_init_template() at boot.
     memcpy(t->fxstate, default_fxstate, sizeof(t->fxstate));
+    return t;
+}
+
+task_t* create_kernel_task(void (*entry)(void), const char* name) {
+    task_t* t = alloc_blank_task(name);
+    uint64_t stack_top = t->kstack_top;
 
     // Build the fake initial stack frame that context_switch will pop.
     // Layout (low -> high addresses) at saved_rsp:
