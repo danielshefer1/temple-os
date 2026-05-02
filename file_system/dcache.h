@@ -7,6 +7,7 @@
 #include "slab_alloc.h"
 #include "string.h"
 #include "vga.h"
+#include "mutex.h"
 
 void dCachePut(dentry_t* dentry);
 void dCacheRemove(dentry_t* dentry);

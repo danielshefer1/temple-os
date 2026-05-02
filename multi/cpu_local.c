@@ -45,7 +45,15 @@ void cpu_init_late(uint32_t idx) {
     c->kernel_rsp = c->kstack_top;
     c->scratch_user_rsp = 0;
     c->cpu_index = idx;
-    c->apic_id = get_cpuid();
+    // Read APIC ID via CPUID directly — get_cpuid() would take its fast
+    // path (gs:[apic_id]) at this point because init_gs_and_get_cpuid has
+    // already programmed GS_BASE on this CPU, and the apic_id field hasn't
+    // been written yet, so the fast path would return 0.
+    {
+        uint32_t ebx_val;
+        __asm__ volatile ("cpuid" : "=b"(ebx_val) : "a"(1) : "rcx", "rdx");
+        c->apic_id = (uint8_t)(ebx_val >> 24);
+    }
     c->tss = t;
     c->current = NULL;
 

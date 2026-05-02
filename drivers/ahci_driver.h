@@ -10,6 +10,8 @@
 #include "slab_alloc.h"
 #include "string.h"
 #include "buddy_alloc.h"
+#include "scheduler.h"
+#include "cpu_local.h"
 
 void AhciInit();
 void GetAhciDriveInfo();

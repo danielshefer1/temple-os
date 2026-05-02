@@ -15,3 +15,8 @@ void DisablePic();
 void EnableLapic();
 void InitTimer(uint64_t ms);
 void InitKeyboard();
+
+// Broadcast a fixed IPI of `vector` to every CPU except the caller. Spins
+// until the LAPIC reports the send is complete. Caller is responsible for
+// providing any handshake/ack protocol on top of this.
+void SendIpiAllExcludingSelf(uint8_t vector);

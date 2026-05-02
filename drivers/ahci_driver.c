@@ -2,6 +2,71 @@
 
 static uint64_t cmd_list_size;
 
+// Per-port state for interrupt-driven completion. See AhciHandler.
+static ahci_port_state_t port_states[32];
+
+// Reserve an unused slot on `port_no` and mark it in-flight. Returns -1 on
+// no free slot. Caller must hold port_states[port_no].lock and have IF=0.
+static int64_t ahci_reserve_slot_locked(uint8_t port_no) {
+    hba_port_t* port = &hba->ports[port_no];
+    ahci_port_state_t* st = &port_states[port_no];
+    uint32_t in_use = port->sact | port->ci | st->issued_mask;
+    for (uint64_t i = 0; i < cmd_list_size; i++) {
+        if (!(in_use & (1u << i))) {
+            ahci_completion_t* c = &st->completions[i];
+            c->done = false;
+            c->error = false;
+            c->waiter = NULL;
+            st->issued_mask |= (1u << i);
+            return (int64_t)i;
+        }
+    }
+    return -1;
+}
+
+// Block (or poll, before scheduler is up) until the slot completes. Returns
+// 0 on success, -1 on TFE.
+static int64_t ahci_wait_completion(uint8_t port_no, int64_t slot) {
+    ahci_port_state_t* st = &port_states[port_no];
+    ahci_completion_t* c = &st->completions[slot];
+    hba_port_t* port = &hba->ports[port_no];
+
+    cpu_local_t* cpu = this_cpu();
+    bool can_block = cpu && cpu->current && check_interrupts();
+
+    if (!can_block) {
+        // Early-boot fallback: scheduler not yet attached, or interrupts
+        // are disabled (the IRQ that would wake us cannot fire). Poll.
+        while (port->ci & (1u << slot)) {
+            if (port->is & (1u << 30)) {
+                spin_lock(&st->lock);
+                st->issued_mask &= ~(1u << slot);
+                spin_unlock(&st->lock);
+                return -1;
+            }
+            PauseHelper();
+        }
+        spin_lock(&st->lock);
+        st->issued_mask &= ~(1u << slot);
+        spin_unlock(&st->lock);
+        return 0;
+    }
+
+    CliHelper();
+    spin_lock(&c->guard);
+    if (!c->done) {
+        c->waiter = cpu->current;
+        cpu->current->state = TASK_STATE_BLOCKED;
+        spin_unlock(&c->guard);
+        schedule();
+    } else {
+        spin_unlock(&c->guard);
+    }
+    StiHelper();
+
+    return c->error ? -1 : 0;
+}
+
 void AhciReset() {
     if (hba == NULL) {
         kprintf("Haven't found AHCI controller yet!\n");
@@ -165,104 +230,97 @@ int64_t FindFreeSlotInCmdList(hba_port_t* port) {
 
 void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys, bool sata) {
     hba_port_t* port = &hba->ports[port_no];
-    
+    ahci_port_state_t* st = &port_states[port_no];
 
-    int64_t slot = FindFreeSlotInCmdList(port);
+    while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
 
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&st->lock);
+
+    int64_t slot = ahci_reserve_slot_locked(port_no);
     if (slot == -1) {
+        spin_unlock(&st->lock);
+        if (ie) StiHelper();
         kprintf("No free command slot found!\n");
         return;
     }
 
     hba_cmd_header_t* header = (hba_cmd_header_t*)((port->clb | ((uint64_t)port->clbu << 32)) + KERNEL_VIRTUAL);
     header += slot;
-    
+
     hba_cmd_table_t* table = (hba_cmd_table_t*)((header->ctba | ((uint64_t)header->ctbau << 32)) + KERNEL_VIRTUAL);
     memset(table, 0, sizeof(hba_cmd_table_t));
 
-    
     table->prdt_entries[0].dba = (uint64_t)buffer_phys & 0xFFFFFFFF;
     table->prdt_entries[0].dbau = (uint64_t)buffer_phys >> 32;
+    table->prdt_entries[0].dw3 |= 511;
+    table->prdt_entries[0].dw3 |= (1 << 31);
 
-    table->prdt_entries[0].dw3 |= 511; 
-    table->prdt_entries[0].dw3 |= (1 << 31);     
-
-    // 4. Build the FIS (The "Question")
     fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
-    fis->fis_type = 0x27; 
-    fis->c = 1;           
-    fis->command = sata ? 0xEC : 0xA1;  // IDENTIFY DEVICE command
-    fis->device = 0;      
+    fis->fis_type = 0x27;
+    fis->c = 1;
+    fis->command = sata ? 0xEC : 0xA1;
+    fis->device = 0;
 
-    header->cfl = sizeof(fis_reg_h2d_t) / 4; 
-    header->w = 0;                           
-    header->prdtl = 1;                       
-    header->prdbc = 0;                       // Reset byte counter
+    header->cfl = sizeof(fis_reg_h2d_t) / 4;
+    header->w = 0;
+    header->prdtl = 1;
+    header->prdbc = 0;
 
-    // 6. Wait for port to be ready
-    while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
+    port->ci = (1u << slot);
+    spin_unlock(&st->lock);
+    if (ie) StiHelper();
 
-    // 7. Issue the command!
-    port->ci = (1 << slot);
-
-    // 8. Wait for completion
-    while (1) {
-        // If slot bit is cleared, command is done
-        if (!(port->ci & (1 << slot))) break;
-        
-        // Check for errors
-        if (port->is & (1 << 30)) { // Task File Error bit
-            kprintf("Disk Error during Identify!\n");
-            return;
-        }
+    if (ahci_wait_completion(port_no, slot) < 0) {
+        kprintf("Disk Error during Identify!\n");
+        return;
     }
     kprintf("Identify Complete!\n");
 }
 
 int64_t AhciFlush(hba_port_t* port) {
-    int64_t slot = FindFreeSlotInCmdList(port);
+    uint8_t port_no = (uint8_t)(port - hba->ports);
+    ahci_port_state_t* st = &port_states[port_no];
 
+    while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
+
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&st->lock);
+
+    int64_t slot = ahci_reserve_slot_locked(port_no);
     if (slot == -1) {
+        spin_unlock(&st->lock);
+        if (ie) StiHelper();
         kprintf("No free command slot found!\n");
         return 1;
     }
 
     hba_cmd_header_t* header = (hba_cmd_header_t*)((port->clb | ((uint64_t)port->clbu << 32)) + KERNEL_VIRTUAL);
     header += slot;
-    
+
     hba_cmd_table_t* table = (hba_cmd_table_t*)((header->ctba | ((uint64_t)header->ctbau << 32)) + KERNEL_VIRTUAL);
     memset(table, 0, sizeof(hba_cmd_table_t));
 
-
-    // 4. Build the FIS (The "Question")
     fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
-    fis->fis_type = 0x27; 
-    fis->c = 1;           
-    fis->command = 0xEA;  
+    fis->fis_type = 0x27;
+    fis->c = 1;
+    fis->command = 0xEA;
 
-    header->cfl = sizeof(fis_reg_h2d_t) / 4; 
-    header->w = 0;                           
-    header->prdtl = 0;                       
-    header->prdbc = 0;                       
+    header->cfl = sizeof(fis_reg_h2d_t) / 4;
+    header->w = 0;
+    header->prdtl = 0;
+    header->prdbc = 0;
 
-    // 6. Wait for port to be ready
-    while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
+    port->ci = (1u << slot);
+    spin_unlock(&st->lock);
+    if (ie) StiHelper();
 
-    // 7. Issue the command!
-    port->ci = (1 << slot);
-
-    // 8. Wait for completion
-    while (1) {
-        // If slot bit is cleared, command is done
-        if (!(port->ci & (1 << slot))) break;
-        
-        // Check for errors
-        if (port->is & (1 << 30)) { // Task File Error bit
-            kprintf("Disk Error during Flush!\n");
-            return 1;
-        }
+    if (ahci_wait_completion(port_no, slot) < 0) {
+        kprintf("Disk Error during Flush!\n");
+        return 1;
     }
-    kprintf("Flush Complete!\n");
     return 0;
 }
 
@@ -276,17 +334,25 @@ bool AhciCommand(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer
         return false;
     }
 
-    int64_t slot = FindFreeSlotInCmdList(port); 
-    if (slot == -1) {
-        kprintf("No free command slot found!\n");
-        return false;
-    }
+    uint8_t port_no = (uint8_t)(port - hba->ports);
+    ahci_port_state_t* st = &port_states[port_no];
 
     uint8_t cpu_id = get_cpuid();
     uint64_t ticks = timer_ticks[cpu_id];
-
     while ((port->tfd & (0x80 | 0x08)) && (timer_ticks[cpu_id] - ticks < BIOS_TIMEOUT)) {
         PauseHelper();
+    }
+
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&st->lock);
+
+    int64_t slot = ahci_reserve_slot_locked(port_no);
+    if (slot == -1) {
+        spin_unlock(&st->lock);
+        if (ie) StiHelper();
+        kprintf("No free command slot found!\n");
+        return false;
     }
 
     hba_cmd_header_t* header = (hba_cmd_header_t*)((port->clb | ((uint64_t)port->clbu << 32)) + KERNEL_VIRTUAL);
@@ -295,21 +361,19 @@ bool AhciCommand(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer
     hba_cmd_table_t* table = (hba_cmd_table_t*)((header->ctba | ((uint64_t)header->ctbau << 32)) + KERNEL_VIRTUAL);
     memset(table, 0, sizeof(hba_cmd_table_t));
 
-    // 1. PRDT setup (for 'count' sectors)
     table->prdt_entries[0].dba = buffer_phys & 0xFFFFFFFF;
     table->prdt_entries[0].dbau = buffer_phys >> 32;
-    table->prdt_entries[0].dw3 = (count * 512 - 1) | (1U << 31); 
+    table->prdt_entries[0].dw3 = (count * 512 - 1) | (1U << 31);
 
-    // 2. FIS setup for LBA48
     fis_reg_h2d_t* fis = (fis_reg_h2d_t*)(&table->cfis);
     fis->fis_type = 0x27;
     fis->c = 1;
-    fis->command = write ? 0x35: 0x25; // READ DMA EXT
+    fis->command = write ? 0x35: 0x25;
 
     fis->lba0 = (uint8_t)lba;
     fis->lba1 = (uint8_t)(lba >> 8);
     fis->lba2 = (uint8_t)(lba >> 16);
-    fis->device = 1 << 6; // LBA mode bit
+    fis->device = 1 << 6;
 
     fis->lba3 = (uint8_t)(lba >> 24);
     fis->lba4 = (uint8_t)(lba >> 32);
@@ -318,15 +382,15 @@ bool AhciCommand(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer
     fis->countl = count & 0xFF;
     fis->counth = (count >> 8) & 0xFF;
 
-    // 3. Issue and Poll (or wait for ISR)
     header->cfl = 5;
     header->w = write ? 1 : 0;
     header->prdtl = 1;
 
-    port->ci = (1 << slot);
-    while (port->ci & (1 << slot)); 
+    port->ci = (1u << slot);
+    spin_unlock(&st->lock);
+    if (ie) StiHelper();
 
-    return true;
+    return ahci_wait_completion(port_no, slot) == 0;
 }
 
 bool AhciRead(hba_port_t* port, uint64_t lba, uint16_t count, uint64_t buffer_phys) {
@@ -461,6 +525,52 @@ void PrintAhciDevices() {
 
         p = p->next;
         idx++;
+    }
+}
+
+void AhciHandler() {
+    uint32_t interrupt_status = hba->is;
+
+    for (int i = 0; i < 32; i++) {
+        if (!(interrupt_status & (1 << i))) continue;
+        hba_port_t* port = &hba->ports[i];
+        ahci_port_state_t* st = &port_states[i];
+
+        uint32_t port_is = port->is;
+        bool tfe = (port_is & (1 << 30)) != 0;
+
+        if (tfe) {
+            uint32_t tfd = port->tfd;
+            uint8_t error_reg = (tfd >> 8) & 0xFF;
+            kprintf("AHCI TFES on port %d, Error Register: %x\n", i, error_reg);
+        }
+
+        // Snapshot which of our in-flight slots have completed (CI cleared
+        // by the device). Clear them from issued_mask under the port lock
+        // so submitters and the IRQ agree on slot ownership.
+        spin_lock(&st->lock);
+        uint32_t completed = st->issued_mask & ~port->ci;
+        st->issued_mask &= ~completed;
+        spin_unlock(&st->lock);
+
+        for (uint8_t s = 0; s < AHCI_MAX_SLOTS; s++) {
+            if (!(completed & (1u << s))) continue;
+            ahci_completion_t* c = &st->completions[s];
+            spin_lock(&c->guard);
+            c->done = true;
+            c->error = tfe;
+            task_t* w = c->waiter;
+            c->waiter = NULL;
+            spin_unlock(&c->guard);
+            if (w) {
+                w->state = TASK_STATE_READY;
+                rq_enqueue_external(w);
+            }
+        }
+
+        // Write-1-to-clear the latched port IS, then the global per-port bit.
+        port->is = port_is;
+        hba->is = (1u << i);
     }
 }
 

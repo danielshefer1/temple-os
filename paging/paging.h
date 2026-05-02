@@ -23,3 +23,14 @@ uint64_t AddStack();
 void RemovePage(uint64_t addr, bool big_page);
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
 uint64_t GetCurrPrimitveAddr();
+
+// Invalidate `addr` (single page) on the local TLB and broadcast a TLB
+// shootdown IPI to every other online CPU. Pass 0 for a full-flush
+// shootdown (CR3 reload on each CPU). Must NOT be called from interrupt
+// context, and must NOT be called while holding any lock that another CPU
+// is spinning on with interrupts disabled (see paging.c notes).
+void tlb_flush_remote(uint64_t addr);
+
+// Vector-65 IPI handler. Reads the single in-flight shootdown descriptor
+// and clears this CPU's pending bit.
+void TlbShootdownHandler(void);

@@ -1,5 +1,6 @@
 #include "irq_handler.h"
 #include "scheduler.h"
+#include "paging.h"
 
 static const char kbd_us[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
@@ -57,6 +58,9 @@ void irq_handler(interrupt_frame_t* frame) {
         case 64:
             AhciHandler();
             return;
+        case 65:
+            TlbShootdownHandler();
+            return;
         default:
             kprintf("Unkown Interrupt just fired, interrupt number: %d\n", frame->int_no);
     }
@@ -92,36 +96,4 @@ void KeyboardHandler() {
     }
 }
 
-void AhciHandler() {
-    uint32_t interrupt_status = hba->is;
-
-
-    for (int i = 0; i < 32; i++) {
-        if (interrupt_status & (1 << i)) {
-            hba_port_t* port = &hba->ports[i];
-
-
-            uint32_t port_is = port->is;
-
-
-            if (port_is & (1 << 5)) {
-
-            }
-            if (port_is & (1 << 0)) {
-
-            }
-            if (port_is & (1 << 30)) {
-                kprintf("AHCI Error on port %d, Error Code: %x\n", i, port->is);
-                uint32_t tfd = port->tfd;
-                uint8_t error_reg = (tfd >> 8) & 0xFF;
-                kprintf("TFES detected. Error Register: %x\n", error_reg);
-            }
-
-            // 5. CLEAR the port interrupts (Write 1s to the bits that were set)
-            port->is = port_is;
-
-            // 6. CLEAR the global status bit for this port
-            hba->is = (1 << i);
-        }
-    }
-}
+// AhciHandler lives in drivers/ahci_driver.c so it can see static port_states.

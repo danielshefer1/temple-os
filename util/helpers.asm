@@ -288,76 +288,89 @@ ISR_PIC_STUB 32
 ISR_APIC_STUB 32
 ISR_APIC_STUB 33
 ISR_APIC_STUB 64
+ISR_APIC_STUB 65
 
 
 global isr_common_stub
 isr_common_stub:
+    ; If we entered from user mode (CS RPL != 0), GS_BASE currently holds
+    ; user-controlled state. swapgs brings the per-CPU pointer (saved in
+    ; KERNEL_GS_BASE) into GS_BASE so the kernel handler can use gs:[off]
+    ; safely. We only swap on user->kernel transitions, so kernel->kernel
+    ; IRQs leave GS_BASE alone.
+    test byte [rsp + 24], 3        ; CS RPL in the iret frame
+    jz .from_kernel_in
+    swapgs
+.from_kernel_in:
     PUSHAQ             ; save all registers
-    push fs
-    push gs
-    
-    mov ax, 0x10       ; load kernel data selector
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    
-    mov rdi, rsp    
-    call isr_handler         
+    ; Reserve the fs/gs slots in interrupt_frame_t. We do NOT push the
+    ; segment registers themselves: in long mode `mov gs, ax`/`pop gs`
+    ; reload GS_BASE from the GDT, which clobbers the per-CPU pointer
+    ; this kernel keeps in IA32_GS_BASE.
+    push qword 0       ; fs slot
+    push qword 0       ; gs slot
 
-    pop gs
-    pop fs
+    mov rdi, rsp
+    call isr_handler
+
+    add rsp, 16         ; skip fs/gs placeholder slots
     POPAQ
     add rsp, 16         ; clean up int num and error code
+    test byte [rsp + 8], 3
+    jz .from_kernel_out
+    swapgs
+.from_kernel_out:
     iretq
 
 global isr_pic_stub
 isr_pic_stub:
+    test byte [rsp + 24], 3
+    jz .from_kernel_in
+    swapgs
+.from_kernel_in:
     PUSHAQ
-    push fs
-    push gs
+    push qword 0       ; fs slot
+    push qword 0       ; gs slot
 
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    mov rdi, rsp    
+    mov rdi, rsp
     call isr_handler
 
     mov al, 0x20
     out 0xA0, al      ; slave PIC
     out 0x20, al      ; master PIC
 
-    pop gs
-    pop fs
+    add rsp, 16         ; skip fs/gs placeholder slots
     POPAQ
 
     add rsp, 16
 
+    test byte [rsp + 8], 3
+    jz .from_kernel_out
+    swapgs
+.from_kernel_out:
     iretq
 
 global isr_apic_stub
 isr_apic_stub:
+    test byte [rsp + 24], 3
+    jz .from_kernel_in
+    swapgs
+.from_kernel_in:
     PUSHAQ
-    push fs
-    push gs
+    push qword 0       ; fs slot
+    push qword 0       ; gs slot
 
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    mov rdi, rsp    
+    mov rdi, rsp
     call irq_handler
 
-    pop gs
-    pop fs
+    add rsp, 16         ; skip fs/gs placeholder slots
     POPAQ
 
     add rsp, 16
 
+    test byte [rsp + 8], 3
+    jz .from_kernel_out
+    swapgs
+.from_kernel_out:
     iretq
 

@@ -1,4 +1,56 @@
 #include "paging.h"
+#include "global.h"
+#include "cpu_local.h"
+#include "apic.h"
+
+#define TLB_SHOOTDOWN_VECTOR 65
+
+static tlb_shootdown_t shootdown;
+
+static inline uint64_t online_cpu_mask_excluding_self(uint32_t self_idx) {
+    uint64_t online = cpus_active;
+    if (online > 64) online = 64;
+    uint64_t mask = (online >= 64) ? ~0ULL : ((1ULL << online) - 1ULL);
+    mask &= ~(1ULL << self_idx);
+    return mask;
+}
+
+void tlb_flush_remote(uint64_t addr) {
+    // Local invalidation first — covers the (common) single-CPU case and
+    // the initiator side of the broadcast.
+    if (addr == 0) flush_tlb();
+    else           InvlpgHelper(addr);
+
+    // Snapshot online CPU count. APs that come up after this call are
+    // booting on the same PML4 we're modifying, so they don't have stale
+    // TLB entries for `addr` to begin with.
+    uint64_t online = cpus_active;
+    if (online <= 1) return;
+
+    cpu_local_t* self = this_cpu();
+    uint64_t target = online_cpu_mask_excluding_self(self->cpu_index);
+    if (target == 0) return;
+
+    spin_lock(&shootdown.lock);
+    shootdown.addr = addr;
+    __atomic_store_n(&shootdown.pending, target, __ATOMIC_RELEASE);
+    SendIpiAllExcludingSelf(TLB_SHOOTDOWN_VECTOR);
+    while (__atomic_load_n(&shootdown.pending, __ATOMIC_ACQUIRE) != 0) {
+        PauseHelper();
+    }
+    spin_unlock(&shootdown.lock);
+}
+
+void TlbShootdownHandler(void) {
+    uint64_t addr = shootdown.addr;
+    if (addr == 0) flush_tlb();
+    else           InvlpgHelper(addr);
+
+    cpu_local_t* self = this_cpu();
+    __atomic_and_fetch(&shootdown.pending,
+                       ~(1ULL << self->cpu_index),
+                       __ATOMIC_RELEASE);
+}
 
 page_entry_t pml4[512] __attribute__((aligned(4096)));
 
@@ -10,6 +62,14 @@ page_entry_t identity_pdpt[512] __attribute__((aligned(4096)));
 page_entry_t identity_pd[512] __attribute__((aligned(4096)));
 
 static uint64_t curr_addr_prim;
+
+// Lock ordering for memory subsystem: paging > buddy > slab. The lock
+// covers kernel page-table mutation. map_page_to_virt and RemovePage hold
+// it; AddKernelPages does NOT (RequestBuddy/map_page_to_virt take their
+// own locks). Same-CPU recursion via map_page_to_virt -> kmalloc(PAGE_SIZE)
+// -> AddSlabW -> AddKernelPages -> map_page_to_virt would deadlock; relies
+// on the PAGE_SIZE slab cache staying warm.
+static spinlock_t paging_lock;
 
 void InitPaging() {
     uint64_t kernel_size = (uint64_t)&__kernel_size_bytes;
@@ -109,6 +169,9 @@ uint64_t PageDirAddrV() {
 void DisableIdentityMapping() {
     pml4[0].present = 0;
     switch_pml4((page_entry_t*)KERNEL_VIRT_TO_PHYS(pml4));
+    // APs share this PML4 — they need to drop their cached identity-map
+    // entries too. Full flush via the shootdown (addr=0 means CR3 reload).
+    tlb_flush_remote(0);
 }
 
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
@@ -119,6 +182,10 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 
     bool is_user = (flags & USER_PAGE) ? true : false;
     page_entry_t* new_pdpt, *new_pd;
+
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&paging_lock);
 
     if (pml4[pml4_idx].present == 0) {
         new_pdpt = (page_entry_t*) kmalloc(PAGE_SIZE);
@@ -142,11 +209,15 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 
     if (big_page) {
         if (new_pd == NULL) {
+            spin_unlock(&paging_lock);
+            if (ie) StiHelper();
             kprintf("Tried to map a big page but page directory already exists!");
             return;
         }
         if (pt_idx != 0 && PT_IDX(phy) != 0) {
             //kprintf("Tried to map a big page but not 2MB aligned!");
+            spin_unlock(&paging_lock);
+            if (ie) StiHelper();
             return;
         }
         pd[pd_idx].present = 1;
@@ -159,6 +230,8 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
         pd[pd_idx].pwt = (flags & WRITE_THROUGH_PAGE) ? 1 : 0;
         pd[pd_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
         pd[pd_idx].page_size = 1;
+        spin_unlock(&paging_lock);
+        if (ie) StiHelper();
         return;
     }
 
@@ -174,6 +247,8 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 
     if (pd[pd_idx].page_size == 1) {
         //kprintf("Warning: ID 50\t");
+        spin_unlock(&paging_lock);
+        if (ie) StiHelper();
         return;
     }
 
@@ -187,6 +262,8 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     pt[pt_idx].pcd = (flags & CACHE_DIS_PAGE) ? 1 : 0;
     pt[pt_idx].pwt = (flags & WRITE_THROUGH_PAGE) ? 1 : 0;
     pt[pt_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
+    spin_unlock(&paging_lock);
+    if (ie) StiHelper();
 }
 
 
@@ -339,28 +416,42 @@ void RemovePage(uint64_t addr, bool big_page) {
     uint64_t pd_idx = PD_IDX(addr);
     uint64_t t_idx = PT_IDX(addr);
 
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&paging_lock);
+    bool need_shootdown = false;
+
     if (pml4[pml4_idx].present == 0) {
-        return;
+        goto out;
     }
 
     page_entry_t* pdpt_entry = (page_entry_t*) (((uint64_t)(pml4[pml4_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pdpt_entry[pdpt_idx].present == 0) {
-        return;
+        goto out;
     }
 
     page_entry_t* pd_entry = (page_entry_t*) (((uint64_t)(pdpt_entry[pdpt_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pd_entry[pd_idx].present == 0) {
-        return;
+        goto out;
     }
     if (big_page) {
         pd_entry[pd_idx].present = 0;
-        InvlpgHelper(addr);
-        return;
+        need_shootdown = true;
+        goto out;
     }
     page_entry_t* pt_entry = (page_entry_t*) (((uint64_t)(pd_entry[pd_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pt_entry[t_idx].present == 0) {
-        return;
+        goto out;
     }
     pt_entry[t_idx].present = 0;
-    InvlpgHelper(addr);
+    need_shootdown = true;
+
+out:
+    spin_unlock(&paging_lock);
+    // Run the shootdown after releasing paging_lock: another CPU may be
+    // spinning on paging_lock with interrupts disabled, and could not
+    // service our shootdown IPI until it makes forward progress. Doing the
+    // local+remote invalidation here keeps the lock-hold window short.
+    if (need_shootdown) tlb_flush_remote(addr);
+    if (ie) StiHelper();
 }

@@ -1,6 +1,10 @@
 #pragma once
 #include "includes.h"
 
+typedef struct spinlock_t {
+    volatile uint64_t locked;
+} spinlock_t;
+
 typedef struct buddy_node_t {
     bool free;
     void* address;
@@ -45,6 +49,7 @@ typedef struct cache_t
     slab_t* full_slabs;
     slab_t* partial_slabs;
     slab_t* empty_slabs;
+    spinlock_t lock;
 } cache_t;
 
 typedef struct e820_entry_t {
@@ -165,6 +170,12 @@ typedef struct tss64_t {
     uint16_t iopb_offset;
 } __attribute__((packed)) tss64_t;
 
+typedef struct run_queue_t {
+    struct task_t* head;
+    struct task_t* tail;
+    spinlock_t lock;
+} run_queue_t;
+
 typedef struct cpu_local_t {
     uint64_t self;              // offset 0  — &cpu_locals[i] (gs:[0])
     uint64_t kernel_rsp;        // offset 8  — top of kernel stack (== tss.rsp0)
@@ -174,6 +185,8 @@ typedef struct cpu_local_t {
     tss64_t* tss;               // offset 32
     uint64_t kstack_top;        // offset 40
     struct task_t* current;     // offset 48 — currently running task on this CPU
+    struct task_t* pending_reap;// offset 56 — zombie left behind by previous switch
+    run_queue_t rq;             // this CPU's runnable tasks
 } __attribute__((packed)) cpu_local_t;
 
 // ---- Multi-tasking ----
@@ -181,6 +194,7 @@ typedef struct cpu_local_t {
 #define TASK_OFF_SAVED_RSP   0
 #define TASK_OFF_CR3         8
 #define TASK_OFF_KSTACK_TOP  16
+#define TASK_OFF_FXSTATE     128
 #define CPU_LOCAL_OFF_SELF    0
 #define CPU_LOCAL_OFF_KRSP   8
 #define CPU_LOCAL_OFF_APIC_ID 28
@@ -208,8 +222,16 @@ typedef struct task_t {
     struct task_t* next;       // run-queue link
     struct task_t* prev;
     char name[32];
+    uint32_t home_cpu;         // CPU index whose run queue owns this task
+    uint8_t fxstate[512] __attribute__((aligned(16)));
 } task_t;
 
+
+typedef struct tlb_shootdown_t {
+    spinlock_t lock;             // serializes initiators
+    volatile uint64_t addr;      // 0 = full flush, otherwise single page
+    volatile uint64_t pending;   // bitmap of CPUs we are still waiting on
+} tlb_shootdown_t;
 
 typedef struct rsdp_t {
     char signature[8];
@@ -325,10 +347,6 @@ typedef struct madt_local_apic_nmi_t {
     uint16_t flags;            
     uint8_t lint;              
 } __attribute__((packed)) madt_local_apic_nmi_t;
-
-typedef struct spinlock_t {
-    volatile uint64_t locked;
-} spinlock_t;
 
 typedef struct mcfg_entry_t {
     uint64_t base_address;          
@@ -501,8 +519,23 @@ typedef struct {
     uint32_t reserved1[4];
 } __attribute__((packed)) hba_cmd_header_t;
 
+#define AHCI_MAX_SLOTS 32
+
+typedef struct ahci_completion_t {
+    spinlock_t guard;
+    volatile bool done;
+    volatile bool error;
+    struct task_t* waiter;
+} ahci_completion_t;
+
+typedef struct ahci_port_state_t {
+    spinlock_t lock;          // serializes slot allocation + CI write + issued_mask
+    uint32_t issued_mask;     // slots currently in flight (we own them)
+    ahci_completion_t completions[AHCI_MAX_SLOTS];
+} ahci_port_state_t;
+
 typedef struct {
-    uint8_t  attributes;    
+    uint8_t  attributes;
     uint8_t  chs_start[3];  
     uint8_t  partition_type; 
     uint8_t  chs_end[3];    
@@ -546,9 +579,11 @@ typedef struct partition_device_node {
 } partition_device_node_t;
 
 typedef struct mutex_t {
-    volatile bool locked;     
-    uint64_t owner_pcb;      
-    void* wait_queue;        
+    spinlock_t guard;            // protects fields below
+    volatile uint64_t locked;    // 0 = free, 1 = held
+    struct task_t* owner;        // current holder; NULL when free
+    struct task_t* wait_head;    // FIFO of blocked tasks linked via task_t::next
+    struct task_t* wait_tail;
 } mutex_t;
 
 typedef struct superblock_t {
@@ -823,6 +858,8 @@ typedef struct ext2_info_t {
 
     uint32_t hash_seed[4];
     uint8_t def_hash_version;
+
+    mutex_t inode_alloc_lock;
 } ext2_info_t;
 
 typedef struct ext2_inode_data_t {
@@ -900,5 +937,5 @@ typedef struct buffer_cache {
     uint64_t size;
     uint64_t hash_table_length;
 
-    spinlock_t lock;
+    mutex_t lock;
 } buffer_cache_t;

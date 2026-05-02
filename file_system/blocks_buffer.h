@@ -5,6 +5,7 @@
 #include "extern.h"
 #include "paging.h"
 #include "slab_alloc.h"
+#include "mutex.h"
 
 void* bread(superblock_t* sb, uint32_t block_number);
 void brelse(superblock_t* sb, uint32_t block_number);

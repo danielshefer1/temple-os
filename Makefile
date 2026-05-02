@@ -56,7 +56,7 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c init/limine_entry.c \
                 file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
                 file_system/vfs_path_ops.c \
                 interrupts/fd_table.c interrupts/vfs_syscalls.c \
-                multi/cpu_local.c init/user_launch.c multi/scheduler.c
+                multi/cpu_local.c init/user_launch.c multi/scheduler.c multi/mutex.c
 
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm \
                   interrupts/user_enter.asm multi/switch.asm

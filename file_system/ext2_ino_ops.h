@@ -8,6 +8,7 @@
 #include "math.h"
 #include "memory.h"
 #include "string.h"
+#include "mutex.h"
 
 int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry);
 int64_t EXT2Create(inode_t* dir, dentry_t* dentry, uint64_t permissions);

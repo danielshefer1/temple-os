@@ -11,6 +11,7 @@
 
 %define TASK_OFF_SAVED_RSP   0
 %define TASK_OFF_CR3         8
+%define TASK_OFF_FXSTATE     128
 
 section .text
 
@@ -23,8 +24,12 @@ context_switch:
     push r14
     push r15
 
+    fxsave64 [rdi + TASK_OFF_FXSTATE]
+
     mov [rdi + TASK_OFF_SAVED_RSP], rsp
     mov rsp, [rsi + TASK_OFF_SAVED_RSP]
+
+    fxrstor64 [rsi + TASK_OFF_FXSTATE]
 
     mov rax, [rdi + TASK_OFF_CR3]
     mov rcx, [rsi + TASK_OFF_CR3]
@@ -43,10 +48,16 @@ context_switch:
 
 ; Trampoline for brand-new tasks. create_kernel_task seeds the stack so that
 ; r12 = entry_fn and the return address from context_switch is this label.
+; When the entry function returns naturally, fall into task_exit so the task
+; is reaped by the scheduler. task_exit is __attribute__((noreturn)); the
+; halt loop is a defensive backstop.
+extern task_exit
+
 global task_entry_trampoline
 task_entry_trampoline:
     sti
     call r12
+    call task_exit
 .halt:
     cli
     hlt

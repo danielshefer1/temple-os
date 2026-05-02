@@ -193,6 +193,7 @@ int64_t EXT2Mount(superblock_t* sb) {
     if (sbext->s_magic != EXT2_MAGIC) return 3;
 
     sb->fs_info = kmalloc(sizeof(ext2_info_t));
+    mutex_init(&((ext2_info_t*)sb->fs_info)->inode_alloc_lock);
     int64_t ret = CopySbExtToInternal(sbext, sb);
 
     total_time_t total_time;

@@ -5,6 +5,14 @@ static buddy_bin_t kernel_bins[MAX_ORDER];
 static uint64_t user_lowest_vaild = UINT64_MAX;
 static uint64_t kernel_lowest_vaild = UINT64_MAX;
 
+// Per-pool spinlocks. Held across RequestBuddy/FreeBuddy. The internal
+// helpers (SplitNode, MergeBuddy, MoveBuddyNode, CreateBuddyNode) call
+// kmalloc/kfree, which take per-cache slab locks — order is buddy > slab.
+// Same-CPU recursion (kmalloc -> AddSlabW -> AddKernelPages -> RequestBuddy)
+// would deadlock; relies on the buddy_node_t slab cache staying warm.
+static spinlock_t kernel_buddy_lock;
+static spinlock_t user_buddy_lock;
+
 void AddToBuddyAlloc(uint64_t start, uint64_t size, bool user) {
     uint64_t bit, start_order, size_order;
     buddy_bin_t* bins = user ? user_bins : kernel_bins;
@@ -182,6 +190,11 @@ buddy_node_t* FindBuddyNode(buddy_bin_t* bin, void* address) {
 void FreeBuddy(void* address, bool user) {
     buddy_bin_t* bins = user ? user_bins : kernel_bins;
     uint64_t* lowest_valid_p = user ? &user_lowest_vaild : &kernel_lowest_vaild;
+    spinlock_t* lock = user ? &user_buddy_lock : &kernel_buddy_lock;
+
+    bool org_int_state = check_interrupts();
+    CliHelper();
+    spin_lock(lock);
 
     uint64_t order = 0, page_count;
     buddy_node_t* node = FindBuddyNode(&bins[order], address);
@@ -191,10 +204,10 @@ void FreeBuddy(void* address, bool user) {
         node = FindBuddyNode(&bins[order], address);
     }
     if (node == NULL) {
+        spin_unlock(lock);
+        if (org_int_state) StiHelper();
         return;
     }
-    bool org_int_state = check_interrupts();
-    CliHelper();
     if (1 << node->order < TABLE_SIZE) {
         page_count = (1 << node->order) / PAGE_SIZE;
         if ((uint64_t)(1 << node->order) % PAGE_SIZE != 0) {
@@ -206,15 +219,17 @@ void FreeBuddy(void* address, bool user) {
     if (!merged) {
         MoveBuddyNode(&bins[order], node);
     }
-    if (org_int_state) StiHelper();
 
     *lowest_valid_p = FindLowest(bins);
 
+    spin_unlock(lock);
+    if (org_int_state) StiHelper();
 }
 
 void* RequestBuddy(uint64_t size, bool user) {
     buddy_bin_t* bins = user ? user_bins : kernel_bins;
     uint64_t* lowest_vaild_p = user ? &user_lowest_vaild : &kernel_lowest_vaild;
+    spinlock_t* lock = user ? &user_buddy_lock : &kernel_buddy_lock;
 
     uint64_t order = BiggestBit(size), tmp;
     if (!IsPowerOfTwo(size)) order++;
@@ -227,25 +242,28 @@ void* RequestBuddy(uint64_t size, bool user) {
         return NULL;
     }
 
+    bool org_int_state = check_interrupts();
+    CliHelper();
+    spin_lock(lock);
+
     if (order < *lowest_vaild_p) {
         tmp = order;
         order = *lowest_vaild_p;
         *lowest_vaild_p = tmp;
-    } 
-
+    }
 
     for (uint64_t current_order = order; current_order < MAX_ORDER; current_order++) {
         if (bins[current_order].head_free != NULL) {
-            bool org_int_state = check_interrupts();
-            CliHelper();
-
             void* ret = SplitNode(bins[current_order].head_free, order, bins);
             if (ret != NULL) {
+                spin_unlock(lock);
                 if (org_int_state) StiHelper();
                 return ret;
             }
         }
     }
+    spin_unlock(lock);
+    if (org_int_state) StiHelper();
     return NULL;
 }
 

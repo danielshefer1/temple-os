@@ -1,5 +1,6 @@
 #include "utility.h"
 #include "cpu_local.h"
+#include "scheduler.h"
 
 void start() {
     SetGDT();
@@ -8,6 +9,7 @@ void start() {
     InitIDT();
     InitVGA();
     enable_sse();
+    fpu_init_template();
 
     uint64_t kernel_size = (uint64_t)&__total_pages;
     InitSlabAlloc(KERNEL_VIRTUAL + kernel_size*PAGE_SIZE);
@@ -26,6 +28,9 @@ void start() {
     // parsing fills cpu_ids[]/apic_to_index[].
     cpu_locals[0].kstack_top = (uint64_t)&_stack_top;
     cpu_init_late(0);
+
+    // Per-CPU run queues must be initialised before APs come online.
+    SchedulerInit();
 
     EnableLapic();
 

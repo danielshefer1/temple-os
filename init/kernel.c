@@ -3,14 +3,14 @@
 #include "scheduler.h"
 
 static void task_a(void) {
-    for (uint64_t i = 0; ; i++) {
+    for (uint64_t i = 0; i < 10; i++) {
         kprintf("[A:%d] ", (uint64_t)i);
         for (volatile uint64_t j = 0; j < 50000000; j++) {}
     }
 }
 
 static void task_b(void) {
-    for (uint64_t i = 0; ; i++) {
+    for (uint64_t i = 0; i < 50; i++) {
         kprintf("[B:%d] ", (uint64_t)i);
         for (volatile uint64_t j = 0; j < 50000000; j++) {}
     }
@@ -23,7 +23,6 @@ static void idle_task(void) {
 void kmain() {
     start();
 
-    SchedulerInit();
     scheduler_attach_bootstrap("bsp_init");
 
     create_kernel_task(task_a, "task_a");

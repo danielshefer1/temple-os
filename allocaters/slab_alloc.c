@@ -160,26 +160,34 @@ uint64_t GetBestCacheIndex(uint64_t size) {
 void* kmalloc(uint64_t size) {
 
     int idx = GetBestCacheIndex(size);
-    
+
     // If size is too huge (larger than PAGE_SIZE cache), return NULL
     if (idx == 0xFFFFFFF) {
-        return NULL; 
+        return NULL;
     }
     bool org_int_state = check_interrupts();
     CliHelper();
+    spin_lock(&caches[idx].lock);
     // Try to find a slot in the existing slabs
     void* ret = SearchCache(&caches[idx], idx);
     if (ret != NULL) {
+        spin_unlock(&caches[idx].lock);
         memset(ret, 0, size);
         if (org_int_state) StiHelper();
         return ret;
     }
 
-    // No slot found, allocate a new Slab
+    // Drop the lock before AddSlabW: it calls AddKernelPages, which may
+    // recurse back into kmalloc for a different cache (e.g. PAGE_SIZE for
+    // page-table allocations). Holding our lock across that would cause
+    // a same-CPU deadlock if the inner kmalloc targeted this cache.
+    spin_unlock(&caches[idx].lock);
     AddSlabW(&caches[idx], idx);
-    
+    spin_lock(&caches[idx].lock);
+
     // Search again in the newly added slab
     ret = SearchCache(&caches[idx], idx);
+    spin_unlock(&caches[idx].lock);
     if (ret != NULL) {
         memset(ret, 0, size);
     }
@@ -236,14 +244,15 @@ void kfree(void* ptr, uint64_t size) {
 
     bool org_int_state = check_interrupts();
     CliHelper();
-    
+    spin_lock(&caches[idx].lock);
+
     p->free_count++;
 
     slot_index = ((uint64_t)ptr - (uint64_t)p->start) / sizes[idx];
     bitmap_index = slot_index / 64;
     bit_pos = slot_index % 64;
 
-    p->bitmap[bitmap_index] ^=  (1ULL << bit_pos);        
+    p->bitmap[bitmap_index] ^=  (1ULL << bit_pos);
 
     if (p->free_count == 1) {
         caches[idx].full_slabs = DeleteSlab(caches[idx].full_slabs, p);
@@ -255,5 +264,6 @@ void kfree(void* ptr, uint64_t size) {
         p->next = caches[idx].empty_slabs;
         caches[idx].empty_slabs = p;
     }
+    spin_unlock(&caches[idx].lock);
     if (org_int_state) StiHelper();
 }

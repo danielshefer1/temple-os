@@ -50,7 +50,12 @@ uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
     ext2_info_t* vol = (ext2_info_t*) sb->fs_info;
     ext2_block_group_t* bg = &vol->bgdt[block_group];
 
-    if (bg->free_inodes_count == 0) return 0;
+    mutex_lock(&vol->inode_alloc_lock);
+
+    if (bg->free_inodes_count == 0) {
+        mutex_unlock(&vol->inode_alloc_lock);
+        return 0;
+    }
 
     uint32_t inode_bitmap_block = bg->inode_bitmap;
     uint8_t* buf = (uint8_t*) bread(sb, inode_bitmap_block);
@@ -61,6 +66,7 @@ uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
     int64_t bit_idx = FindFirstUnsetInBuffer(bitmap, u64_inside_block);
     if (bit_idx == -1) {
         brelse(sb, inode_bitmap_block);
+        mutex_unlock(&vol->inode_alloc_lock);
         return 0;
     }
     bitmap[bit_idx / 64] |= (1ULL << (bit_idx % 64));
@@ -70,6 +76,7 @@ uint32_t EXT2AddInode(superblock_t* sb, uint32_t block_group) {
     vol->free_inodes--;
     vol->bgdt[block_group].free_inodes_count--;
 
+    mutex_unlock(&vol->inode_alloc_lock);
     return block_group * vol->inodes_per_group + bit_idx + 1;
 }
 
@@ -290,6 +297,8 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
 
     ext2_block_group_t* bg = &vol->bgdt[data->block_group];
 
+    mutex_lock(&vol->inode_alloc_lock);
+
     uint64_t* bitmap = (uint64_t*) bread(inode->sb, bg->inode_bitmap);
 
     uint32_t inode_idx_inside_bitmap = (data->inode_number - 1) - vol->inodes_per_group * data->block_group;
@@ -301,6 +310,9 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
 
     if (inode->type == VFS_TYPE_DIR) bg->used_dirs_count--;
     bg->free_inodes_count++;
+    vol->free_inodes++;
+
+    mutex_unlock(&vol->inode_alloc_lock);
     return 0;
 }
 

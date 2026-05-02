@@ -121,3 +121,13 @@ void IOAPIC_SetEntry(uint8_t irq, uint8_t vector) {
 void InitKeyboard() {
     IOAPIC_SetEntry(1, 33);
 }
+
+void SendIpiAllExcludingSelf(uint8_t vector) {
+    // Wait for any prior IPI to drain (delivery status bit 12).
+    while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();
+    lapic[0x310 / 4] = 0;
+    // Destination shorthand 11b = "all excluding self", fixed delivery,
+    // physical mode, edge, idle.
+    lapic[0x300 / 4] = (3u << 18) | vector;
+    while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();
+}

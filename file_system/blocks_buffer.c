@@ -106,7 +106,7 @@ void* bread(superblock_t* sb, uint32_t block_number) {
 
 
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
     buffer_node_t* node = buffer_cache.hash_table[hash_idx], *avi_node = NULL;
 
     while (node != NULL) {
@@ -119,14 +119,14 @@ void* bread(superblock_t* sb, uint32_t block_number) {
 
             SwitchNodeToLRUHead(node);
 
-            spin_unlock(&buffer_cache.lock);
+            mutex_unlock(&buffer_cache.lock);
             return data;
         }
         node = node->hash_next;
     }
     void* ret = (void*) AddKernelPages(sb->pages_in_block);
     if (ret == NULL) {
-        spin_unlock(&buffer_cache.lock);
+        mutex_unlock(&buffer_cache.lock);
         kerror("Failed to allocate memory for block buffer!");
         return NULL;
     }
@@ -166,7 +166,7 @@ void* bread(superblock_t* sb, uint32_t block_number) {
     avi_node->ref_count = 1;
 
     SwitchNodeToLRUHead(avi_node);
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 
     EXT2ReadBlocks(sb, block_number, 1, ret);
     return ret;
@@ -176,7 +176,7 @@ void brelse(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
 
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
     buffer_node_t* node = buffer_cache.hash_table[hash_idx];
 
     while (node != NULL) {
@@ -184,19 +184,19 @@ void brelse(superblock_t* sb, uint32_t block_number) {
             if (node->ref_count > 0) {
                 node->ref_count--;
             }
-            spin_unlock(&buffer_cache.lock);
+            mutex_unlock(&buffer_cache.lock);
             return;
         }
         node = node->hash_next;
     }
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void bwrite(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
 
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
     buffer_node_t* node = buffer_cache.hash_table[hash_idx];
 
     while (node != NULL) {
@@ -204,19 +204,19 @@ void bwrite(superblock_t* sb, uint32_t block_number) {
             node->is_dirty = true;
             SwitchNodeToLRUHead(node);
 
-            spin_unlock(&buffer_cache.lock);
+            mutex_unlock(&buffer_cache.lock);
             return;
         }
         node = node->hash_next;
     }
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void bflush(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
 
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
 
     buffer_node_t* node = buffer_cache.hash_table[hash_idx];
     while (node != NULL) {
@@ -226,18 +226,18 @@ void bflush(superblock_t* sb, uint32_t block_number) {
                 node->is_dirty = false;
             }
             SwitchNodeToLRUHead(node);
-            spin_unlock(&buffer_cache.lock);
+            mutex_unlock(&buffer_cache.lock);
             return;
         }
         node = node->hash_next;
     }
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void bflush_all(superblock_t* sb) {
     if (sb == NULL) return;
 
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
     
     buffer_node_t* node = buffer_cache.lru_head;
     while (node != NULL) {
@@ -248,14 +248,14 @@ void bflush_all(superblock_t* sb) {
         node = node->prev;
     }
 
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void binvalidate(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
 
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
 
     buffer_node_t* node = buffer_cache.hash_table[hash_idx];
     while (node != NULL) {
@@ -272,17 +272,17 @@ void binvalidate(superblock_t* sb, uint32_t block_number) {
         kfree(node, sizeof(buffer_node_t));
         buffer_cache.size--;
 
-        spin_unlock(&buffer_cache.lock);
+        mutex_unlock(&buffer_cache.lock);
         return;
     }
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void bclean(superblock_t* sb, uint32_t block_number) {
     if (sb == NULL) return;
     uint64_t hash_idx = block_number % BUFFER_CACHE_SIZE;
 
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
 
     buffer_node_t* node = buffer_cache.hash_table[hash_idx];
     while (node != NULL) {
@@ -299,16 +299,16 @@ void bclean(superblock_t* sb, uint32_t block_number) {
         DeleteNodeFromLRU(node);
         kfree(node, sizeof(buffer_node_t));
 
-        spin_unlock(&buffer_cache.lock);
+        mutex_unlock(&buffer_cache.lock);
         return;
     }
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
 
 void bclean_all(superblock_t* sb) {
     if (sb == NULL) return;
 
-    spin_lock(&buffer_cache.lock);
+    mutex_lock(&buffer_cache.lock);
 
     buffer_node_t* p = buffer_cache.lru_head, *p1;
     while (p->prev != NULL) {
@@ -332,5 +332,5 @@ void bclean_all(superblock_t* sb) {
     buffer_cache.lru_tail = NULL;
     buffer_cache.size = 0;
 
-    spin_unlock(&buffer_cache.lock);
+    mutex_unlock(&buffer_cache.lock);
 }
