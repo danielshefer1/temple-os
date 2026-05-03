@@ -15,7 +15,9 @@ void start() {
     InitSlabAlloc(KERNEL_VIRTUAL + kernel_size*PAGE_SIZE);
     e820_info_t* e820_info = init_E820(E820_ADDRESS);
     InitUserBuddyAlloc(e820_info);
+    InitKernelBuddyShadow(KERNEL_VIRT_TO_PHYS(GetCurrPrimitveAddr()), GB);
     InitKernelBuddyAlloc(KERNEL_VIRT_TO_PHYS(GetCurrPrimitveAddr()), GB);
+    VerifyKernelBuddyShadow();
 
     InitConsoleBuffer();
 

@@ -39,6 +39,7 @@ void kmain() {
     } else {
         create_user_task(&img, "hello");
     }
+    VerifyKernelBuddyShadow();
 
     // Yield into the scheduler so the new tasks start running.
     StiHelper();

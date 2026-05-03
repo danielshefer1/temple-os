@@ -63,12 +63,15 @@ page_entry_t identity_pd[512] __attribute__((aligned(4096)));
 
 static uint64_t curr_addr_prim;
 
-// Lock ordering for memory subsystem: paging > buddy > slab. The lock
-// covers kernel page-table mutation. map_page_to_virt and RemovePage hold
-// it; AddKernelPages does NOT (RequestBuddy/map_page_to_virt take their
-// own locks). Same-CPU recursion via map_page_to_virt -> kmalloc(PAGE_SIZE)
-// -> AddSlabW -> AddKernelPages -> map_page_to_virt would deadlock; relies
-// on the PAGE_SIZE slab cache staying warm.
+// Lock ordering for memory subsystem: paging > buddy. The lock covers kernel
+// page-table mutation. map_page_to_virt and RemovePage hold it; AddKernelPages
+// does NOT (RequestBuddy/map_page_to_virt take their own locks).
+//
+// The kernel buddy fast path (kernel_request_buddy/free_buddy) does no slab
+// allocations and never calls back into paging, so the historic same-CPU
+// recursion chain (map_page_to_virt -> kmalloc(PAGE_SIZE) -> AddSlabW ->
+// AddKernelPages -> map_page_to_virt) is structurally impossible. Page-table
+// allocations here go straight through RequestBuddy.
 static spinlock_t paging_lock;
 
 void InitPaging() {
@@ -167,7 +170,13 @@ void InitPaging() {
     // by the buddy allocator must lie within an already-mapped range. The
     // small-page region above used kernel_pd[base_idx + kernel_big_pages];
     // continue from one entry past that.
-    uint64_t headroom_big_pages = 64;  // 128MB of pre-mapped data RAM
+    //
+    // The kernel buddy pool now uses an inline next-pointer free list (see
+    // buddy_alloc.c::inline_push) — every free page is touched at its
+    // KERNEL_VIRTUAL alias the moment it enters the pool, including init.
+    // So the headroom must cover the entire pool, not just its working set.
+    // Loop is capped at 512 (PD slot count); fills whatever room is left.
+    uint64_t headroom_big_pages = 512;  // up to ~1GB of pre-mapped data RAM
     uint64_t headroom_start = base_idx + kernel_big_pages + 1;
     for (uint64_t i = 0; i < headroom_big_pages && (headroom_start + i) < 512; i++) {
         uint64_t idx = headroom_start + i;
@@ -212,30 +221,32 @@ int64_t map_page_to_virt_in(page_entry_t* pml4_base,
     spin_lock(&paging_lock);
 
     if (pml4_base[pml4_idx].present == 0) {
-        new_pdpt = (page_entry_t*) kmalloc(PAGE_SIZE);
-        if (new_pdpt == NULL) {
+        void* phys = RequestBuddy(PAGE_SIZE, false);
+        if (phys == NULL) {
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
             return -ENOMEM;
         }
+        new_pdpt = (page_entry_t*)((uint64_t)phys + KERNEL_VIRTUAL);
         memset(new_pdpt, 0, PAGE_SIZE);
         pml4_base[pml4_idx].present = 1;
         pml4_base[pml4_idx].writable = 1;
-        pml4_base[pml4_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pdpt) >> 12;
+        pml4_base[pml4_idx].address = (uint64_t)phys >> 12;
     }
     if (is_user) pml4_base[pml4_idx].user = 1;
     page_entry_t* pdpt = (page_entry_t*) ((pml4_base[pml4_idx].address << 12) + KERNEL_VIRTUAL);
     if (pdpt[pdpt_idx].present == 0) {
-        new_pd = (page_entry_t*) kmalloc(PAGE_SIZE);
-        if (new_pd == NULL) {
+        void* phys = RequestBuddy(PAGE_SIZE, false);
+        if (phys == NULL) {
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
             return -ENOMEM;
         }
+        new_pd = (page_entry_t*)((uint64_t)phys + KERNEL_VIRTUAL);
         memset(new_pd, 0, PAGE_SIZE);
         pdpt[pdpt_idx].present = 1;
         pdpt[pdpt_idx].writable = 1;
-        pdpt[pdpt_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pd) >> 12;
+        pdpt[pdpt_idx].address = (uint64_t)phys >> 12;
     }
     if (is_user) pdpt[pdpt_idx].user = 1;
 
@@ -274,16 +285,17 @@ int64_t map_page_to_virt_in(page_entry_t* pml4_base,
 
 
     if (pd[pd_idx].present == 0) {
-        page_entry_t* new_pt = (page_entry_t*) kmalloc(PAGE_SIZE);
-        if (new_pt == NULL) {
+        void* phys = RequestBuddy(PAGE_SIZE, false);
+        if (phys == NULL) {
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
             return -ENOMEM;
         }
+        page_entry_t* new_pt = (page_entry_t*)((uint64_t)phys + KERNEL_VIRTUAL);
         memset(new_pt, 0, PAGE_SIZE);
         pd[pd_idx].present = 1;
         pd[pd_idx].writable = 1;
-        pd[pd_idx].address = KERNEL_VIRT_TO_PHYS((uint64_t)new_pt) >> 12;
+        pd[pd_idx].address = (uint64_t)phys >> 12;
     }
     if (is_user) pd[pd_idx].user = 1;
 
