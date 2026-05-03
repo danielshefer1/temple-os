@@ -470,6 +470,16 @@ void RemovePage(uint64_t addr, bool big_page) {
         need_shootdown = true;
         goto out;
     }
+    // Caller asked for a 4KB unmap, but this PD slot is a 2MB big page
+    // (e.g. an address that lives inside the boot-time/headroom big-page
+    // mapping). The .address field is the physical 2MB frame, not a PT
+    // pointer — dereferencing it as one would read/write arbitrary kernel
+    // bytes. Bail out: the buddy block has already been freed by our
+    // caller, the big-page mapping legitimately covers the whole 2MB
+    // region, and there is no per-page mapping to invalidate.
+    if (pd_entry[pd_idx].page_size == 1) {
+        goto out;
+    }
     page_entry_t* pt_entry = (page_entry_t*) (((uint64_t)(pd_entry[pd_idx].address) << 12) + KERNEL_VIRTUAL);
     if (pt_entry[t_idx].present == 0) {
         goto out;

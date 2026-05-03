@@ -15,6 +15,7 @@ volatile uint64_t overrides_length;
 
 uint8_t cpu_ids[UINT8_MAX];
 volatile uint64_t cpus_active = 1;
+volatile uint64_t ap_online_ack = 0;
 
 volatile pci_config_t* ecam_ptr;
 

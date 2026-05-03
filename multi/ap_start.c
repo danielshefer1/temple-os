@@ -59,30 +59,36 @@ void BootCore(uint8_t cpu_id, bool trampoline_set) {
     // bounds. Passing stack_base sent RSP below the allocation, where pushes
     // landed in whichever buddy block followed, corrupting other stacks.
     inputs[0] = stack_top;
-    inputs[1] = (uint64_t)((void*)ap_kmain); 
+    inputs[1] = (uint64_t)((void*)ap_kmain);
     inputs[2] = ((uint64_t) PageDirAddrV()) - KERNEL_VIRTUAL;
 
+    // Clear the handoff flag *before* the AP could possibly start running.
+    // The AP sets it once it has consumed inputs[] and switched to its own
+    // stack, telling us the trampoline scratch area is free to be reused
+    // for the next AP.
+    __atomic_store_n(&ap_online_ack, 0, __ATOMIC_RELEASE);
+
     SendInitIPI(cpu_id);
-    
-    sleep(10); 
+
+    sleep(10);
 
     SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
-    
+
 
     for(volatile uint64_t i = 0; i < 10000; i++) {
         PauseHelper();
     }
 
     SendStartupIPI(cpu_id, TRAMPOLINE_ADDR / PAGE_SIZE);
+
+    while (__atomic_load_n(&ap_online_ack, __ATOMIC_ACQUIRE) == 0) {
+        PauseHelper();
+    }
 }
 
 void BootCores() {
     if (cpu_count == 1) return;
-    BootCore(cpu_ids[1], false);
-    while (cpus_active == 1) PauseHelper();
-    for (uint64_t i = 2; i < cpu_count; i++) {
-        uint64_t current_cpus_active = cpus_active;
-        BootCore(cpu_ids[i], true);
-        while (current_cpus_active == cpus_active) PauseHelper();
+    for (uint64_t i = 1; i < cpu_count; i++) {
+        BootCore(cpu_ids[i], i != 1);
     }
 }

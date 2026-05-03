@@ -16,6 +16,7 @@ extern int_override_t* overrides[16];
 extern volatile uint64_t overrides_length;
 extern uint8_t cpu_ids[UINT8_MAX];
 extern volatile uint64_t cpus_active;
+extern volatile uint64_t ap_online_ack;
 extern volatile pci_config_t* ecam_ptr;
 extern volatile hba_mem_t* hba;
 extern block_device_node_t* devices_head;

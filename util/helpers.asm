@@ -167,8 +167,8 @@ spin_lock:
 
 global spin_unlock
 spin_unlock:
-    mov rdx, rdi
-    mov dword [rdi], 0      ; Atomic write of 0
+    xor eax, eax
+    mov [rdi], rax          ; 64-bit release store; aligned -> atomic on x86
     ret
 
 global switch_pml4

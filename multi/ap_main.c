@@ -3,6 +3,10 @@
 #include "scheduler.h"
 
 void ap_kmain() {
+    // First thing: tell BSP the trampoline scratch area is free to reuse
+    // for the next AP. We're already on our own stack with our own CR3.
+    __atomic_store_n(&ap_online_ack, 1, __ATOMIC_RELEASE);
+
     LoadGDTHelper((gdt_ptr_t*)getGdtPointer());
     LoadIDTHelper((idt_ptr_t*)getIdtPtr());
     uint8_t cpu_id = get_cpuid();
@@ -12,16 +16,8 @@ void ap_kmain() {
     enable_sse();
 
     kprintf("Core %d woke up!\n", cpu_id);
-    cpus_active++;
+    __atomic_fetch_add(&cpus_active, 1, __ATOMIC_RELEASE);
 
-    // Register this AP with the scheduler so this_cpu()->current is non-NULL.
-    // The bootstrap task acts as our per-CPU idle: when the run queue is
-    // empty, schedule() returns and we keep hlt'ing until the timer fires
-    // again or work arrives.
-    // Register this AP with the scheduler so this_cpu()->current is non-NULL.
-    // The bootstrap task acts as our per-CPU idle: when the run queue is
-    // empty, schedule() returns and we keep hlt'ing until the timer fires
-    // again or work arrives.
     scheduler_attach_bootstrap("ap_idle");
     StiHelper();
     while (true) HltHelper();

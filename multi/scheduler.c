@@ -174,11 +174,37 @@ void schedule(void) {
     spin_lock(&rq->lock);
     task_t* next = rq_dequeue_locked(rq);
     if (!next) {
-        // Nothing to run: keep prev. Common during early bootstrap before
-        // any tasks exist. Just unlock and return.
-        spin_unlock(&rq->lock);
-        if (ie) StiHelper();
-        return;
+        // Nothing to run. If prev still wants the CPU (RUNNING), keep it.
+        // But if prev parked itself (BLOCKED / ZOMBIE), we MUST NOT return:
+        // the caller (e.g. mutex_lock) is relying on us not coming back
+        // until a wakeup puts something on the queue. Idle here with
+        // interrupts on so the wakeup IPI / timer can land.
+        if (prev && prev->state != TASK_STATE_RUNNING) {
+            spin_unlock(&rq->lock);
+            kprintf("<idle-loop cpu=%d state=%d>", (uint64_t)cpu->cpu_index, (uint64_t)prev->state);
+            while (true) {
+                StiHelper();
+                HltHelper();
+                CliHelper();
+                spin_lock(&rq->lock);
+                next = rq_dequeue_locked(rq);
+                if (next) break;
+                // A wakeup may have flipped prev back to READY/RUNNING
+                // without going through the queue (shouldn't happen, but
+                // defensive); honor it and bail.
+                if (prev->state == TASK_STATE_RUNNING) {
+                    spin_unlock(&rq->lock);
+                    if (ie) StiHelper();
+                    return;
+                }
+                spin_unlock(&rq->lock);
+            }
+            // fall through with rq still locked and next != NULL
+        } else {
+            spin_unlock(&rq->lock);
+            if (ie) StiHelper();
+            return;
+        }
     }
     // BLOCKED tasks (e.g. parked by mutex_lock) intentionally fall through:
     // they are not re-enqueued here. The corresponding mutex_unlock /
