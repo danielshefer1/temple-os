@@ -28,8 +28,13 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 // the global kernel pml4. The PML4 base is the kernel-virt of the table page
 // (i.e. cr3_phys + KERNEL_VIRTUAL), since every page table this kernel
 // allocates is reachable at that alias.
-void map_page_to_virt_in(page_entry_t* pml4_base,
-                         uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
+//
+// Returns 0 on success, -ENOMEM if a page-table allocation fails, -EEXIST
+// when a 4KB mapping collides with an existing big-page entry. The big-page
+// no-op cases (PD already populated, or unaligned phys) return 0 — these
+// are intentional behavior that AddKernelPages relies on.
+int64_t map_page_to_virt_in(page_entry_t* pml4_base,
+                            uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
 uint64_t GetCurrPrimitveAddr();
 
 // Invalidate `addr` (single page) on the local TLB and broadcast a TLB

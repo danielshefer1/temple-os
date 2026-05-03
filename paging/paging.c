@@ -197,8 +197,8 @@ void DisableIdentityMapping() {
     tlb_flush_remote(0);
 }
 
-void map_page_to_virt_in(page_entry_t* pml4_base,
-                         uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
+int64_t map_page_to_virt_in(page_entry_t* pml4_base,
+                            uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {
     uint64_t pml4_idx = PML4_IDX(virt);
     uint64_t pdpt_idx = PDPT_IDX(virt);
     uint64_t pd_idx = PD_IDX(virt);
@@ -213,6 +213,11 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
 
     if (pml4_base[pml4_idx].present == 0) {
         new_pdpt = (page_entry_t*) kmalloc(PAGE_SIZE);
+        if (new_pdpt == NULL) {
+            spin_unlock(&paging_lock);
+            if (ie) StiHelper();
+            return -ENOMEM;
+        }
         memset(new_pdpt, 0, PAGE_SIZE);
         pml4_base[pml4_idx].present = 1;
         pml4_base[pml4_idx].writable = 1;
@@ -222,6 +227,11 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
     page_entry_t* pdpt = (page_entry_t*) ((pml4_base[pml4_idx].address << 12) + KERNEL_VIRTUAL);
     if (pdpt[pdpt_idx].present == 0) {
         new_pd = (page_entry_t*) kmalloc(PAGE_SIZE);
+        if (new_pd == NULL) {
+            spin_unlock(&paging_lock);
+            if (ie) StiHelper();
+            return -ENOMEM;
+        }
         memset(new_pd, 0, PAGE_SIZE);
         pdpt[pdpt_idx].present = 1;
         pdpt[pdpt_idx].writable = 1;
@@ -239,13 +249,13 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
             // already covered by the boot-time big-page mappings.
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
-            return;
+            return 0;
         }
         if (pt_idx != 0 && PT_IDX(phy) != 0) {
             //kprintf("Tried to map a big page but not 2MB aligned!");
             spin_unlock(&paging_lock);
             if (ie) StiHelper();
-            return;
+            return 0;
         }
         pd[pd_idx].present = 1;
         pd[pd_idx].writable = (flags & RW_PAGE) ? 1 : 0;
@@ -259,12 +269,17 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
         pd[pd_idx].page_size = 1;
         spin_unlock(&paging_lock);
         if (ie) StiHelper();
-        return;
+        return 0;
     }
 
 
     if (pd[pd_idx].present == 0) {
         page_entry_t* new_pt = (page_entry_t*) kmalloc(PAGE_SIZE);
+        if (new_pt == NULL) {
+            spin_unlock(&paging_lock);
+            if (ie) StiHelper();
+            return -ENOMEM;
+        }
         memset(new_pt, 0, PAGE_SIZE);
         pd[pd_idx].present = 1;
         pd[pd_idx].writable = 1;
@@ -276,7 +291,7 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
         //kprintf("Warning: ID 50\t");
         spin_unlock(&paging_lock);
         if (ie) StiHelper();
-        return;
+        return -EEXIST;
     }
 
     page_entry_t* pt = (page_entry_t*) ((pd[pd_idx].address << 12) + KERNEL_VIRTUAL);
@@ -291,6 +306,7 @@ void map_page_to_virt_in(page_entry_t* pml4_base,
     pt[pt_idx].global = (flags & GLOBAL_PAGE) ? 1 : 0;
     spin_unlock(&paging_lock);
     if (ie) StiHelper();
+    return 0;
 }
 
 void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page) {

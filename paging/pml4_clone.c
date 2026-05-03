@@ -15,26 +15,21 @@ static inline page_entry_t* table_kvirt(uint64_t phys) {
 
 int64_t clone_kernel_pml4(uint64_t* out_phys) {
     if (!out_phys) return -EINVAL;
-    // kmalloc(PAGE_SIZE) returns slab-backed 4KB-aligned page reachable at
-    // KERNEL_VIRTUAL+phys. Used here instead of AddKernelPages because the
-    // buddy allocator's GetBuddyAddress has an off-by-one and can return
-    // 2KB-aligned pages for 4KB requests, which fails as a CR3 value.
-    void* p = kmalloc(PAGE_SIZE);
-    if (!p) return -ENOMEM;
-    if ((uint64_t)p & 0xFFF) return -EINVAL;
-    memset(p, 0, PAGE_SIZE);
+    void* phys = RequestBuddy(PAGE_SIZE, false);
+    if (!phys) return -ENOMEM;
+    page_entry_t* new_pml4 = (page_entry_t*)((uint64_t)phys + KERNEL_VIRTUAL);
+    memset(new_pml4, 0, PAGE_SIZE);
 
-    page_entry_t* new_pml4 = (page_entry_t*)p;
     // Share the kernel half (entries 256..511). Entry 0 (identity) stays
     // empty — the boot identity map was disabled by DisableIdentityMapping.
     for (uint64_t i = 256; i < 512; i++) new_pml4[i] = pml4[i];
 
-    *out_phys = KERNEL_VIRT_TO_PHYS((uint64_t)p);
+    *out_phys = (uint64_t)phys;
     return 0;
 }
 
 void free_cloned_pml4(uint64_t pml4_phys) {
-    kfree((void*)(pml4_phys + KERNEL_VIRTUAL), PAGE_SIZE);
+    FreeBuddy((void*)pml4_phys, false);
 }
 
 int64_t lookup_user_in_pml4(uint64_t pml4_phys, uint64_t virt, uint64_t* out_phys) {

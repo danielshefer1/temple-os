@@ -22,6 +22,13 @@ void run_user_program(void) {
 
     void* code_page  = RequestBuddy(PAGE_SIZE, false);
     void* stack_page = RequestBuddy(PAGE_SIZE, false);
+    if (code_page == NULL || stack_page == NULL) {
+        kprintf("run_user_program: out of memory allocating user pages\n");
+        if (code_page)  FreeBuddy(code_page, false);
+        if (stack_page) FreeBuddy(stack_page, false);
+        vfs_close(f);
+        return;
+    }
 
     map_page_to_virt(USER_CODE_VA, (uint64_t)code_page,
                      PRESENT_PAGE | RW_PAGE | USER_PAGE, false);

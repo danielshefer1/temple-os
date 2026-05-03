@@ -23,19 +23,20 @@ static uint64_t flags_for_phdr(uint32_t p_flags) {
 }
 
 // Allocate a single user page, install it in the cloned PML4 at va, and return
-// the page's kernel-virt alias so the caller can write into it. Uses
-// kmalloc(PAGE_SIZE) — its PAGE_SIZE slab cache hands out true 4KB-aligned
-// pages whose kernel-virt = phys + KERNEL_VIRTUAL, working around an
-// alignment bug in the underlying buddy allocator.
+// the page's kernel-virt alias so the caller can write into it.
 static int64_t alloc_and_map_user_page(uint64_t cr3_phys, uint64_t va, uint64_t flags,
                                        void** out_kvirt) {
-    void* kvirt = kmalloc(PAGE_SIZE);
-    if (!kvirt) return -ENOMEM;
-    if ((uint64_t)kvirt & 0xFFF) return -EINVAL;
+    void* phys_p = RequestBuddy(PAGE_SIZE, false);
+    if (!phys_p) return -ENOMEM;
+    uint64_t phys = (uint64_t)phys_p;
+    void* kvirt = (void*)(phys + KERNEL_VIRTUAL);
     memset(kvirt, 0, PAGE_SIZE);
-    uint64_t phys = KERNEL_VIRT_TO_PHYS((uint64_t)kvirt);
     page_entry_t* pml4_kvirt = (page_entry_t*)(cr3_phys + KERNEL_VIRTUAL);
-    map_page_to_virt_in(pml4_kvirt, va, phys, flags, false);
+    int64_t r = map_page_to_virt_in(pml4_kvirt, va, phys, flags, false);
+    if (r < 0) {
+        FreeBuddy(phys_p, false);
+        return r;
+    }
     *out_kvirt = kvirt;
     return 0;
 }
@@ -195,12 +196,13 @@ int64_t load_elf64(const char* path, elf64_image_t* out) {
         kfree(ph, ph_bytes); vfs_close(f); return -EIO;
     }
 
-    void* scratch = kmalloc(PAGE_SIZE);
-    if (!scratch) { kfree(ph, ph_bytes); vfs_close(f); return -ENOMEM; }
+    void* scratch_phys = RequestBuddy(PAGE_SIZE, false);
+    if (!scratch_phys) { kfree(ph, ph_bytes); vfs_close(f); return -ENOMEM; }
+    void* scratch = (void*)((uint64_t)scratch_phys + KERNEL_VIRTUAL);
 
     uint64_t cr3_phys = 0;
     r = clone_kernel_pml4(&cr3_phys);
-    if (r < 0) { kfree(scratch, PAGE_SIZE); kfree(ph, ph_bytes); vfs_close(f); return r; }
+    if (r < 0) { FreeBuddy(scratch_phys, false); kfree(ph, ph_bytes); vfs_close(f); return r; }
 
     uint64_t bias = (eh.e_type == ET_EXEC) ? 0 : USER_VIRTUAL;
     out->cr3_phys = cr3_phys;
@@ -219,14 +221,14 @@ int64_t load_elf64(const char* path, elf64_image_t* out) {
     r = setup_user_stack(cr3_phys, out);
     if (r < 0) goto fail;
 
-    kfree(scratch, PAGE_SIZE);
+    FreeBuddy(scratch_phys, false);
     kfree(ph, ph_bytes);
     vfs_close(f);
     return 0;
 
 fail:
     free_cloned_pml4(cr3_phys);
-    kfree(scratch, PAGE_SIZE);
+    FreeBuddy(scratch_phys, false);
     kfree(ph, ph_bytes);
     vfs_close(f);
     return r;
