@@ -1,0 +1,17 @@
+#pragma once
+#include "includes.h"
+#include "paging_defs.h"
+
+#define BIOS_TIMEOUT 2000
+#define AHCI_INT_VECTOR 0x40
+#define CMD_TABLE_SIZE 256
+#define RECV_FIS_SIZE 256
+#define CMD_LIST_HEADER_SIZE 32
+#define CMD_LIST_PAGES(CMD_LIST_SIZE) (RECV_FIS_SIZE + (CMD_LIST_HEADER_SIZE + CMD_TABLE_SIZE) * CMD_LIST_SIZE + PAGE_SIZE - 1) / PAGE_SIZE
+#define H2D_FIS_SIZE 20
+
+#define SATA_SIG_ATA    0x00000101
+#define SATA_SIG_ATAPI  0xEB140101
+
+#define MAX_PORTS 32
+#define SECTOR_SIZE 512
