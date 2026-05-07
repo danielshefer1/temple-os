@@ -61,6 +61,17 @@ int64_t vfs_hardlink(inode_t* dir, inode_t* existing, dentry_t* d) {
     return VFS_CALL(dir->ops, hardlink, dir, existing, d);
 }
 
+int64_t vfs_mknod(inode_t* dir, dentry_t* d, uint64_t type,
+                  uint64_t perm, uint32_t dev_id) {
+    int64_t r = check_dir_dentry_writable(dir, d);
+    if (r < 0) return r;
+    if (type != VFS_TYPE_CHARDEV && type != VFS_TYPE_BLOCKDEV &&
+        type != VFS_TYPE_FIFO    && type != VFS_TYPE_SOCKET) {
+        return -EINVAL;
+    }
+    return VFS_CALL(dir->ops, mknod, dir, d, type, perm, dev_id);
+}
+
 int64_t vfs_symlink(inode_t* dir, dentry_t* d, const char* target) {
     int64_t r = check_dir_dentry_writable(dir, d);
     if (r < 0) return r;

@@ -42,7 +42,8 @@ QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c init/kernel.c init/limine_entry.c \
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c drivers/devfs.c \
+                drivers/mem_devs.c drivers/ram_block.c init/kernel.c init/limine_entry.c \
                 allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
                 wrappers/keyboard.c util/global.c util/string.c interrupts/syscall_handler.c \
@@ -75,7 +76,7 @@ USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
 USER_LDFLAGS = -m elf_x86_64 -static -pie -nostdlib -T user/hello_linker.ld
 
-all: $(ISO_IMG) $(DATA_IMG) user-img
+all: $(ISO_IMG) $(DATA_IMG) user-img dev-img
 
 $(DATA_IMG):
 	@echo "Creating persistent data disk..."
@@ -97,6 +98,18 @@ user-img: $(USER_HELLO) $(DATA_IMG)
 	@echo "[USER] Installing $(USER_HELLO) -> /hello on $(DATA_IMG)"
 	@debugfs -w -R "rm /hello" $(DATA_IMG) 2>/dev/null || true
 	@debugfs -w -R "write $(USER_HELLO) hello" $(DATA_IMG)
+
+# Create /dev with the standard character/block device nodes used by the
+# kernel: tty (c 4 0), null (c 1 3), zero (c 1 5), ram0 (b 1 0).
+# debugfs's `mknod` only resolves a leaf name in the current directory,
+# so we cd into /dev before creating each node. Multi-command scripts
+# are fed via stdin since `-R` only accepts one command at a time.
+# The `rm` lines are best-effort (ignore failure on first run).
+dev-img: $(DATA_IMG)
+	@echo "[DEV] Populating /dev on $(DATA_IMG)"
+	@debugfs -w -R "mkdir /dev" $(DATA_IMG) 2>/dev/null || true
+	@printf 'cd /dev\nrm tty\nrm null\nrm zero\nrm ram0\nq\n' | debugfs -w $(DATA_IMG) >/dev/null 2>&1 || true
+	@printf 'cd /dev\nmknod tty  c 4 0\nmknod null c 1 3\nmknod zero c 1 5\nmknod ram0 b 1 0\nq\n' | debugfs -w $(DATA_IMG) >/dev/null
 
 # --- Kernel Rules ---
 $(K_OBJ_DIR)/%.o: %.c | $(K_OBJ_DIR)
@@ -173,7 +186,7 @@ clean-data:
 clean-all:
 	./docker-build.sh make clean-all-raw
 
-run: $(ISO_IMG) $(DATA_IMG) user-img
+run: $(ISO_IMG) $(DATA_IMG) user-img dev-img
 	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
 
 run-uefi: $(ISO_IMG) $(DATA_IMG)

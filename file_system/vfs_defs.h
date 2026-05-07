@@ -29,6 +29,7 @@
 #define EROFS        30   // read only filesystem
 #define ENOTEMPTY    39   // directory not empty (tried to rmdir non-empty dir)
 #define ENOTSUP      95   // operation not supported
+#define ENODEV       19   // no such device (no driver registered for inode's dev_id)
 #define ENOTTY       25   // inappropriate ioctl for file
 #define ELOOP        40   // too many levels of symlinks
 #define ENAMETOOLONG 36   // file name too long

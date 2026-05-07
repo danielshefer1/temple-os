@@ -124,6 +124,15 @@ int64_t SysSync(interrupt_frame_t* f) {
     return vfs_sync(vfs_root->inode->sb);
 }
 
+int64_t SysMknod(interrupt_frame_t* f) {
+    const char* path   = (const char*) f->rbx;
+    uint64_t    type   = (uint64_t)    f->rcx;
+    uint64_t    perm   = (uint64_t)    f->rdx;
+    uint32_t    dev_id = (uint32_t)    f->rsi;
+    if (path == NULL) return -EINVAL;
+    return vfs_mknod_path(path, type, perm, dev_id);
+}
+
 int64_t SysIoctl(interrupt_frame_t* f) {
     int64_t  fd  = (int64_t)  f->rbx;
     uint64_t cmd = (uint64_t) f->rcx;

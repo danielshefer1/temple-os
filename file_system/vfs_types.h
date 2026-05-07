@@ -25,6 +25,7 @@ typedef struct inode_t {
     uint64_t type;
     uint64_t size;
     uint64_t permissions;
+    uint32_t dev_id;          // valid for VFS_TYPE_CHARDEV/BLOCKDEV; encoded MKDEV(major, minor)
 
     struct inode_ops_t* ops;
     struct file_ops_t* file_ops;
@@ -108,6 +109,8 @@ typedef struct inode_ops_t {
     int64_t  (*rename)      (inode_t* old_dir, dentry_t* old_dentry,
                              inode_t* new_dir, dentry_t* new_dentry);
     int64_t (*hardlink)     (inode_t* dir, inode_t* existing_inode, dentry_t* dentry);
+    int64_t (*mknod)        (inode_t* dir, dentry_t* dentry, uint64_t type,
+                             uint64_t permissions, uint32_t dev_id);
 
     // symlink operations
     int64_t  (*symlink)     (inode_t* dir, dentry_t* dentry, const char* target);

@@ -2,6 +2,9 @@
 #include "cpu_local.h"
 #include "scheduler.h"
 #include "tty.h"
+#include "devfs.h"
+#include "mem_devs.h"
+#include "ram_block.h"
 
 void start() {
     SetGDT();
@@ -20,7 +23,10 @@ void start() {
     InitKernelBuddyAlloc(KERNEL_VIRT_TO_PHYS(GetCurrPrimitveAddr()), GB);
     VerifyKernelBuddyShadow();
 
+    devfs_init();
     tty_init(&console_tty);
+    mem_devs_init();
+    ram_block_init();
 
     InitRsdt();
     InitMadt();

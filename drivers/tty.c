@@ -7,6 +7,7 @@
 #include "signal.h"
 #include "extern.h"
 #include "defintions.h"
+#include "devfs.h"
 
 // One global console tty. Becomes /dev/tty once devfs lands; until then it
 // is reachable only via fd 0/1/2 which create_user_task wires up.
@@ -178,10 +179,18 @@ void tty_init(tty_t* tty) {
     tty->flags = TTY_FLAG_ICANON | TTY_FLAG_ECHO | TTY_FLAG_ISIG;
     tty->fops = &tty_fops;
 
-    // Stub inode shared by every tty file_t. Setting type != VFS_TYPE_DIR
-    // and leaving sb/ops NULL is fine — vfs_read/write/ioctl only consult
+    // Stub inode shared by every tty file_t opened via tty_open() (i.e.
+    // create_user_task fd 0/1/2 wiring). vfs_read/write/ioctl only consult
     // f->ops (= tty_fops) and reject the directory case.
     tty_stub_inode.type = VFS_TYPE_CHARDEV;
+
+    // Register with devfs so user code can also open the tty by path
+    // (e.g. open("/dev/tty", O_RDWR)). When opening that route, vfs_open
+    // looks up (4, 0) and uses these same fops, with token == &console_tty
+    // ending up in file_t.private_data — matching tty_open()'s convention.
+    if (tty == &console_tty) {
+        devfs_register_char(4, 0, &tty_fops, tty);
+    }
 }
 
 file_t* tty_open(tty_t* tty) {

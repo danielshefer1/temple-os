@@ -1,4 +1,5 @@
 #include "vfs.h"
+#include "devfs.h"
 
 // shared check for read/write payload args
 static int64_t check_io(file_t* f, const void* buf, uint64_t size) {
@@ -52,6 +53,29 @@ int64_t vfs_open(inode_t* in, file_t* f) {
     int64_t r = vfs_check_inode(in);
     if (r < 0) return r;
     if (f == NULL) return -EINVAL;
+
+    // Special files: dispatch through devfs. The on-disk inode's file_ops
+    // (from the underlying fs, e.g. ext2) doesn't know how to talk to a
+    // tty — we replace the per-inode fops with the registered driver's,
+    // and stash the driver's token so reads/writes have device context.
+    if (in->type == VFS_TYPE_CHARDEV || in->type == VFS_TYPE_BLOCKDEV) {
+        bool is_block = (in->type == VFS_TYPE_BLOCKDEV);
+        devfs_entry_t* dev = devfs_lookup(is_block, MAJOR(in->dev_id), MINOR(in->dev_id));
+        if (dev == NULL) return -ENODEV;
+
+        f->inode = in;
+        f->ops = dev->fops;
+        f->position = 0;
+        f->flags = 0;
+        f->mode = 0;
+        f->ref_count = 1;
+        f->private_data = dev->token;
+        // Driver-side open is optional; many character devices have no
+        // per-open state to initialize beyond what we just set.
+        if (dev->fops->open == NULL) return 0;
+        return dev->fops->open(in, f);
+    }
+
     if (in->file_ops == NULL) return -ENOTSUP;
 
     f->inode = in;

@@ -310,6 +310,13 @@ void PopulateInode(ext2_inode_disk_t* raw, inode_t* inode) {
 
     if (inode->type == VFS_TYPE_FILE)
         inode->size |= ((uint64_t)raw->i_dir_acl << 32);
+
+    // Linux stores the device id of a special file in i_block[0] using the
+    // "old" encoding: low byte = minor, next byte = major. We mirror that
+    // into inode->dev_id so vfs_open can route to the right driver.
+    if (inode->type == VFS_TYPE_CHARDEV || inode->type == VFS_TYPE_BLOCKDEV) {
+        inode->dev_id = raw->i_block[0] & 0xFFFFu;
+    }
 }
 
 /*

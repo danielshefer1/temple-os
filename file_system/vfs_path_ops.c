@@ -48,6 +48,16 @@ static int64_t op_create  (inode_t* dir, dentry_t* d, void* a) { return vfs_crea
 static int64_t op_mkdir   (inode_t* dir, dentry_t* d, void* a) { return vfs_mkdir (dir, d, *(uint64_t*)a); }
 static int64_t op_symlink (inode_t* dir, dentry_t* d, void* a) { return vfs_symlink(dir, d, (const char*)a); }
 
+typedef struct mknod_args {
+    uint64_t type;
+    uint64_t perm;
+    uint32_t dev_id;
+} mknod_args_t;
+static int64_t op_mknod   (inode_t* dir, dentry_t* d, void* a) {
+    mknod_args_t* m = (mknod_args_t*)a;
+    return vfs_mknod(dir, d, m->type, m->perm, m->dev_id);
+}
+
 // ---- public API ----
 
 int64_t vfs_create_path(const char* path, uint64_t perm) {
@@ -61,6 +71,12 @@ int64_t vfs_mkdir_path(const char* path, uint64_t perm) {
 int64_t vfs_symlink_path(const char* target, const char* linkpath) {
     if (target == NULL) return -EINVAL;
     return with_new_child(linkpath, op_symlink, (void*)target, NULL);
+}
+
+int64_t vfs_mknod_path(const char* path, uint64_t type,
+                       uint64_t perm, uint32_t dev_id) {
+    mknod_args_t args = { .type = type, .perm = perm, .dev_id = dev_id };
+    return with_new_child(path, op_mknod, &args, NULL);
 }
 
 int64_t vfs_unlink_path(const char* path) {

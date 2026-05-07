@@ -256,6 +256,26 @@ int64_t EXT2Create(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     return EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_FILE);
 }
 
+int64_t EXT2Mknod(inode_t* dir, dentry_t* dentry, uint64_t type,
+                  uint64_t permissions, uint32_t dev_id) {
+    if (type != VFS_TYPE_CHARDEV && type != VFS_TYPE_BLOCKDEV &&
+        type != VFS_TYPE_FIFO    && type != VFS_TYPE_SOCKET) {
+        return -EINVAL;
+    }
+
+    int64_t res = EXT2CreateGeneric(dir, dentry, permissions, type);
+    if (res < 0) return res;
+
+    // Stash the device id in i_block[0] using Linux's old encoding
+    // (low byte = minor, next byte = major) — the same format
+    // PopulateInode reads back. write_inode flushes it to disk.
+    ext2_inode_data_t* data = (ext2_inode_data_t*) dentry->inode->fs_specific;
+    data->i_block[0] = dev_id & 0xFFFFu;
+    dentry->inode->dev_id = dev_id;
+    dentry->inode->sb->ops->write_inode(dentry->inode);
+    return 0;
+}
+
 int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     int64_t res = EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_DIR);
     if (res < 0) return res;
@@ -553,6 +573,7 @@ inode_ops_t ext2_inode_ops = {
     .unlink   = EXT2Unlink,
     .rename   = EXT2Rename,
     .hardlink = EXT2HardLink,
+    .mknod    = EXT2Mknod,
     .symlink  = EXT2SymLink,
     .readlink = EXT2ReadLink,
     .getattr  = NULL,

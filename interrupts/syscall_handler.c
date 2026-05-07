@@ -46,6 +46,7 @@ void syscall_handler(interrupt_frame_t* frame) {
         case SIGRETURN_SYSCALL:    ret = SigreturnHandler(frame); break;
         case GETPID_SYSCALL:       ret = GetpidHandler(frame);    break;
         case WAITPID_SYSCALL:      ret = WaitpidHandler(frame);   break;
+        case MKNOD_SYSCALL:        ret = SysMknod(frame);         break;
 
         default:                   ret = UnknownSysCall();
     }

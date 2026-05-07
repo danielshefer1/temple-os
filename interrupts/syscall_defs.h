@@ -28,6 +28,7 @@
 #define SIGRETURN_SYSCALL  27
 #define GETPID_SYSCALL     28
 #define WAITPID_SYSCALL    29
+#define MKNOD_SYSCALL      30
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256
