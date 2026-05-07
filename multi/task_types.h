@@ -2,6 +2,23 @@
 #include "includes.h"
 #include "lock_types.h"
 #include "gdt_types.h"
+#include "syscall_defs.h"
+#include "signal_defs.h"
+
+// Forward declaration so we can hold pointers to file_t without dragging
+// the full vfs_types.h into the task struct (vfs_types.h is included
+// later in util/types.h after this header).
+struct file_t;
+
+typedef struct fd_entry_t {
+    struct file_t* file;
+    uint32_t flags;
+} fd_entry_t;
+
+typedef struct sigaction_t {
+    void* handler;     // SIG_DFL, SIG_IGN, or a user-space function pointer
+    void* restorer;    // user-space trampoline that calls SYS_SIGRETURN
+} sigaction_t;
 
 typedef struct run_queue_t {
     struct task_t* head;
@@ -57,4 +74,13 @@ typedef struct task_t {
     char name[32];
     uint32_t home_cpu;         // CPU index whose run queue owns this task
     uint8_t fxstate[512] __attribute__((aligned(16)));
+    fd_entry_t fds[FD_MAX];    // per-task open file table (zeroed on alloc)
+    uint64_t pending_signals;  // bit (signo - 1) set => signal pending
+    sigaction_t signal_actions[NSIG];
+
+    // Process tree / wait support.
+    struct task_t* parent;     // task that fork()ed this one; NULL for orphans/kernel
+    uint64_t wait_target;      // when state==BLOCKED for waitpid: 0=any child, else PID
+    uint64_t exit_code;        // set by task_exit; readable by waitpid
+    struct task_t* zombie_next;// link in the global zombie list
 } task_t;

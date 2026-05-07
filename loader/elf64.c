@@ -227,6 +227,7 @@ int64_t load_elf64(const char* path, elf64_image_t* out) {
     return 0;
 
 fail:
+    free_user_address_space(cr3_phys);
     free_cloned_pml4(cr3_phys);
     FreeBuddy(scratch_phys, false);
     kfree(ph, ph_bytes);

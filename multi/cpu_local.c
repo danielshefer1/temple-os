@@ -67,9 +67,17 @@ void cpu_init_late(uint32_t idx) {
 
     // Program SYSCALL/SYSRET MSRs.
     wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_SCE);
+    // STAR layout: [47:32] = SYSCALL kernel base, [63:48] = SYSRET user base.
+    // SYSCALL sets CS = base, SS = base+8. SYSRET sets CS = base+16, SS = base+8.
+    // Intel does NOT force RPL=3 into the SYSRET CS/SS values — they're the
+    // raw arithmetic result. So the user base must already have RPL bits set
+    // so that +8 = 0x1B (user SS, RPL=3) and +16 = 0x23 (user CS, RPL=3).
+    // Without this, user code runs with SS=0x18 (RPL=0), which works for
+    // memory access but causes iretq to GPF the first time an IRQ fires
+    // during user execution and tries to return to ring 3 with SS RPL=0.
     wrmsr(IA32_STAR,
-          ((uint64_t)KERNEL_CS_SEL << 32) |   // SYSCALL: CS=0x08, SS=0x10
-          ((uint64_t)KERNEL_DS_SEL << 48));   // SYSRET base: SS=0x1B, CS=0x23
+          ((uint64_t)KERNEL_CS_SEL << 32) |        // SYSCALL: CS=0x08, SS=0x10
+          ((uint64_t)(KERNEL_DS_SEL | 3) << 48));  // SYSRET: CS=0x23, SS=0x1B
     wrmsr(IA32_LSTAR, (uint64_t)&syscall_entry);
     wrmsr(IA32_FMASK, RFLAGS_IF | RFLAGS_DF);
 

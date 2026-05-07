@@ -96,7 +96,7 @@ void ExecptionHandler(interrupt_frame_t* frame) {
                c ? (uint64_t)c->cpu_index : (uint64_t)-1,
                frame->int_no, frame->rip,
                (c && c->current) ? c->current->name : "?");
-        task_exit();
+        task_exit(128 + frame->int_no);  // SysV-ish: exit code = 128 + signal-equivalent
     }
     // Kernel-mode fault: kernel state is suspect, halt this CPU. Calling end()
     // would unmount the root FS and recursively fault, clobbering the printout.

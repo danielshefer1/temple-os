@@ -88,6 +88,12 @@ syscall_entry:
     mov rdi, rsp
     call syscall_handler
 
+; A forked child is woken here by context_switch, with a synthesized frame
+; placed on its kstack by do_fork. From this label down, the path is the
+; same as a normal syscall return — POPAQ + SYSRET — so the child resumes
+; in user mode at the parent's RIP with rax=0.
+global fork_child_return
+fork_child_return:
     add rsp, 16                             ; skip saved gs, fs (long mode: don't touch segregs)
     POPAQ
     add rsp, 16                             ; drop int_no + err_code

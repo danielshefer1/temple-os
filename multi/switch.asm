@@ -57,6 +57,7 @@ global task_entry_trampoline
 task_entry_trampoline:
     sti
     call r12
+    xor edi, edi          ; exit_code = 0 when entry function returns naturally
     call task_exit
 .halt:
     cli

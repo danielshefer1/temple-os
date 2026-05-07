@@ -1,6 +1,7 @@
 #include "irq_handler.h"
 #include "scheduler.h"
 #include "paging.h"
+#include "signal.h"
 
 static const char kbd_us[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
@@ -49,21 +50,21 @@ void irq_handler(interrupt_frame_t* frame) {
     lapic[0xB0 / 4] = 0;
 
     switch (frame->int_no) {
-        case 32:
-            TimerHandler();
-            return;
-        case 33:
-            KeyboardHandler();
-            return;
-        case 64:
-            AhciHandler();
-            return;
-        case 65:
-            TlbShootdownHandler();
-            return;
+        case 32: TimerHandler();         break;
+        case 33: KeyboardHandler();      break;
+        case 64: AhciHandler();          break;
+        case 65: TlbShootdownHandler();  break;
         default:
             kprintf("Unkown Interrupt just fired, interrupt number: %d\n", frame->int_no);
+            break;
     }
+
+    // Deliver any pending signal before IRETing back to user. signal_deliver
+    // is a no-op when frame->cs != 0x23 (i.e. we interrupted kernel mode),
+    // so this is safe regardless of where the IRQ landed. With this hook a
+    // CPU-bound user task with no syscalls still picks up signals on the
+    // next timer tick (~1 ms).
+    signal_deliver_on_return(frame);
 }
 
 void TimerHandler() {

@@ -8,7 +8,43 @@
 #include "global.h"
 #include "defintions.h"
 #include "slab_alloc.h"
+#include "vfs_file.h"
+#include "pml4_clone.h"
 #include <stddef.h>
+
+// ---- Global zombie list -------------------------------------------------
+// Tasks that have called task_exit but haven't been claimed by waitpid live
+// here, keyed by their parent pointer. Orphan tasks (parent == NULL) are
+// freed immediately by drain_pending_reap and never enter this list.
+static task_t* zombie_list_head = NULL;
+static spinlock_t zombie_list_lock = {0};
+
+static void zombie_list_add(task_t* t) {
+    spin_lock(&zombie_list_lock);
+    t->zombie_next = zombie_list_head;
+    zombie_list_head = t;
+    spin_unlock(&zombie_list_lock);
+}
+
+task_t* zombie_list_take(task_t* parent, uint64_t target_pid) {
+    spin_lock(&zombie_list_lock);
+    task_t** link = &zombie_list_head;
+    task_t* t = zombie_list_head;
+    while (t) {
+        int parent_ok = (t->parent == parent);
+        int pid_ok    = (target_pid == 0) || (t->pid == target_pid);
+        if (parent_ok && pid_ok) {
+            *link = t->zombie_next;
+            t->zombie_next = NULL;
+            spin_unlock(&zombie_list_lock);
+            return t;
+        }
+        link = &t->zombie_next;
+        t = t->zombie_next;
+    }
+    spin_unlock(&zombie_list_lock);
+    return NULL;
+}
 
 #define DEFAULT_TIME_SLICE 20   // ticks (1 ms each) — 20 ms quantum
 
@@ -73,6 +109,26 @@ static void rq_enqueue(run_queue_t* rq, task_t* t) {
 
 void rq_enqueue_external(task_t* t) {
     rq_enqueue(rq_for_task(t), t);
+}
+
+task_t* task_for_pid(uint64_t pid) {
+    uint64_t online = cpus_active ? cpus_active : 1;
+    for (uint64_t i = 0; i < online; i++) {
+        cpu_local_t* cpu = &cpu_locals[i];
+        task_t* cur = cpu->current;
+        if (cur && cur->pid == pid) return cur;
+
+        run_queue_t* rq = &cpu->rq;
+        spin_lock(&rq->lock);
+        for (task_t* t = rq->head; t; t = t->next) {
+            if (t->pid == pid) {
+                spin_unlock(&rq->lock);
+                return t;
+            }
+        }
+        spin_unlock(&rq->lock);
+    }
+    return NULL;
 }
 
 void SchedulerInit(void) {
@@ -148,17 +204,51 @@ void scheduler_attach_bootstrap(const char* name) {
     this_cpu()->current = t;
 }
 
-// Free a zombie left behind by a previous context_switch on this CPU. Safe
-// to call now because context_switch has long since moved off the zombie's
-// stack — we're running on some other task's stack at this point.
-static void drain_pending_reap(cpu_local_t* cpu) {
-    task_t* dead = cpu->pending_reap;
+void free_dead_task(task_t* dead) {
     if (!dead) return;
-    cpu->pending_reap = NULL;
+
+    // Close any fds the dying task still held open. Refcount decrement may
+    // free the underlying file_t when this was the last referencer.
+    for (int64_t i = 0; i < FD_MAX; i++) {
+        if (dead->fds[i].file != NULL) {
+            vfs_file_put(dead->fds[i].file);
+            dead->fds[i].file = NULL;
+        }
+    }
+
+    // Free the user address space if this task had its own PML4. Kernel
+    // tasks share the global pml4 (cr3 == phys of pml4) — never free that.
+    uint64_t global_cr3 = KERNEL_VIRT_TO_PHYS(PageDirAddrV());
+    if (dead->cr3 != global_cr3) {
+        free_user_address_space(dead->cr3);
+        free_cloned_pml4(dead->cr3);
+    }
+
     if (dead->kstack_pages) {
         RemoveKernelPages(dead->kstack_base, dead->kstack_pages);
     }
     kfree(dead, sizeof(task_t));
+}
+
+// Free a zombie left behind by a previous context_switch on this CPU. Safe
+// to call now because context_switch has long since moved off the zombie's
+// stack — we're running on some other task's stack at this point.
+//
+// If the zombie has a live parent, it is held on the global zombie list by
+// task_exit so the parent's waitpid can claim it; this function only fully
+// reaps tasks that have no live waiter — kernel tasks (parent == NULL),
+// orphans whose parent already died, etc.
+static void drain_pending_reap(cpu_local_t* cpu) {
+    task_t* dead = cpu->pending_reap;
+    if (!dead) return;
+    cpu->pending_reap = NULL;
+
+    // If a parent is still alive, leave the corpse on the zombie list for
+    // waitpid. task_exit already enqueued it.
+    if (dead->parent != NULL && dead->parent->state != TASK_STATE_ZOMBIE) {
+        return;
+    }
+    free_dead_task(dead);
 }
 
 void schedule(void) {
@@ -249,15 +339,86 @@ picked:;
     if (ie) StiHelper();
 }
 
-void task_exit(void) {
+void task_exit(uint64_t exit_code) {
     CliHelper();
     cpu_local_t* cpu = this_cpu();
     task_t* cur = cpu->current;
+    cur->exit_code = exit_code;
+
+    // Detach any of our children: their parent is about to be freed (or at
+    // least become a zombie), so null their parent pointer to avoid
+    // use-after-free in waitpid lookups. We walk every CPU's run queue,
+    // current task, plus the zombie list. Tasks we orphan this way will
+    // be auto-reaped by drain_pending_reap (parent==NULL → orphan path).
+    uint64_t online = cpus_active ? cpus_active : 1;
+    for (uint64_t i = 0; i < online; i++) {
+        cpu_local_t* c = &cpu_locals[i];
+        task_t* run = c->current;
+        if (run && run->parent == cur) run->parent = NULL;
+        run_queue_t* rq = &c->rq;
+        spin_lock(&rq->lock);
+        for (task_t* t = rq->head; t; t = t->next) {
+            if (t->parent == cur) t->parent = NULL;
+        }
+        spin_unlock(&rq->lock);
+    }
+    spin_lock(&zombie_list_lock);
+    for (task_t* t = zombie_list_head; t; t = t->zombie_next) {
+        if (t->parent == cur) t->parent = NULL;
+    }
+    spin_unlock(&zombie_list_lock);
+
     cur->state = TASK_STATE_ZOMBIE;
+
+    // If we have a parent, hand ourselves to it via the zombie list and
+    // wake it if it's blocked on a matching waitpid. Orphans don't need
+    // the list — drain_pending_reap will free them outright.
+    if (cur->parent != NULL && cur->parent->state != TASK_STATE_ZOMBIE) {
+        zombie_list_add(cur);
+        task_t* p = cur->parent;
+        if (p->state == TASK_STATE_BLOCKED &&
+            (p->wait_target == 0 || p->wait_target == cur->pid)) {
+            p->state = TASK_STATE_READY;
+            rq_enqueue_external(p);
+        }
+    }
+
     schedule();
     // schedule() must not return — there is always at least the idle task
     // available. Belt-and-suspenders halt in case something goes wrong.
     while (true) HltHelper();
+}
+
+int task_has_children(task_t* parent, uint64_t target_pid) {
+    uint64_t online = cpus_active ? cpus_active : 1;
+    for (uint64_t i = 0; i < online; i++) {
+        cpu_local_t* c = &cpu_locals[i];
+        task_t* run = c->current;
+        if (run && run->parent == parent &&
+            (target_pid == 0 || run->pid == target_pid)) {
+            return 1;
+        }
+        run_queue_t* rq = &c->rq;
+        spin_lock(&rq->lock);
+        for (task_t* t = rq->head; t; t = t->next) {
+            if (t->parent == parent &&
+                (target_pid == 0 || t->pid == target_pid)) {
+                spin_unlock(&rq->lock);
+                return 1;
+            }
+        }
+        spin_unlock(&rq->lock);
+    }
+    spin_lock(&zombie_list_lock);
+    for (task_t* t = zombie_list_head; t; t = t->zombie_next) {
+        if (t->parent == parent &&
+            (target_pid == 0 || t->pid == target_pid)) {
+            spin_unlock(&zombie_list_lock);
+            return 1;
+        }
+    }
+    spin_unlock(&zombie_list_lock);
+    return 0;
 }
 
 void scheduler_tick(void) {

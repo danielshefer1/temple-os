@@ -21,8 +21,16 @@
 #define SYNC_SYSCALL       20
 #define IOCTL_SYSCALL      21
 #define EXEC_SYSCALL       22
+#define SPAWN_SYSCALL      23
+#define FORK_SYSCALL       24
+#define KILL_SYSCALL       25
+#define SIGNAL_SYSCALL     26
+#define SIGRETURN_SYSCALL  27
+#define GETPID_SYSCALL     28
+#define WAITPID_SYSCALL    29
 
 #define FD_MAX             64
+#define EXEC_PATH_MAX      256
 
 #define STDIN_FILENO   0
 #define STDOUT_FILENO  1

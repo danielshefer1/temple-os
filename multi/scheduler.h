@@ -30,7 +30,22 @@ void scheduler_tick(void);
 // the next schedule() call on this CPU, and switches to the next runnable
 // task. Never returns. Tasks reach this implicitly when their entry function
 // returns (via task_entry_trampoline) or by calling it directly.
-void task_exit(void) __attribute__((noreturn));
+void task_exit(uint64_t exit_code) __attribute__((noreturn));
+
+// Pop the first matching zombie child of `parent` from the global zombie
+// list. `target_pid == 0` matches any child; otherwise the zombie's PID
+// must match exactly. Returns NULL if no match.
+struct task_t* zombie_list_take(struct task_t* parent, uint64_t target_pid);
+
+// Returns 1 if `parent` has any task somewhere with t->parent == parent
+// (running, ready, blocked, or zombie). Used by waitpid to short-circuit
+// to -ECHILD when there's nothing to wait on.
+int task_has_children(struct task_t* parent, uint64_t target_pid);
+
+// Free a fully-dead task: closes fds, frees user address space (for tasks
+// with their own PML4), releases kernel stack, kfrees the task_t. Caller
+// guarantees the task is no longer running on any CPU.
+void free_dead_task(struct task_t* dead);
 
 // Bootstrap: registers the currently executing kmain/ap_kmain context as
 // the per-CPU `current` task and creates a per-CPU idle task. Call once
@@ -44,3 +59,8 @@ extern void task_entry_trampoline(void);
 // Allocate a zeroed task with PID, fxstate template, kernel stack, and home_cpu
 // filled in. Used by both create_kernel_task and create_user_task.
 task_t* alloc_blank_task(const char* name);
+
+// Find the task with the given PID across all CPUs. Walks each CPU's
+// `current` and run queue. Returns NULL if no such task exists.
+// Snapshot semantics — the returned task may already be exiting.
+task_t* task_for_pid(uint64_t pid);

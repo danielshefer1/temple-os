@@ -23,7 +23,6 @@ int64_t SysOpen(interrupt_frame_t* f) {
 
 int64_t SysClose(interrupt_frame_t* f) {
     int64_t fd = (int64_t) f->rbx;
-    if (fd >= STDIN_FILENO && fd <= STDERR_FILENO) return 0;
     file_t* fp = fd_release(fd);
     if (fp == NULL) return -EBADF;
     vfs_file_put(fp);
