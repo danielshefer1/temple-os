@@ -1,9 +1,5 @@
 #include "global.h"
 
-input_buffer_t console_buffer;
-timed_key_t keyboard_buffer[CONSOLE_BUFFER_SIZE];
-
-volatile bool shift_pressed = false;
 volatile bool pit_timer_fired;
 uint64_t timer_ticks[UINT8_MAX];
 volatile uint32_t* lapic;

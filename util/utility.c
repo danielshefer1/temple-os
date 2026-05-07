@@ -1,6 +1,7 @@
 #include "utility.h"
 #include "cpu_local.h"
 #include "scheduler.h"
+#include "tty.h"
 
 void start() {
     SetGDT();
@@ -19,7 +20,7 @@ void start() {
     InitKernelBuddyAlloc(KERNEL_VIRT_TO_PHYS(GetCurrPrimitveAddr()), GB);
     VerifyKernelBuddyShadow();
 
-    InitConsoleBuffer();
+    tty_init(&console_tty);
 
     InitRsdt();
     InitMadt();

@@ -76,8 +76,11 @@ int64_t UnknownSysCall() {
 }
 
 int64_t FlushBufferHandler() {
-    FlushBuffer(&console_buffer);
-    return 1;
+    // Legacy syscall: previously cleared the unsynchronized global keyboard
+    // ring. With per-task tty fds the ring lives inside the tty and is
+    // drained by tty_read; nothing to flush here. Kept as a no-op so the
+    // syscall number stays stable.
+    return 0;
 }
 
 int64_t ExitHandler(interrupt_frame_t* frame) {

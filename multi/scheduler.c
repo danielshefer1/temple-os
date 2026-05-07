@@ -10,6 +10,7 @@
 #include "slab_alloc.h"
 #include "vfs_file.h"
 #include "pml4_clone.h"
+#include "tty.h"
 #include <stddef.h>
 
 // ---- Global zombie list -------------------------------------------------
@@ -207,6 +208,11 @@ void scheduler_attach_bootstrap(const char* name) {
 void free_dead_task(task_t* dead) {
     if (!dead) return;
 
+    // If this task was the tty's foreground (Ctrl+C target), clear the
+    // pointer so signal_send doesn't dereference freed memory next time
+    // someone hits Ctrl+C.
+    tty_drop_task(dead);
+
     // Close any fds the dying task still held open. Refcount decrement may
     // free the underlying file_t when this was the last referencer.
     for (int64_t i = 0; i < FD_MAX; i++) {
@@ -329,7 +335,13 @@ picked:;
     // If prev is exiting, hand it to this CPU's reap slot. The next
     // schedule() call on whichever CPU resumes will free it — by then
     // context_switch has already moved off prev's kernel stack.
-    if (prev && prev->state == TASK_STATE_ZOMBIE) {
+    //
+    // Only orphans / kernel tasks (parent == NULL) take this path. A zombie
+    // with a live parent has already been linked into the global zombie
+    // list by task_exit; the parent's waitpid is responsible for freeing
+    // it. Putting it on pending_reap as well would race waitpid: drain
+    // would later deref a task_t that waitpid had already kfreed.
+    if (prev && prev->state == TASK_STATE_ZOMBIE && prev->parent == NULL) {
         cpu->pending_reap = prev;
     }
 

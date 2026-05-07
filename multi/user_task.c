@@ -2,6 +2,8 @@
 #include "scheduler.h"
 #include "string.h"
 #include "defintions.h"
+#include "tty.h"
+#include "vfs_file.h"
 
 task_t* create_user_task(const elf64_image_t* img, const char* name) {
     task_t* t = alloc_blank_task(name);
@@ -30,6 +32,20 @@ task_t* create_user_task(const elf64_image_t* img, const char* name) {
     *--sp = 0;                    // r14
     *--sp = 0;                    // r15
     t->saved_rsp = (uint64_t)sp;
+
+    // Wire up stdin/stdout/stderr to the global console tty. The three
+    // slots each hold a refcounted reference to the same file_t — closing
+    // any one of them is independent.
+    file_t* tty_f = tty_open(&console_tty);
+    if (tty_f) {
+        t->fds[0].file = tty_f;
+        t->fds[1].file = tty_f; vfs_file_get(tty_f);
+        t->fds[2].file = tty_f; vfs_file_get(tty_f);
+    }
+
+    // Newest user task becomes foreground for Ctrl+C delivery. Crude but
+    // sufficient until job-control / process groups exist.
+    console_tty.foreground = t;
 
     rq_enqueue_external(t);
     return t;

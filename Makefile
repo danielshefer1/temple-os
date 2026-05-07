@@ -42,7 +42,7 @@ QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = drivers/E820.c drivers/vga.c init/kernel.c init/limine_entry.c \
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c init/kernel.c init/limine_entry.c \
                 allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
                 wrappers/keyboard.c util/global.c util/string.c interrupts/syscall_handler.c \

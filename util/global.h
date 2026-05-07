@@ -4,9 +4,6 @@
 #include "defintions.h"
 #include "types.h"
 
-extern input_buffer_t console_buffer;
-extern timed_key_t keyboard_buffer[CONSOLE_BUFFER_SIZE];
-extern volatile bool shift_pressed;
 extern volatile bool pit_timer_fired;
 extern uint64_t timer_ticks[UINT8_MAX];
 extern volatile uint32_t* lapic;

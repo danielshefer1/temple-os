@@ -2,6 +2,7 @@
 #include "scheduler.h"
 #include "paging.h"
 #include "signal.h"
+#include "tty.h"
 
 static const char kbd_us[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
@@ -80,20 +81,26 @@ void KeyboardHandler() {
     char c = kbd_us[presscode];
 
     if  (presscode == LEFT_SHIFT_MAKE_SCANCODE || presscode == RIGHT_SHIFT_MAKE_SCANCODE) {
-        shift_pressed = !is_release;
+        console_tty.shift_pressed = !is_release;
         return;
     }
     if (c == 0) return;
 
     if (!is_release) {
-        if (shift_pressed) {
+        if (c == 'Q' || (console_tty.shift_pressed && c == 'q')) {
+            // Preserve the legacy Shift+Q shutdown shortcut handled by the
+            // old PushKeyboardBuffer path. With the tty in cooked mode the
+            // byte would otherwise wait for a newline.
+            Shutdown();
+        }
+        if (console_tty.shift_pressed) {
             if (c <= 'z' && c >= 'a') c -= 32;
             else {
                 uint8_t special_idx = c - 48;
                 c = special_chars[special_idx];
             }
         }
-        PushKeyboardBuffer(&console_buffer, c);
+        tty_input_byte(&console_tty, c);
     }
 }
 

@@ -34,13 +34,6 @@ int64_t SysFRead(interrupt_frame_t* f) {
     void*    buf  = (void*)   f->rcx;
     uint64_t size = (uint64_t)f->rdx;
 
-    if (fd == STDIN_FILENO) {
-        if (buf == NULL && size > 0) return -EINVAL;
-        tuple_t newline_triggers = { '\n', '\n' };
-        return (int64_t) GetInputUntilKey(&console_buffer, (char*)buf, size,
-                                          KEYBOARD_MS_BACK, &newline_triggers);
-    }
-
     file_t* fp = fd_lookup(fd);
     if (fp == NULL) return -EBADF;
     if (buf == NULL && size > 0) return -EINVAL;
@@ -51,11 +44,6 @@ int64_t SysFWrite(interrupt_frame_t* f) {
     int64_t      fd   = (int64_t)    f->rbx;
     const void*  buf  = (const void*)f->rcx;
     uint64_t     size = (uint64_t)   f->rdx;
-
-    if (fd == STDOUT_FILENO || fd == STDERR_FILENO) {
-        if (buf == NULL && size > 0) return -EINVAL;
-        return (int64_t) print_str_SYSCALL((const char*)buf, GREY_COLOR, size);
-    }
 
     file_t* fp = fd_lookup(fd);
     if (fp == NULL) return -EBADF;
