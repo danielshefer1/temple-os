@@ -28,3 +28,6 @@ int64_t GetpidHandler(interrupt_frame_t* frame);
 int64_t SleepHandler(interrupt_frame_t* frame);
 int64_t SetpgidHandler(interrupt_frame_t* frame);
 int64_t GetpgidHandler(interrupt_frame_t* frame);
+int64_t PipeHandler(interrupt_frame_t* frame);
+int64_t DupHandler(interrupt_frame_t* frame);
+int64_t Dup2Handler(interrupt_frame_t* frame);

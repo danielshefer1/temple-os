@@ -149,7 +149,7 @@ int64_t vfs_open_path(const char* path, uint32_t flags, uint64_t mode,
     file_t* f = vfs_file_alloc();
     if (f == NULL) return -ENOMEM;
 
-    r = vfs_open(d->inode, f);
+    r = vfs_open(d->inode, f, flags);
     if (r < 0) {
         kfree(f, sizeof(file_t));
         return r;

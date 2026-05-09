@@ -3,6 +3,8 @@
 #include "lock_types.h"
 #include "block_device_types.h"
 
+struct pipe_t;
+
 typedef struct superblock_t {
     uint64_t magic;
     uint64_t block_size;
@@ -33,6 +35,11 @@ typedef struct inode_t {
 
     char* syslink_name;
     superblock_t* sb;
+
+    // For VFS_TYPE_FIFO inodes: lazily-allocated kernel pipe_t shared by
+    // every open file_t referencing this inode. NULL otherwise. Initialised
+    // and torn down by file_system/pipe.c.
+    struct pipe_t* pipe;
 
     mutex_t mutex;
 } inode_t;

@@ -1,4 +1,5 @@
 #include "syscall_inline.h"
+#include "sys/wait.h"
 
 static const char start_m[]  = "starting\n";
 static const char child_m[]  = "child running\n";
@@ -190,7 +191,7 @@ void _start(void) {
             }
             unsigned long status = 0;
             sys_waitpid(pid, &status);
-            if (status != 42) good = 0;
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 42) good = 0;
             if (good && p[0] != (char)(7 & 0xFF)) good = 0;
             if (sys_munmap(p, sz) != 0) good = 0;
         }
@@ -219,6 +220,151 @@ void _start(void) {
     sys_write(STDOUT_FILENO, "sleep start\n", 12);
     sys_sleep(500);
     sys_write(STDOUT_FILENO, "sleep done\n", 11);
+
+    // ---- M8 PR A tests ----
+
+    // Test 1: anonymous pipe + fork. Child writes 3 bytes; parent reads them.
+    {
+        static const char ok[]   = "pipe ok\n";
+        static const char fail[] = "pipe FAIL\n";
+        int fds[2] = { -1, -1 };
+        long pr = sys_pipe(fds);
+        int good = (pr == 0 && fds[0] >= 3 && fds[1] >= 3);
+        if (good) {
+            long pid = sys_fork();
+            if (pid == 0) {
+                sys_close(fds[0]);
+                sys_write(fds[1], "abc", 3);
+                sys_close(fds[1]);
+                sys_exit(0);
+            }
+            sys_close(fds[1]);
+            char b[8] = {0};
+            long r = sys_read_for_test_(fds[0], b, sizeof(b));
+            sys_close(fds[0]);
+            unsigned long st = 0;
+            sys_waitpid(pid, &st);
+            if (!(r == 3 && b[0] == 'a' && b[1] == 'b' && b[2] == 'c')) good = 0;
+        }
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 2: dup2-based stdout redirection. Child dup2(fds[1], 1) and
+    // writes via fd 1; parent reads from fds[0].
+    {
+        static const char ok[]   = "dup2 ok\n";
+        static const char fail[] = "dup2 FAIL\n";
+        int fds[2] = { -1, -1 };
+        long pr = sys_pipe(fds);
+        int good = (pr == 0);
+        if (good) {
+            long pid = sys_fork();
+            if (pid == 0) {
+                sys_close(fds[0]);
+                sys_dup2(fds[1], 1);
+                sys_close(fds[1]);
+                sys_write(1, "via stdout\n", 11);
+                sys_exit(0);
+            }
+            sys_close(fds[1]);
+            char b[16] = {0};
+            long r = sys_read_for_test_(fds[0], b, sizeof(b));
+            sys_close(fds[0]);
+            unsigned long st = 0;
+            sys_waitpid(pid, &st);
+            if (r != 11) good = 0;
+            const char* exp = "via stdout\n";
+            for (int i = 0; good && i < 11; i++) if (b[i] != exp[i]) good = 0;
+        }
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 3: FIFO. Create /myfifo (the data fs has no /tmp), fork two
+    // children — reader and writer — and assert end-to-end transfer.
+    {
+        static const char ok[]   = "fifo ok\n";
+        static const char fail[] = "fifo FAIL\n";
+        sys_unlink_for_test_("/myfifo");
+        long mr = sys_mknod("/myfifo", S_IFIFO_T, 0666, 0);
+        int good = (mr == 0);
+        unsigned long ws = 0, rs = 0;
+        if (good) {
+            long wpid = sys_fork();
+            if (wpid == 0) {
+                long fd = sys_open("/myfifo", O_WRONLY, 0);
+                long w = (fd >= 0) ? sys_write(fd, "hello", 5) : fd;
+                if (fd >= 0) sys_close(fd);
+                sys_exit((fd >= 0 && w == 5) ? 0 : (long)(-fd));
+            }
+            long rpid = sys_fork();
+            if (rpid == 0) {
+                long fd = sys_open("/myfifo", O_RDONLY, 0);
+                char b[8] = {0};
+                long n = (fd >= 0) ? sys_read_for_test_(fd, b, 5) : -1;
+                if (fd >= 0) sys_close(fd);
+                int rc = (n == 5 && b[0] == 'h' && b[4] == 'o') ? 0 : 99;
+                sys_exit(rc);
+            }
+            sys_waitpid(wpid, &ws);
+            sys_waitpid(rpid, &rs);
+            if (!(WIFEXITED(ws) && WEXITSTATUS(ws) == 0 &&
+                  WIFEXITED(rs) && WEXITSTATUS(rs) == 0)) good = 0;
+        }
+        sys_unlink_for_test_("/myfifo");
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+        (void)mr; (void)ws; (void)rs;
+    }
+
+    // Test 4: wait status macros. Two children — one killed by SIGINT
+    // (default action: terminate), one cleanly exit(7).
+    {
+        static const char ok[]   = "wait macros ok\n";
+        static const char fail[] = "wait macros FAIL\n";
+        int good = 1;
+
+        long pid = sys_fork();
+        if (pid == 0) {
+            // Tight syscall loop so SIGINT is delivered on return-to-user.
+            for (;;) (void)sys_getpid();
+        }
+        sys_kill(pid, SIGINT);
+        unsigned long st = 0;
+        sys_waitpid(pid, &st);
+        if (!(WIFSIGNALED(st) && WTERMSIG(st) == SIGINT)) good = 0;
+
+        long pid2 = sys_fork();
+        if (pid2 == 0) sys_exit(7);
+        unsigned long st2 = 0;
+        sys_waitpid(pid2, &st2);
+        if (!(WIFEXITED(st2) && WEXITSTATUS(st2) == 7)) good = 0;
+
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 5: TIOCGWINSZ on stdin (the tty). Just sanity-check that the
+    // call succeeds and returns non-zero geometry.
+    {
+        static const char ok[]   = "winsize ok ";
+        static const char fail[] = "winsize FAIL\n";
+        winsize_t ws = {0};
+        long r = sys_ioctl(0, TIOCGWINSZ, &ws);
+        int good = (r == 0 && ws.ws_col != 0 && ws.ws_row != 0);
+        if (good) {
+            sys_write(STDOUT_FILENO, ok, my_strlen(ok));
+            char b[24];
+            unsigned long n;
+            n = itoa10(ws.ws_col, b); b[n-1] = 'x';   // overwrite the trailing '\n'
+            sys_write(STDOUT_FILENO, b, n);
+            n = itoa10(ws.ws_row, b);
+            sys_write(STDOUT_FILENO, b, n);
+        } else {
+            sys_write(STDOUT_FILENO, fail, my_strlen(fail));
+        }
+    }
 
     sys_exit(0);
 }

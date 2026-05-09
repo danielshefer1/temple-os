@@ -8,6 +8,8 @@
 #include "extern.h"
 #include "defintions.h"
 #include "devfs.h"
+#include "fb_console.h"
+#include "global.h"
 
 // One global console tty. Becomes /dev/tty once devfs lands; until then it
 // is reachable only via fd 0/1/2 which create_user_task wires up.
@@ -153,6 +155,17 @@ static int64_t tty_ioctl(file_t* f, uint64_t cmd, void* arg) {
         case TTY_IOCTL_TIOCGPGRP:
             if (arg) *(uint64_t*)arg = tty->pgrp;
             break;
+        case TTY_IOCTL_TIOCGWINSZ: {
+            if (!arg) { r = -EINVAL; break; }
+            uint64_t cols = 0, rows = 0;
+            fb_console_geometry(&cols, &rows);
+            winsize_t* ws = (winsize_t*)arg;
+            ws->ws_row    = (uint16_t)rows;
+            ws->ws_col    = (uint16_t)cols;
+            ws->ws_xpixel = (uint16_t)fb_info.width;
+            ws->ws_ypixel = (uint16_t)fb_info.height;
+            break;
+        }
         default:
             r = -ENOTTY;
             break;

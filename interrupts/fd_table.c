@@ -2,6 +2,7 @@
 #include "defintions.h"
 #include "cpu_local.h"
 #include "scheduler.h"
+#include "vfs_file.h"
 
 // Each task carries its own fd_entry_t fds[FD_MAX] array (see task_types.h).
 // These accessors operate on the currently running task's array, so the
@@ -34,6 +35,21 @@ int64_t fd_alloc(file_t* f) {
 file_t* fd_lookup(int64_t fd) {
     if (valid_fd(fd) < 0) return NULL;
     return current_fds()[fd].file;
+}
+
+int64_t fd_alloc_at(file_t* f, int64_t fd) {
+    if (f == NULL) return -EINVAL;
+    if (valid_fd(fd) < 0) return -EBADF;
+    fd_entry_t* fds = current_fds();
+    file_t* prev = fds[fd].file;
+    if (prev != NULL) {
+        // Drop the previous occupant. vfs_file_put closes on the last ref.
+        fds[fd].file = NULL;
+        vfs_file_put(prev);
+    }
+    fds[fd].file = f;
+    fds[fd].flags = 0;
+    return fd;
 }
 
 file_t* fd_release(int64_t fd) {

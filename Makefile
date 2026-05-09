@@ -55,7 +55,7 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/fb.c drivers/fb_console.c d
                 file_system/ext2_helpers.c file_system/ext2_file_ops.c \
                 file_system/vfs_sb.c file_system/vfs_inode.c file_system/vfs_file.c \
                 file_system/vfs_dentry.c file_system/vfs_mount.c file_system/vfs_path.c \
-                file_system/vfs_path_ops.c \
+                file_system/vfs_path_ops.c file_system/pipe.c \
                 interrupts/fd_table.c interrupts/vfs_syscalls.c \
                 multi/cpu_local.c init/user_launch.c multi/scheduler.c multi/mutex.c \
                 paging/pml4_clone.c loader/elf64.c multi/user_task.c \
@@ -91,7 +91,7 @@ $(DATA_IMG):
 $(USER_DIR):
 	@mkdir -p $@
 
-$(USER_HELLO): user/hello.c user/syscall_inline.h user/hello_linker.ld | $(USER_DIR)
+$(USER_HELLO): user/hello.c user/syscall_inline.h user/sys/wait.h user/hello_linker.ld | $(USER_DIR)
 	@echo "[USER] Building $@"
 	@$(CC64) $(USER_CFLAGS) -c user/hello.c -o $(USER_DIR)/hello.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/hello.o
@@ -101,7 +101,7 @@ user-img: $(USER_HELLO) $(DATA_IMG)
 	@echo "[USER] Installing $(USER_HELLO) -> /bin/hello on $(DATA_IMG)"
 	@debugfs -w -R "mkdir /bin" $(DATA_IMG) 2>/dev/null || true
 	@debugfs -w -R "rm /bin/hello" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "cd /bin; write $(USER_HELLO) hello" $(DATA_IMG)
+	@debugfs -w -R "write $(USER_HELLO) /bin/hello" $(DATA_IMG)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

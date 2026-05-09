@@ -19,6 +19,25 @@
 #define WAITPID_SYSCALL   29
 #define MKNOD_SYSCALL     30
 #define SLEEP_SYSCALL     31
+#define IOCTL_SYSCALL     21
+#define MKDIR_SYSCALL     14
+#define UNLINK_SYSCALL    13
+#define PIPE_SYSCALL      34
+#define DUP_SYSCALL       35
+#define DUP2_SYSCALL      36
+
+// Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
+#define S_IFIFO_T 0x06
+
+// tty ioctl commands
+#define TIOCGWINSZ        0x105
+
+typedef struct winsize {
+    unsigned short ws_row;
+    unsigned short ws_col;
+    unsigned short ws_xpixel;
+    unsigned short ws_ypixel;
+} winsize_t;
 
 // Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
 #define S_IFCHR_T  0x04
@@ -211,6 +230,59 @@ __attribute__((naked, used)) static void sig_restorer(void) {
         "mov $27, %rax\n"   // SIGRETURN_SYSCALL
         "syscall\n"
     );
+}
+
+static inline long sys_pipe(int fds[2]) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)PIPE_SYSCALL), "b"(fds)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_dup(long fd) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)DUP_SYSCALL), "b"(fd)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_dup2(long oldfd, long newfd) {
+    long ret;
+    register long r10_ asm("r10") = newfd;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)DUP2_SYSCALL), "b"(oldfd), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_ioctl(long fd, long cmd, void* arg) {
+    long ret;
+    register long r10_ asm("r10") = cmd;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)IOCTL_SYSCALL), "b"(fd), "r"(r10_), "d"(arg)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_mkdir_for_test_(const char* path, long perm) {
+    long ret;
+    register long r10_ asm("r10") = perm;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)MKDIR_SYSCALL), "b"(path), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
 }
 
 static inline void sys_exit(long code) {

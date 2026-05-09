@@ -105,8 +105,10 @@ void signal_deliver_on_return(interrupt_frame_t* frame) {
     int signo = __builtin_ctzll(pending) + 1;
     __atomic_and_fetch(&t->pending_signals, ~(1ULL << (signo - 1)), __ATOMIC_RELAXED);
 
-    // POSIX-ish: tasks killed by an unhandled signal exit with code 128+signo.
-    uint64_t sig_exit_code = 128 + (uint64_t)signo;
+    // POSIX wait-status encoding: signal-death stores the signo in the low
+    // 7 bits (bit 7 reserved for "core dumped"; always 0 here). Userspace
+    // uses WIFSIGNALED / WTERMSIG (user/sys/wait.h) to decode this.
+    uint64_t sig_exit_code = (uint64_t)(signo & 0x7F);
 
     // SIGKILL is uncatchable.
     if (signo == SIGKILL) {

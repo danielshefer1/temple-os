@@ -11,6 +11,9 @@
 #include "waitpid.h"
 #include "timer.h"
 #include "paging.h"
+#include "fd_table.h"
+#include "vfs_file.h"
+#include "pipe.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
     uint64_t cs = frame->cs;
@@ -52,6 +55,9 @@ void syscall_handler(interrupt_frame_t* frame) {
         case SLEEP_SYSCALL:        ret = SleepHandler(frame);     break;
         case SETPGID_SYSCALL:      ret = SetpgidHandler(frame);   break;
         case GETPGID_SYSCALL:      ret = GetpgidHandler(frame);   break;
+        case PIPE_SYSCALL:         ret = PipeHandler(frame);      break;
+        case DUP_SYSCALL:          ret = DupHandler(frame);       break;
+        case DUP2_SYSCALL:         ret = Dup2Handler(frame);      break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -139,7 +145,10 @@ int64_t FlushBufferHandler() {
 }
 
 int64_t ExitHandler(interrupt_frame_t* frame) {
-    task_exit(frame->rbx);
+    // POSIX wait-status: clean exits live in bits 8..15 (low byte of the
+    // user-supplied code). Signal-death paths in multi/signal.c put the
+    // signo in bits 0..6.
+    task_exit(((frame->rbx) & 0xFF) << 8);
     return 1; // unreachable
 }
 
@@ -282,6 +291,67 @@ int64_t WaitpidHandler(interrupt_frame_t* frame) {
     int64_t   target_pid   = (int64_t)   frame->rbx;
     uint64_t* user_status  = (uint64_t*) frame->rcx;  // patched from r10 by syscall_entry
     return do_waitpid(target_pid, user_status);
+}
+
+// dup(fd): allocate the lowest free fd ≥ 3 referencing the same file_t.
+int64_t DupHandler(interrupt_frame_t* frame) {
+    int64_t fd = (int64_t)frame->rbx;
+    file_t* f = fd_lookup(fd);
+    if (f == NULL) return -EBADF;
+    vfs_file_get(f);
+    int64_t newfd = fd_alloc(f);
+    if (newfd < 0) {
+        vfs_file_put(f);
+        return newfd;
+    }
+    return newfd;
+}
+
+// dup2(oldfd, newfd): install oldfd's file_t at newfd, closing whatever was
+// there. Returns newfd. No-op (returns newfd) if oldfd == newfd.
+int64_t Dup2Handler(interrupt_frame_t* frame) {
+    int64_t oldfd = (int64_t)frame->rbx;
+    int64_t newfd = (int64_t)frame->rcx;  // arg2: r10 -> rcx by syscall_entry
+    if (oldfd < 0 || oldfd >= FD_MAX) return -EBADF;
+    if (newfd < 0 || newfd >= FD_MAX) return -EBADF;
+    file_t* f = fd_lookup(oldfd);
+    if (f == NULL) return -EBADF;
+    if (oldfd == newfd) return newfd;
+    vfs_file_get(f);
+    int64_t r = fd_alloc_at(f, newfd);
+    if (r < 0) {
+        vfs_file_put(f);
+        return r;
+    }
+    return newfd;
+}
+
+// pipe(int fds[2]): allocates one anonymous pipe and two file_t's; installs
+// them at the lowest two free fds ≥ 3 and writes {readfd, writefd} to the
+// caller's int[2] buffer.
+int64_t PipeHandler(interrupt_frame_t* frame) {
+    int* user_fds = (int*)frame->rbx;
+    if (!user_fds) return -EINVAL;
+    if ((uint64_t)user_fds >= 0xFFFF800000000000ULL) return -EINVAL;
+
+    file_t* rf = NULL;
+    file_t* wf = NULL;
+    int64_t r = pipe_create_pair(&rf, &wf);
+    if (r < 0) return r;
+
+    int64_t rfd = fd_alloc(rf);
+    if (rfd < 0) { vfs_file_put(rf); vfs_file_put(wf); return rfd; }
+    int64_t wfd = fd_alloc(wf);
+    if (wfd < 0) {
+        // Roll back the read-side install.
+        fd_release(rfd);
+        vfs_file_put(rf);
+        vfs_file_put(wf);
+        return wfd;
+    }
+    user_fds[0] = (int)rfd;
+    user_fds[1] = (int)wfd;
+    return 0;
 }
 
 // posix_spawn-style: load an ELF from `path` into a fresh user address

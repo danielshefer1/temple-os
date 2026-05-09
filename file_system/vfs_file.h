@@ -8,7 +8,7 @@ int64_t vfs_write    (file_t* f, const void* buf, uint64_t size);
 int64_t vfs_seek     (file_t* f, int64_t off, int64_t whence);
 int64_t vfs_truncate (file_t* f, uint64_t new_size);
 int64_t vfs_readdir  (file_t* f, dentry_t* out);
-int64_t vfs_open     (inode_t* in, file_t* f);
+int64_t vfs_open     (inode_t* in, file_t* f, uint32_t flags);
 int64_t vfs_close    (file_t* f);
 int64_t vfs_flush    (file_t* f);
 int64_t vfs_ioctl    (file_t* f, uint64_t cmd, void* arg);

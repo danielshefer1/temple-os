@@ -12,6 +12,10 @@ bool fb_console_init(uint64_t* cols, uint64_t* rows);
 // True if init succeeded (i.e. fb_blit_* are safe to call).
 bool fb_console_ready(void);
 
+// Read the cell-grid dimensions established at init. Both pointers are
+// optional; either may be NULL. Returns zero values if console not ready.
+void fb_console_geometry(uint64_t* cols, uint64_t* rows);
+
 // Pixel-level primitives. Caller is responsible for serialising calls
 // (the per-VT lock in vt_t serves this role today).
 void fb_blit_cell  (uint64_t row, uint64_t col, vt_cell_t cell);

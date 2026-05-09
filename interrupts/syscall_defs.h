@@ -32,6 +32,9 @@
 #define SLEEP_SYSCALL      31
 #define SETPGID_SYSCALL    32   // setpgid(pid, pgid); pid==0 means self, pgid==0 means use pid
 #define GETPGID_SYSCALL    33   // getpgid(pid); pid==0 means self
+#define PIPE_SYSCALL       34   // pipe(int fds[2]); fds[0]=read end, fds[1]=write end
+#define DUP_SYSCALL        35   // dup(fd) -> new fd ≥ 3
+#define DUP2_SYSCALL       36   // dup2(oldfd, newfd) -> newfd
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256

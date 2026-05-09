@@ -114,6 +114,11 @@ void fb_redraw_cells(const vt_cell_t* cells, uint64_t rows, uint64_t cols) {
 
 bool fb_console_ready(void) { return g_ready; }
 
+void fb_console_geometry(uint64_t* cols, uint64_t* rows) {
+    if (cols) *cols = g_ready ? g_cols : 0;
+    if (rows) *rows = g_ready ? g_rows : 0;
+}
+
 bool fb_console_init(uint64_t* out_cols, uint64_t* out_rows) {
     if (out_cols) *out_cols = 0;
     if (out_rows) *out_rows = 0;

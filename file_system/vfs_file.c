@@ -1,5 +1,6 @@
 #include "vfs.h"
 #include "devfs.h"
+#include "pipe.h"
 
 // shared check for read/write payload args
 static int64_t check_io(file_t* f, const void* buf, uint64_t size) {
@@ -49,10 +50,18 @@ int64_t vfs_readdir(file_t* f, dentry_t* out) {
     return VFS_CALL(f->ops, readdir, f, out);
 }
 
-int64_t vfs_open(inode_t* in, file_t* f) {
+int64_t vfs_open(inode_t* in, file_t* f, uint32_t flags) {
     int64_t r = vfs_check_inode(in);
     if (r < 0) return r;
     if (f == NULL) return -EINVAL;
+
+    // FIFOs: route through the in-kernel pipe code. The on-disk inode has
+    // no useful file_ops (it stores no data on disk); we replace it with
+    // the bidirectional pipe_fops and lazily create a pipe_t cached on
+    // the inode so multiple openers share a single ring buffer.
+    if (in->type == VFS_TYPE_FIFO) {
+        return fifo_open(in, f, flags);
+    }
 
     // Special files: dispatch through devfs. The on-disk inode's file_ops
     // (from the underlying fs, e.g. ext2) doesn't know how to talk to a
