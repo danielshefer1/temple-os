@@ -39,6 +39,7 @@ typedef struct pty_pair_t {
     bool       in_use;           // slot allocated
     bool       master_open;
     bool       slave_open;
+    bool       slave_ever_opened; // sticky: set on first slave open
     bool       locked;           // unlockpt() flips this off
     uint16_t   index;            // /dev/pts/N
 } pty_pair_t;

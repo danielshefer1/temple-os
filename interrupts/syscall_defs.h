@@ -43,6 +43,9 @@
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256
+#define EXEC_ARG_MAX       1024   // single argv/envp string max length (incl. NUL)
+#define EXEC_ARGS_TOTAL    4096   // combined argv+envp string bytes
+#define EXEC_ARGS_ENTRIES  256    // max argc+envc entries
 
 #define STDIN_FILENO   0
 #define STDOUT_FILENO  1

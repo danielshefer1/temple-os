@@ -220,7 +220,20 @@ static int64_t pty_slave_open(inode_t* in, file_t* f) {
     CliHelper();
     spin_lock(&p->lock);
     p->slave_open = true;
+    p->slave_ever_opened = true;
+    // Wake any master reader that was blocked waiting for the slave to
+    // attach. Without this, the userspace term parent could enter pty
+    // master_read before the shell child finishes opening /dev/pts/N and
+    // race-loop on the !slave_open EOF path. (We changed master_read to
+    // gate EOF on slave_ever_opened, so the master will block from now
+    // on; we still wake an existing waiter so it re-enters the drain.)
+    ldisc_ring_t s = s2m_ring(p);
+    task_t* w = ldisc_waiter_pop(&s);
     spin_unlock(&p->lock);
+    if (w) {
+        w->state = TASK_STATE_READY;
+        rq_enqueue_external(w);
+    }
     if (ie) StiHelper();
     return 0;
 }
@@ -273,7 +286,12 @@ static int64_t pty_master_read(file_t* f, void* buf, uint64_t size) {
             if (ie) StiHelper();
             return n;
         }
-        if (!p->slave_open) {
+        // EOF only after the slave was opened at least once and is now
+        // gone. Without the `slave_ever_opened` gate, a master_read that
+        // races ahead of the slave's first open returns 0 immediately and
+        // the userspace term's render loop exits before the shell ever
+        // attaches.
+        if (p->slave_ever_opened && !p->slave_open) {
             spin_unlock(&p->lock);
             if (ie) StiHelper();
             return 0;
@@ -288,6 +306,15 @@ static int64_t pty_master_read(file_t* f, void* buf, uint64_t size) {
         CliHelper();
         spin_lock(&p->lock);
         ldisc_waiter_remove(&r, me);
+
+        // If a signal woke us, return EINTR so userspace can handle it
+        // (e.g. /bin/term's SIGALRM-driven cursor blink) instead of
+        // re-blocking on the same waiter and swallowing the signal.
+        if (__atomic_load_n(&me->pending_signals, __ATOMIC_RELAXED)) {
+            spin_unlock(&p->lock);
+            if (ie) StiHelper();
+            return -EINTR;
+        }
     }
 }
 

@@ -55,6 +55,26 @@ static unsigned char cur_bg = 0;
 static int           cur_bold = 0;
 static unsigned long cur_row, cur_col;
 
+// Soft block cursor overlaid on the framebuffer at (cursor_row, cursor_col).
+// `cursor_visible` is set whenever the overlay is currently painted; the
+// render loop erases it (via blit_cell) before drawing program output and
+// repaints it after. Wipes / scrolls invalidate the tracked cell so we
+// don't try to re-draw what we erased.
+static int           cursor_visible;
+static unsigned long cursor_row, cursor_col;
+
+// Cursor-blink state: a child process raises SIGALRM on the parent every
+// ~500ms; the handler flips `blink_on`, which interrupts the parent's
+// blocking sys_read with EINTR. The render loop then either paints or
+// erases the cursor depending on the current phase.
+static volatile int  blink_on = 1;
+
+__attribute__((used))
+static void blink_handler(int signo) {
+    (void)signo;
+    blink_on = !blink_on;
+}
+
 #define VT_GROUND 0
 #define VT_ESC    1
 #define VT_CSI    2
@@ -122,6 +142,26 @@ static void clear_screen(void) {
     fill_rect(0, 0, fbv.width, fbv.height, bg);
     vt_cell_t blank = { ' ', cur_fg, cur_bg };
     for (unsigned long i = 0; i < term_rows * term_cols; i++) cells[i] = blank;
+    cursor_visible = 0;
+}
+
+static void cursor_erase(void) {
+    if (!cursor_visible) return;
+    if (cursor_row < term_rows && cursor_col < term_cols) {
+        blit_cell(cursor_row, cursor_col,
+                  cells[cursor_row * term_cols + cursor_col]);
+    }
+    cursor_visible = 0;
+}
+
+static void cursor_draw(void) {
+    if (cursor_visible) return;
+    if (cur_row >= term_rows || cur_col >= term_cols) return;
+    fill_rect(cur_col * glyph_w, cur_row * glyph_h,
+              glyph_w, glyph_h, pack_color(cur_fg));
+    cursor_row = cur_row;
+    cursor_col = cur_col;
+    cursor_visible = 1;
 }
 
 static void scroll_one(void) {
@@ -143,6 +183,7 @@ static void scroll_one(void) {
     (void)row_bytes_px;
     fill_rect(0, (term_rows - 1) * glyph_h,
               term_cols * glyph_w, glyph_h, pack_color(cur_bg));
+    cursor_visible = 0;
 }
 
 static void newline(void) {
@@ -415,6 +456,7 @@ void _start(void) {
     cells = (vt_cell_t*)sys_mmap(term_rows * term_cols * sizeof(vt_cell_t));
     if ((long)cells <= 0) sys_exit(6);
     clear_screen();
+    cursor_draw();
 
     long ptmx = sys_open("/dev/ptmx", O_RDWR, 0);
     if (ptmx < 0) sys_exit(7);
@@ -447,7 +489,8 @@ void _start(void) {
         if (slave > 2) sys_close(slave);
         sys_close(ptmx);
         sys_close(fb_fd);
-        sys_exec("/bin/hello");
+        char* const sh_argv[] = { "sh", 0 };
+        sys_exec("/bin/sh", sh_argv, 0);
         sys_exit(127);
     }
 
@@ -468,14 +511,44 @@ void _start(void) {
         sys_exit(0);
     }
 
+    // Cursor-blink driver: a child that pings the parent with SIGALRM on a
+    // fixed interval. We capture the parent's pid before forking so the
+    // child doesn't need a getppid syscall.
+    long parent_pid = sys_getpid();
+    sys_signal(SIGALRM, (void*)blink_handler, (void*)sig_restorer);
+
+    long blink_pid = sys_fork();
+    if (blink_pid == 0) {
+        sys_close(fb_fd);
+        sys_close(ptmx);
+        for (;;) {
+            sys_sleep(500);
+            sys_kill(parent_pid, SIGALRM);
+        }
+    }
+
     // Render loop.
     char rbuf[256];
     while (1) {
         long r = sys_read(ptmx, rbuf, sizeof(rbuf));
+        if (r == -EINTR) {
+            // Blink tick. Flip cursor state without touching cell content.
+            if (blink_on) cursor_draw();
+            else          cursor_erase();
+            continue;
+        }
         if (r <= 0) break;
+        cursor_erase();
         for (long i = 0; i < r; i++) vt_input_byte(rbuf[i]);
+        // Reset the blink to ON after activity so the cursor always
+        // reappears at the new write position immediately, instead of
+        // staying erased until the next 500ms tick happens to land on the
+        // ON phase.
+        blink_on = 1;
+        cursor_draw();
     }
 
     sys_kill(input_pid, SIGTERM);
+    sys_kill(blink_pid, SIGTERM);
     sys_exit(0);
 }

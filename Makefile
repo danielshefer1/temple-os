@@ -75,7 +75,20 @@ K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.as
 USER_DIR     = $(BUILD_DIR)/user
 USER_HELLO   = $(USER_DIR)/hello.elf
 USER_TERM    = $(USER_DIR)/term.elf
+USER_INIT    = $(USER_DIR)/init.elf
+USER_SH      = $(USER_DIR)/sh.elf
+USER_HELP    = $(USER_DIR)/help.elf
+USER_CLEAR   = $(USER_DIR)/clear.elf
+USER_PWD     = $(USER_DIR)/pwd.elf
+USER_LS      = $(USER_DIR)/ls.elf
+USER_CAT     = $(USER_DIR)/cat.elf
+USER_ECHO    = $(USER_DIR)/echo.elf
 USER_FONT_OBJ = $(USER_DIR)/font.o
+
+# All "small" user programs that share the same build recipe (no font
+# blob, single .c file under user/, libu.h-based runtime).
+USER_SMALL = $(USER_HELLO) $(USER_INIT) $(USER_SH) $(USER_HELP) \
+             $(USER_CLEAR) $(USER_PWD) $(USER_LS) $(USER_CAT) $(USER_ECHO)
 USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
@@ -93,10 +106,13 @@ $(DATA_IMG):
 $(USER_DIR):
 	@mkdir -p $@
 
-$(USER_HELLO): user/hello.c user/syscall_inline.h user/sys/wait.h user/sys/dirent.h user/hello_linker.ld | $(USER_DIR)
+# Pattern rule for the simple user programs. Each .elf links from a single
+# user/<name>.c that includes user/libu.h (which provides the SysV-aware
+# _start that pulls argc/argv off the stack and tail-calls main).
+$(USER_DIR)/%.elf: user/%.c user/syscall_inline.h user/libu.h user/sys/wait.h user/sys/dirent.h user/hello_linker.ld | $(USER_DIR)
 	@echo "[USER] Building $@"
-	@$(CC64) $(USER_CFLAGS) -c user/hello.c -o $(USER_DIR)/hello.o
-	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/hello.o
+	@$(CC64) $(USER_CFLAGS) -c $< -o $(USER_DIR)/$*.o
+	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/$*.o
 
 # Embed assets/font.psf as a binary blob into user/term so the userspace
 # rasterizer can use the same glyph table as the kernel fb_console.
@@ -106,20 +122,33 @@ $(USER_FONT_OBJ): $(FONT_PSF) | $(USER_DIR)
 	    --rename-section .data=.rodata,alloc,load,readonly,data,contents \
 	    $(notdir $<) $(abspath $@)
 
+# /bin/term has its own rule because it links the embedded font blob.
 $(USER_TERM): user/term.c user/syscall_inline.h user/hello_linker.ld $(USER_FONT_OBJ) | $(USER_DIR)
 	@echo "[USER] Building $@"
 	@$(CC64) $(USER_CFLAGS) -c user/term.c -o $(USER_DIR)/term.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/term.o $(USER_FONT_OBJ)
 
 # Install built user programs into data.img (idempotent; rm-then-write).
-user-img: $(USER_HELLO) $(USER_TERM) $(DATA_IMG)
-	@echo "[USER] Installing $(USER_HELLO) -> /bin/hello on $(DATA_IMG)"
+USER_INSTALL = $(USER_TERM) $(USER_SMALL)
+
+define INSTALL_BIN
+	@echo "[USER] Installing $(1) -> /bin/$(2) on $(DATA_IMG)"
+	@debugfs -w -R "rm /bin/$(2)" $(DATA_IMG) 2>/dev/null || true
+	@debugfs -w -R "write $(1) /bin/$(2)" $(DATA_IMG)
+endef
+
+user-img: $(USER_INSTALL) $(DATA_IMG)
 	@debugfs -w -R "mkdir /bin" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "rm /bin/hello" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "write $(USER_HELLO) /bin/hello" $(DATA_IMG)
-	@echo "[USER] Installing $(USER_TERM) -> /bin/term on $(DATA_IMG)"
-	@debugfs -w -R "rm /bin/term" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "write $(USER_TERM) /bin/term" $(DATA_IMG)
+	$(call INSTALL_BIN,$(USER_HELLO),hello)
+	$(call INSTALL_BIN,$(USER_TERM),term)
+	$(call INSTALL_BIN,$(USER_INIT),init)
+	$(call INSTALL_BIN,$(USER_SH),sh)
+	$(call INSTALL_BIN,$(USER_HELP),help)
+	$(call INSTALL_BIN,$(USER_CLEAR),clear)
+	$(call INSTALL_BIN,$(USER_PWD),pwd)
+	$(call INSTALL_BIN,$(USER_LS),ls)
+	$(call INSTALL_BIN,$(USER_CAT),cat)
+	$(call INSTALL_BIN,$(USER_ECHO),echo)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

@@ -13,6 +13,31 @@
 #include "tty.h"
 #include <stddef.h>
 
+// ---- Global task list ---------------------------------------------------
+// Doubly-linked list of every live task (including BLOCKED ones parked on
+// driver waiter lists). task_for_pid walks this so kill/waitpid/etc. can
+// find tasks regardless of state.
+static task_t* tasks_head = NULL;
+static spinlock_t tasks_lock = {0};
+
+static void tasks_list_add(task_t* t) {
+    spin_lock(&tasks_lock);
+    t->all_prev = NULL;
+    t->all_next = tasks_head;
+    if (tasks_head) tasks_head->all_prev = t;
+    tasks_head = t;
+    spin_unlock(&tasks_lock);
+}
+
+static void tasks_list_remove(task_t* t) {
+    spin_lock(&tasks_lock);
+    if (t->all_prev) t->all_prev->all_next = t->all_next;
+    else if (tasks_head == t) tasks_head = t->all_next;
+    if (t->all_next) t->all_next->all_prev = t->all_prev;
+    t->all_prev = t->all_next = NULL;
+    spin_unlock(&tasks_lock);
+}
+
 // ---- Global zombie list -------------------------------------------------
 // Tasks that have called task_exit but haven't been claimed by waitpid live
 // here, keyed by their parent pointer. Orphan tasks (parent == NULL) are
@@ -113,22 +138,14 @@ void rq_enqueue_external(task_t* t) {
 }
 
 task_t* task_for_pid(uint64_t pid) {
-    uint64_t online = cpus_active ? cpus_active : 1;
-    for (uint64_t i = 0; i < online; i++) {
-        cpu_local_t* cpu = &cpu_locals[i];
-        task_t* cur = cpu->current;
-        if (cur && cur->pid == pid) return cur;
-
-        run_queue_t* rq = &cpu->rq;
-        spin_lock(&rq->lock);
-        for (task_t* t = rq->head; t; t = t->next) {
-            if (t->pid == pid) {
-                spin_unlock(&rq->lock);
-                return t;
-            }
+    spin_lock(&tasks_lock);
+    for (task_t* t = tasks_head; t; t = t->all_next) {
+        if (t->pid == pid) {
+            spin_unlock(&tasks_lock);
+            return t;
         }
-        spin_unlock(&rq->lock);
     }
+    spin_unlock(&tasks_lock);
     return NULL;
 }
 
@@ -198,6 +215,7 @@ task_t* alloc_blank_task(const char* name) {
     t->cwd = vfs_root;
 
     memcpy(t->fxstate, default_fxstate, sizeof(t->fxstate));
+    tasks_list_add(t);
     return t;
 }
 
@@ -236,6 +254,7 @@ void scheduler_attach_bootstrap(const char* name) {
     if (name) {
         for (int i = 0; i < 31 && name[i]; i++) t->name[i] = name[i];
     }
+    tasks_list_add(t);
     this_cpu()->current = t;
 }
 
@@ -267,6 +286,7 @@ void free_dead_task(task_t* dead) {
     if (dead->kstack_pages) {
         RemoveKernelPages(dead->kstack_base, dead->kstack_pages);
     }
+    tasks_list_remove(dead);
     kfree(dead, sizeof(task_t));
 }
 
@@ -311,7 +331,6 @@ void schedule(void) {
         // interrupts on so the wakeup IPI / timer can land.
         if (prev && prev->state != TASK_STATE_RUNNING) {
             spin_unlock(&rq->lock);
-            kprintf("<idle-loop cpu=%d state=%d>", (uint64_t)cpu->cpu_index, (uint64_t)prev->state);
             while (true) {
                 StiHelper();
                 HltHelper();

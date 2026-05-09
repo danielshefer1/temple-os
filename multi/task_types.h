@@ -108,4 +108,11 @@ typedef struct task_t {
     // when set, that path resolves to this file_t instead of console_tty.
     // Borrowed reference — kept alive by the fd that originally set it.
     struct file_t* ctty;
+
+    // Global doubly-linked list of every task that has been alloc'd and
+    // not yet free_dead_task'd. Lets task_for_pid find tasks regardless of
+    // state (BLOCKED tasks parked on driver waiter lists aren't on any
+    // run queue, so per-CPU scans miss them).
+    struct task_t* all_next;
+    struct task_t* all_prev;
 } task_t;

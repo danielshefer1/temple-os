@@ -14,6 +14,8 @@
 #define EPERM        1    // operation not permitted (wrong permissions)
 #define ENOENT       2    // no such file or directory
 #define ESRCH        3    // no such process
+#define EINTR        4    // interrupted system call
+#define E2BIG        7    // argument list too long
 #define ECHILD       10   // no child processes
 #define EIO          5    // I/O error (disk read/write failed)
 #define EBADF        9    // bad file descriptor

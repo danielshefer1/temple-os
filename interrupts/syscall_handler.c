@@ -218,15 +218,86 @@ int64_t ExitHandler(interrupt_frame_t* frame) {
     return 1; // unreachable
 }
 
+// User pointer must live in the lower half. Used to vet argv/envp arrays
+// and the strings they reference before we touch them.
+static int valid_user_ptr(const void* p) {
+    return p && (uint64_t)p < 0xFFFF800000000000ULL;
+}
+
+// Copy a NULL-terminated user array of C strings into a kernel-side
+// (out_arr, out_blob) pair. out_arr[i] points into out_blob (which holds
+// all the strings packed back-to-back, each NUL-terminated).
+//
+// On success returns total bytes consumed in the blob (so the caller can
+// track the EXEC_ARGS_TOTAL budget across argv + envp). Returns -errno
+// on failure; both buffers are freed by the caller via kfree on either
+// path. NULL user_arr is allowed and yields *out_arr = NULL with no blob
+// allocation.
+static int64_t copy_user_strarr(const char* const* user_arr,
+                                uint64_t budget_remaining,
+                                char*** out_arr, uint64_t* out_arr_bytes,
+                                char**  out_blob, uint64_t* out_blob_bytes) {
+    *out_arr = NULL; *out_arr_bytes = 0;
+    *out_blob = NULL; *out_blob_bytes = 0;
+    if (!user_arr) return 0;
+    if (!valid_user_ptr(user_arr)) return -EINVAL;
+
+    uint64_t n = 0;
+    while (1) {
+        const char* s = user_arr[n];
+        if (!s) break;
+        if (!valid_user_ptr(s)) return -EINVAL;
+        n++;
+        if (n > EXEC_ARGS_ENTRIES) return -E2BIG;
+    }
+
+    // Walk the strings to size the blob, bounding each string and the
+    // running total.
+    uint64_t total = 0;
+    for (uint64_t i = 0; i < n; i++) {
+        const char* s = user_arr[i];
+        uint64_t k = 0;
+        while (s[k]) {
+            k++;
+            if (k >= EXEC_ARG_MAX) return -E2BIG;
+        }
+        total += k + 1;
+        if (total > budget_remaining) return -E2BIG;
+    }
+
+    uint64_t arr_bytes = (n + 1) * sizeof(char*);
+    char** karr = (char**)kmalloc(arr_bytes);
+    if (!karr) return -ENOMEM;
+    char* kblob = total ? (char*)kmalloc(total) : NULL;
+    if (total && !kblob) { kfree(karr, arr_bytes); return -ENOMEM; }
+
+    uint64_t off = 0;
+    for (uint64_t i = 0; i < n; i++) {
+        const char* s = user_arr[i];
+        karr[i] = kblob + off;
+        uint64_t k = 0;
+        while (s[k]) { kblob[off + k] = s[k]; k++; }
+        kblob[off + k] = 0;
+        off += k + 1;
+    }
+    karr[n] = NULL;
+
+    *out_arr = karr; *out_arr_bytes = arr_bytes;
+    *out_blob = kblob; *out_blob_bytes = total;
+    return (int64_t)total;
+}
+
 // POSIX-style execve: replaces the calling task's user image in place.
 // Same PID, same parent, same fd table; only the address space and the
 // IRETQ register frame change. Does not return on success — control
 // returns to userspace at the new program's entry point.
 int64_t ExecHandler(interrupt_frame_t* frame) {
     const char* upath = (const char*)frame->rbx;
+    const char* const* uargv = (const char* const*)frame->r10;
+    const char* const* uenvp = (const char* const*)frame->rdx;
     if (!upath) return -EINVAL;
     // Reject obviously bad pointers (kernel half).
-    if ((uint64_t)upath >= 0xFFFF800000000000ULL) return -EINVAL;
+    if (!valid_user_ptr(upath)) return -EINVAL;
 
     // Copy the path into a kernel buffer before we tear down the user
     // address space — `upath` lives in the soon-to-be-freed image.
@@ -240,11 +311,23 @@ int64_t ExecHandler(interrupt_frame_t* frame) {
     if (i == EXEC_PATH_MAX - 1) { kfree(path, EXEC_PATH_MAX); return -ENAMETOOLONG; }
     path[i] = 0;
 
+    // Marshal argv/envp into kernel buffers BEFORE the AS swap.
+    char** kargv  = NULL; uint64_t kargv_bytes  = 0;
+    char*  kabuf  = NULL; uint64_t kabuf_bytes  = 0;
+    char** kenvp  = NULL; uint64_t kenvp_bytes  = 0;
+    char*  kebuf  = NULL; uint64_t kebuf_bytes  = 0;
+    int64_t r = copy_user_strarr(uargv, EXEC_ARGS_TOTAL,
+                                 &kargv, &kargv_bytes, &kabuf, &kabuf_bytes);
+    if (r < 0) goto fail_args;
+    int64_t r2 = copy_user_strarr(uenvp, EXEC_ARGS_TOTAL - (uint64_t)r,
+                                  &kenvp, &kenvp_bytes, &kebuf, &kebuf_bytes);
+    if (r2 < 0) { r = r2; goto fail_args; }
+
     // Build the new image in a fresh PML4. If load_elf64 fails the old
     // address space is untouched and we return -errno cleanly.
     elf64_image_t img;
-    int64_t r = load_elf64(path, &img);
-    if (r < 0) { kfree(path, EXEC_PATH_MAX); return r; }
+    r = load_elf64_argv(path, kargv, kenvp, &img);
+    if (r < 0) goto fail_args;
 
     // Commit. Past this point execve cannot fail.
     task_t* cur = this_cpu()->current;
@@ -265,6 +348,10 @@ int64_t ExecHandler(interrupt_frame_t* frame) {
     }
 
     kfree(path, EXEC_PATH_MAX);
+    if (kargv) kfree(kargv, kargv_bytes);
+    if (kabuf) kfree(kabuf, kabuf_bytes);
+    if (kenvp) kfree(kenvp, kenvp_bytes);
+    if (kebuf) kfree(kebuf, kebuf_bytes);
 
     // Rewrite the IRETQ portion of the syscall's interrupt frame so that
     // when this handler returns, control lands in ring 3 at the new entry.
@@ -282,6 +369,14 @@ int64_t ExecHandler(interrupt_frame_t* frame) {
     frame->r12 = frame->r13 = frame->r14 = frame->r15 = 0;
 
     return 0;
+
+fail_args:
+    if (kargv) kfree(kargv, kargv_bytes);
+    if (kabuf) kfree(kabuf, kabuf_bytes);
+    if (kenvp) kfree(kenvp, kenvp_bytes);
+    if (kebuf) kfree(kebuf, kebuf_bytes);
+    kfree(path, EXEC_PATH_MAX);
+    return r;
 }
 
 // POSIX fork. The child returns 0; the parent gets the new PID. See
@@ -425,14 +520,65 @@ int64_t PipeHandler(interrupt_frame_t* frame) {
 // run unchanged; the return value is the new task's PID.
 int64_t SpawnHandler(interrupt_frame_t* frame) {
     const char* path = (const char*)frame->rbx;
+    const char* const* uargv = (const char* const*)frame->r10;
+    const char* const* uenvp = (const char* const*)frame->rdx;
     if (!path) return -EINVAL;
-    if ((uint64_t)path >= 0xFFFF800000000000ULL) return -EINVAL;
+    if (!valid_user_ptr(path)) return -EINVAL;
 
-    elf64_image_t img;
-    int64_t r = load_elf64(path, &img);
-    if (r < 0) return r;
+    char** kargv  = NULL; uint64_t kargv_bytes  = 0;
+    char*  kabuf  = NULL; uint64_t kabuf_bytes  = 0;
+    char** kenvp  = NULL; uint64_t kenvp_bytes  = 0;
+    char*  kebuf  = NULL; uint64_t kebuf_bytes  = 0;
+    int64_t r = copy_user_strarr(uargv, EXEC_ARGS_TOTAL,
+                                 &kargv, &kargv_bytes, &kabuf, &kabuf_bytes);
+    int64_t pid_or_err = r;
+    if (r >= 0) {
+        int64_t r2 = copy_user_strarr(uenvp, EXEC_ARGS_TOTAL - (uint64_t)r,
+                                      &kenvp, &kenvp_bytes, &kebuf, &kebuf_bytes);
+        if (r2 < 0) {
+            pid_or_err = r2;
+        } else {
+            elf64_image_t img;
+            int64_t lr = load_elf64_argv(path, kargv, kenvp, &img);
+            if (lr < 0) {
+                pid_or_err = lr;
+            } else {
+                task_t* t = create_user_task(&img, path);
+                if (!t) {
+                    pid_or_err = -ENOMEM;
+                } else {
+                    // POSIX-ish posix_spawn: inherit fd table, cwd,
+                    // process group, session, and controlling tty from
+                    // the caller. create_user_task wired fds 0/1/2 to
+                    // the kernel /dev/tty; release those and copy the
+                    // parent's table on top so a shell spawning a
+                    // command keeps the pty slave as stdio (otherwise
+                    // child output bypasses the userspace terminal and
+                    // lands on the kernel framebuffer).
+                    task_t* parent = this_cpu()->current;
+                    for (int64_t i = 0; i < FD_MAX; i++) {
+                        if (t->fds[i].file) vfs_file_put(t->fds[i].file);
+                        t->fds[i] = parent->fds[i];
+                        if (t->fds[i].file) vfs_file_get(t->fds[i].file);
+                    }
+                    t->cwd    = parent->cwd;
+                    t->pgid   = parent->pgid;
+                    t->sid    = parent->sid;
+                    t->ctty   = parent->ctty;
+                    // Without this the spawned task is parent-less and the
+                    // caller's waitpid returns -ECHILD immediately, so the
+                    // shell prints its next prompt before the spawnee's
+                    // output has finished rendering.
+                    t->parent = parent;
+                    pid_or_err = (int64_t)t->pid;
+                }
+            }
+        }
+    }
 
-    task_t* t = create_user_task(&img, path);
-    if (!t) return -ENOMEM;
-    return (int64_t)t->pid;
+    if (kargv) kfree(kargv, kargv_bytes);
+    if (kabuf) kfree(kabuf, kabuf_bytes);
+    if (kenvp) kfree(kenvp, kenvp_bytes);
+    if (kebuf) kfree(kebuf, kebuf_bytes);
+    return pid_or_err;
 }

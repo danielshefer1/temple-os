@@ -144,7 +144,20 @@ static int64_t apply_pie_relocations(uint64_t cr3_phys, Elf64_Ehdr* eh, Elf64_Ph
     return 0;
 }
 
-static int64_t setup_user_stack(uint64_t cr3_phys, elf64_image_t* out) {
+// Caps. The total argv+env strings blob is bounded so that the SysV
+// initial frame always fits comfortably inside the existing
+// USER_STACK_PAGES*PAGE_SIZE region with room to spare for the
+// program's own stack growth.
+#define ELF_ARGS_MAX_ENTRIES   256
+#define ELF_ARGS_BLOB_MAX      4096
+
+static uint64_t cstrlen(const char* s) {
+    uint64_t n = 0; while (s[n]) n++; return n;
+}
+
+static int64_t setup_user_stack(uint64_t cr3_phys,
+                                char* const* argv, char* const* envp,
+                                elf64_image_t* out) {
     uint64_t top = USER_STACK_TOP_VA;
     uint64_t base = top - USER_STACK_PAGES * PAGE_SIZE;
     for (uint64_t va = base; va < top; va += PAGE_SIZE) {
@@ -155,17 +168,89 @@ static int64_t setup_user_stack(uint64_t cr3_phys, elf64_image_t* out) {
         if (r < 0) return r;
     }
 
-    // SysV initial frame: argc=0, argv[0]=NULL, envp[0]=NULL, auxv key=0, val=0.
-    // Five qwords pushed below `top`.
-    uint64_t sp_va = top - 5 * sizeof(uint64_t);
-    uint64_t zeros[5] = {0, 0, 0, 0, 0};
-    int64_t r = write_user(cr3_phys, sp_va, zeros, sizeof(zeros));
+    // Count entries and total string bytes (each string includes its '\0').
+    uint64_t argc = 0, envc = 0, strings_bytes = 0;
+    if (argv) {
+        while (argv[argc]) {
+            if (argc >= ELF_ARGS_MAX_ENTRIES) return -E2BIG;
+            strings_bytes += cstrlen(argv[argc]) + 1;
+            argc++;
+        }
+    }
+    if (envp) {
+        while (envp[envc]) {
+            if (envc >= ELF_ARGS_MAX_ENTRIES) return -E2BIG;
+            strings_bytes += cstrlen(envp[envc]) + 1;
+            envc++;
+        }
+    }
+    if (strings_bytes > ELF_ARGS_BLOB_MAX) return -E2BIG;
+
+    // Layout (low → high):
+    //   [argc][argv ptrs ... NULL][envp ptrs ... NULL][auxv {0,0}][strings]
+    // RSP at process entry must be 16-byte aligned, so argc_va is rounded
+    // down to 16 (this is what SysV requires when no return address has
+    // been pushed by a caller).
+    uint64_t ptrs_qwords = 1                  // argc
+                         + (argc + 1)         // argv + NULL
+                         + (envc + 1)         // envp + NULL
+                         + 2;                 // auxv {0,0}
+    uint64_t ptrs_bytes  = ptrs_qwords * 8;
+
+    uint64_t argc_va    = (top - strings_bytes - ptrs_bytes) & ~((uint64_t)0xF);
+    uint64_t strings_va = argc_va + ptrs_bytes;
+    if (argc_va < base) return -E2BIG;
+
+    // Build the pointer array in a kernel buffer; pointers reference
+    // string-blob offsets that we'll write next.
+    uint64_t* qbuf = (uint64_t*)kmalloc(ptrs_bytes);
+    if (!qbuf) return -ENOMEM;
+    uint64_t qi = 0;
+    qbuf[qi++] = argc;
+    uint64_t soff = 0;
+    for (uint64_t i = 0; i < argc; i++) {
+        qbuf[qi++] = strings_va + soff;
+        soff += cstrlen(argv[i]) + 1;
+    }
+    qbuf[qi++] = 0; // argv terminator
+    for (uint64_t i = 0; i < envc; i++) {
+        qbuf[qi++] = strings_va + soff;
+        soff += cstrlen(envp[i]) + 1;
+    }
+    qbuf[qi++] = 0; // envp terminator
+    qbuf[qi++] = 0; // auxv key
+    qbuf[qi++] = 0; // auxv value
+
+    int64_t r = write_user(cr3_phys, argc_va, qbuf, ptrs_bytes);
+    kfree(qbuf, ptrs_bytes);
     if (r < 0) return r;
-    out->stack_top = sp_va;
+
+    // Copy each string to its slot in the strings blob.
+    uint64_t off = 0;
+    for (uint64_t i = 0; i < argc; i++) {
+        uint64_t len = cstrlen(argv[i]) + 1;
+        r = write_user(cr3_phys, strings_va + off, argv[i], len);
+        if (r < 0) return r;
+        off += len;
+    }
+    for (uint64_t i = 0; i < envc; i++) {
+        uint64_t len = cstrlen(envp[i]) + 1;
+        r = write_user(cr3_phys, strings_va + off, envp[i], len);
+        if (r < 0) return r;
+        off += len;
+    }
+
+    out->stack_top = argc_va;
     return 0;
 }
 
 int64_t load_elf64(const char* path, elf64_image_t* out) {
+    return load_elf64_argv(path, NULL, NULL, out);
+}
+
+int64_t load_elf64_argv(const char* path,
+                        char* const* argv, char* const* envp,
+                        elf64_image_t* out) {
     if (!path || !out) return -EINVAL;
     memset(out, 0, sizeof(*out));
 
@@ -218,7 +303,7 @@ int64_t load_elf64(const char* path, elf64_image_t* out) {
     r = apply_pie_relocations(cr3_phys, &eh, ph, bias);
     if (r < 0) goto fail;
 
-    r = setup_user_stack(cr3_phys, out);
+    r = setup_user_stack(cr3_phys, argv, envp, out);
     if (r < 0) goto fail;
 
     FreeBuddy(scratch_phys, false);

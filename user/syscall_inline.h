@@ -31,6 +31,8 @@
 #define MMAP_FILE_SYSCALL 40
 #define SETSID_SYSCALL    41
 #define EXEC_SYSCALL      22
+#define SPAWN_SYSCALL     23
+#define SYNC_SYSCALL      20
 #define FREAD_SYSCALL_NUM  9
 
 // Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
@@ -48,9 +50,12 @@
 #define TIOCSWINSZ        0x113
 #define FBIOGET_VSCREENINFO 0x120
 
+#define SIGALRM           14
 #define SIGTERM           15
 #define SIGCHLD           17
 #define SIGWINCH          28
+
+#define EINTR              4
 
 typedef struct fb_var_info_t {
     unsigned int width;
@@ -365,12 +370,36 @@ static inline long sys_setsid(void) {
     return ret;
 }
 
-static inline long sys_exec(const char* path) {
+static inline long sys_exec(const char* path,
+                            char* const argv[], char* const envp[]) {
+    long ret;
+    register char* const* r10_ asm("r10") = argv;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)EXEC_SYSCALL), "b"(path), "r"(r10_), "d"(envp)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_spawn(const char* path,
+                             char* const argv[], char* const envp[]) {
+    long ret;
+    register char* const* r10_ asm("r10") = argv;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)SPAWN_SYSCALL), "b"(path), "r"(r10_), "d"(envp)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_sync(void) {
     long ret;
     asm volatile(
         "syscall"
         : "=a"(ret)
-        : "a"((long)EXEC_SYSCALL), "b"(path)
+        : "a"((long)SYNC_SYSCALL)
         : "rcx", "r11", "memory");
     return ret;
 }
