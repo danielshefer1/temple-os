@@ -141,3 +141,6 @@ typedef struct file_ops_t {
     // misc
     int64_t  (*ioctl)       (file_t* file, uint64_t cmd, void* arg);
 } file_ops_t;
+
+// directory iteration callback (used by vfs_iterate)
+typedef int64_t (*vfs_dir_cb)(dentry_t* entry, void* ctx);

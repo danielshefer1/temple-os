@@ -2,8 +2,7 @@
 
 #include "includes.h"
 #include "types.h"
-
-#define MAX_CPUS 64
+#include "multi_defs.h"
 
 extern cpu_local_t cpu_locals[MAX_CPUS];
 extern uint8_t apic_to_index[256];

@@ -72,3 +72,6 @@
 #define IS_APPEND(inode)    ((inode)->flags & S_APPEND)
 #define IS_NOATIME(inode)   ((inode)->flags & S_NOATIME)
 #define IS_NODUMP(inode)    ((inode)->flags & S_NODUMP)
+
+// dispatch macro: call op or return -ENOTSUP if not implemented
+#define VFS_CALL(ops, fn, ...) ((ops)->fn ? (ops)->fn(__VA_ARGS__) : -ENOTSUP)

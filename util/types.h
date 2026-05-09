@@ -19,3 +19,7 @@
 #include "vfs_types.h"
 #include "ext2_types.h"
 #include "buffer_types.h"
+#include "fb_types.h"
+#include "vt_types.h"
+#include "devfs_types.h"
+#include "elf64_types.h"

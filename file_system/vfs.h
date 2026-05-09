@@ -18,8 +18,7 @@ int64_t vfs_check_file     (file_t* f);
 int64_t vfs_check_dentry   (dentry_t* d);
 int64_t vfs_check_writable (inode_t* in);
 
-// dispatch macro: call op or return -ENOTSUP if not implemented
-#define VFS_CALL(ops, fn, ...) ((ops)->fn ? (ops)->fn(__VA_ARGS__) : -ENOTSUP)
+// VFS_CALL dispatch macro lives in vfs_defs.h.
 
 // duplicate a NUL-terminated string into a kmalloc'd buffer
 char* vfs_strdup(const char* s);

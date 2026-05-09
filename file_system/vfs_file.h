@@ -18,7 +18,7 @@ file_t* vfs_file_alloc (void);
 void    vfs_file_get   (file_t* f);
 void    vfs_file_put   (file_t* f);
 
-// directory iteration (the only place that loops readdir)
-typedef int64_t (*vfs_dir_cb)(dentry_t* entry, void* ctx);
+// directory iteration (the only place that loops readdir).
+// vfs_dir_cb lives in vfs_types.h.
 int64_t vfs_iterate(file_t* f, vfs_dir_cb cb, void* ctx);
 int64_t vfs_ls(file_t* f);
