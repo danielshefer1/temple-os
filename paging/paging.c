@@ -82,7 +82,22 @@ void InitPaging() {
     uint64_t kernel_big_pages = (kernel_size + TABLE_SIZE - 1) / TABLE_SIZE;
     uint64_t text_big_pages = (text_size + TABLE_SIZE - 1) / TABLE_SIZE;
 
-    curr_addr_prim = KERNEL_VIRTUAL + (((kernel_size + PAGE_SIZE - 1) / PAGE_SIZE) + 8)*PAGE_SIZE;
+    // Anchor the post-kernel "primitive" allocator at the real linker end
+    // (_kernel_VMA_end), not at KERNEL_VIRTUAL + kernel_size. The kernel is
+    // loaded at KERNEL_VIRTUAL + KERNEL_BASE (= 0x200000), so the bare-size
+    // formula underestimated the kernel's footprint by KERNEL_BASE bytes,
+    // which left the kernel buddy pool overlapping the kernel's .data/.bss
+    // and produced silent free-list corruption (next pointers overwritten
+    // by kernel globals). Round up to a page and pad 8 pages of slack.
+    // Round up to the next 2 MB so the buddy pool starts inside a region
+    // backed by InitPaging's headroom big-page mappings rather than the
+    // small-page tail PT (which only maps up to .bss end). Otherwise the
+    // first AddToBuddyAlloc inline_push writes to an unmapped page and we
+    // page-fault before ever reaching kmain.
+    extern char _kernel_VMA_end[];
+    uint64_t kend = ((uint64_t)_kernel_VMA_end + (2*MB) - 1) & ~(uint64_t)((2*MB) - 1);
+    curr_addr_prim = kend;
+    (void)kernel_size;
 
     uint64_t kernel_pml4_idx = PML4_IDX(KERNEL_VIRTUAL);
     uint64_t kernel_pdpt_idx = PDPT_IDX(KERNEL_VIRTUAL);

@@ -50,6 +50,8 @@ void syscall_handler(interrupt_frame_t* frame) {
         case WAITPID_SYSCALL:      ret = WaitpidHandler(frame);   break;
         case MKNOD_SYSCALL:        ret = SysMknod(frame);         break;
         case SLEEP_SYSCALL:        ret = SleepHandler(frame);     break;
+        case SETPGID_SYSCALL:      ret = SetpgidHandler(frame);   break;
+        case GETPGID_SYSCALL:      ret = GetpgidHandler(frame);   break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -243,6 +245,37 @@ int64_t GetpidHandler(interrupt_frame_t* frame) {
 int64_t SleepHandler(interrupt_frame_t* frame) {
     sleep(frame->rbx);
     return 0;
+}
+
+// setpgid(pid, pgid): set the pgid of `pid` (0 = self) to `pgid` (0 = use
+// the target's own pid, i.e. start a new pgrp). POSIX restricts this in
+// several ways (target must be self or a not-yet-execed child, must be in
+// same session, etc.); we only enforce session-equality, since fork is the
+// only way to extend a session today and we don't ship setsid.
+int64_t SetpgidHandler(interrupt_frame_t* frame) {
+    int64_t pid_arg  = (int64_t)frame->rbx;
+    int64_t pgid_arg = (int64_t)frame->rcx;
+    if (pid_arg < 0 || pgid_arg < 0) return -EINVAL;
+
+    task_t* me = this_cpu()->current;
+    task_t* t  = (pid_arg == 0) ? me : task_for_pid((uint64_t)pid_arg);
+    if (!t) return -ESRCH;
+    if (t->sid != me->sid) return -EPERM;
+
+    uint64_t new_pgid = (pgid_arg == 0) ? t->pid : (uint64_t)pgid_arg;
+    t->pgid = new_pgid;
+    return 0;
+}
+
+// getpgid(pid): return the pgid of `pid` (0 = self).
+int64_t GetpgidHandler(interrupt_frame_t* frame) {
+    int64_t pid_arg = (int64_t)frame->rbx;
+    if (pid_arg < 0) return -EINVAL;
+
+    task_t* t = (pid_arg == 0) ? this_cpu()->current
+                               : task_for_pid((uint64_t)pid_arg);
+    if (!t) return -ESRCH;
+    return (int64_t)t->pgid;
 }
 
 int64_t WaitpidHandler(interrupt_frame_t* frame) {

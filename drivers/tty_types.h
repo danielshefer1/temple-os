@@ -10,7 +10,9 @@
 
 #define TTY_IOCTL_SET_RAW        0x100
 #define TTY_IOCTL_SET_COOKED     0x101
-#define TTY_IOCTL_SET_FOREGROUND 0x102
+#define TTY_IOCTL_SET_FOREGROUND 0x102   // legacy alias for TIOCSPGRP, takes pgid in arg
+#define TTY_IOCTL_TIOCSPGRP      0x103   // set foreground process group (arg = pgid)
+#define TTY_IOCTL_TIOCGPGRP      0x104   // get foreground process group (arg = uint64_t*)
 
 struct task_t;
 struct file_ops_t;
@@ -22,7 +24,9 @@ typedef struct tty_t {
     uint64_t   tail;        // monotonic
     uint32_t   flags;
     bool       shift_pressed;
-    struct task_t* foreground;
+    // Foreground process group ID. signal-on-Ctrl+C is delivered to every
+    // task whose pgid matches this. 0 = no foreground (signal is dropped).
+    uint64_t   pgrp;
     struct task_t* read_waiter;
     struct task_t* read_waiter_tail;
     struct file_ops_t* fops;

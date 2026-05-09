@@ -176,6 +176,8 @@ task_t* alloc_blank_task(const char* name) {
     uint64_t stack_top  = stack_base + STACK_PAGES * PAGE_SIZE;
 
     t->pid          = alloc_pid();
+    t->pgid         = t->pid;   // session leader by default; fork() / setpgid override
+    t->sid          = t->pid;
     t->state        = TASK_STATE_READY;
     t->cr3          = KERNEL_VIRT_TO_PHYS(PageDirAddrV());
     t->kstack_base  = stack_base;

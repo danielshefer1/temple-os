@@ -44,9 +44,10 @@ task_t* create_user_task(const elf64_image_t* img, const char* name) {
         t->fds[2].file = tty_f; vfs_file_get(tty_f);
     }
 
-    // Newest user task becomes foreground for Ctrl+C delivery. Crude but
-    // sufficient until job-control / process groups exist.
-    console_tty.foreground = t;
+    // Newest user task's pgrp becomes the tty's foreground pgrp. Since
+    // alloc_blank_task gave it pgid==pid, this group has exactly one member
+    // until/unless setpgid or fork extends it.
+    console_tty.pgrp = t->pgid;
 
     rq_enqueue_external(t);
     return t;

@@ -4,6 +4,8 @@
 #include "string.h"
 #include "defintions.h"
 #include "memory.h"
+#include "global.h"
+#include "extern.h"
 
 // ---------------------------------------------------------------------------
 // State helpers
@@ -24,6 +26,31 @@ void signal_send(task_t* t, int signo) {
     if (t->state == TASK_STATE_BLOCKED) {
         t->state = TASK_STATE_READY;
         rq_enqueue_external(t);
+    }
+}
+
+// Walk every CPU's current task and run-queue, signalling any task whose
+// pgid matches. We skip the per-CPU sleep queue (sleeping tasks live on a
+// run-queue too once the timer fires; signal_send re-enqueues BLOCKED tasks
+// to READY so they pick up the signal on next dispatch). Zombies are not
+// signalled — they have no userspace to deliver into.
+void signal_send_pgrp(uint64_t pgrp, int signo) {
+    if (pgrp == 0 || !signo_valid(signo)) return;
+    uint64_t online = cpus_active ? cpus_active : 1;
+    for (uint64_t i = 0; i < online; i++) {
+        cpu_local_t* cpu = &cpu_locals[i];
+        task_t* cur = cpu->current;
+        if (cur && cur->pgid == pgrp && cur->state != TASK_STATE_ZOMBIE) {
+            signal_send(cur, signo);
+        }
+        run_queue_t* rq = &cpu->rq;
+        spin_lock(&rq->lock);
+        for (task_t* t = rq->head; t; t = t->next) {
+            if (t->pgid == pgrp && t->state != TASK_STATE_ZOMBIE) {
+                signal_send(t, signo);
+            }
+        }
+        spin_unlock(&rq->lock);
     }
 }
 

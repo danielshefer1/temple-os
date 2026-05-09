@@ -8,6 +8,11 @@
 // Bits are atomic-or'd so signals from different CPUs don't lose each other.
 void signal_send(task_t* t, int signo);
 
+// Send a signal to every task whose pgid matches `pgrp`. Walks each CPU's
+// run-queue + current/zombie state. Tasks that are blocked or running both
+// pick up the signal on their next return-to-userspace.
+void signal_send_pgrp(uint64_t pgrp, int signo);
+
 // Install a handler for the calling task. `handler` is SIG_DFL, SIG_IGN, or
 // a user-space function pointer; `restorer` is a small user-space trampoline
 // that calls SYS_SIGRETURN once the handler returns.

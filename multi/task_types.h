@@ -90,4 +90,10 @@ typedef struct task_t {
     struct task_t* sleep_next; // per-CPU sleep queue link (sorted ascending)
 
     uint64_t mmap_next;        // next user VA for anonymous mmap (bump-only)
+
+    // Process group / session model. New tasks default to a fresh "session
+    // leader" (pgid == sid == pid); fork inherits both from the parent;
+    // exec preserves them. tty's foreground pgrp uses the pgid value.
+    uint64_t pgid;
+    uint64_t sid;
 } task_t;

@@ -10,7 +10,7 @@
 #include "vfs_path.h"
 #include "vfs_path_ops.h"
 #include "fb.h"
-#include "fb_console.h"
+#include "vt.h"
 
 void start() {
     SetGDT();
@@ -35,7 +35,7 @@ void start() {
     ram_block_init();
 
     fb_map();
-    fb_console_init();
+    vt_init_all();
 
     InitRsdt();
     InitMadt();

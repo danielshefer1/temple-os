@@ -30,6 +30,8 @@
 #define WAITPID_SYSCALL    29
 #define MKNOD_SYSCALL      30
 #define SLEEP_SYSCALL      31
+#define SETPGID_SYSCALL    32   // setpgid(pid, pgid); pid==0 means self, pgid==0 means use pid
+#define GETPGID_SYSCALL    33   // getpgid(pid); pid==0 means self
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256

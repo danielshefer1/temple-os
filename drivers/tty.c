@@ -144,7 +144,14 @@ static int64_t tty_ioctl(file_t* f, uint64_t cmd, void* arg) {
             tty->flags |= TTY_FLAG_ICANON | TTY_FLAG_ECHO;
             break;
         case TTY_IOCTL_SET_FOREGROUND:
-            tty->foreground = this_cpu()->current;
+            // Legacy alias: treat the calling task's pgid as the new fg pgrp.
+            tty->pgrp = this_cpu()->current->pgid;
+            break;
+        case TTY_IOCTL_TIOCSPGRP:
+            tty->pgrp = (uint64_t)arg;
+            break;
+        case TTY_IOCTL_TIOCGPGRP:
+            if (arg) *(uint64_t*)arg = tty->pgrp;
             break;
         default:
             r = -ENOTTY;
@@ -207,10 +214,12 @@ file_t* tty_open(tty_t* tty) {
 }
 
 void tty_drop_task(task_t* t) {
-    if (!t) return;
-    if (console_tty.foreground == t) {
-        console_tty.foreground = NULL;
-    }
+    // With process groups, the tty no longer holds a per-task pointer.
+    // Clearing the foreground pgrp when the *leader* of that group exits
+    // would be reasonable, but we don't track membership cardinality and
+    // setpgid+children-still-alive is the more common case. Leave the pgrp
+    // value in place; signal_send_pgrp gracefully handles the empty case.
+    (void)t;
 }
 
 // IRQ-context producer. Called from KeyboardHandler.
@@ -219,11 +228,14 @@ void tty_input_byte(tty_t* tty, char c) {
     CliHelper();
     spin_lock(&tty->input_lock);
 
-    // Ctrl+C: never enters the buffer; signals foreground.
+    // Ctrl+C: never enters the buffer; signals every task in the foreground
+    // process group. signal_send_pgrp walks scheduler state, so it must run
+    // outside our own input_lock to avoid lock-ordering problems with the
+    // run-queue locks it acquires.
     if ((tty->flags & TTY_FLAG_ISIG) && c == 0x03) {
-        task_t* fg = tty->foreground;
+        uint64_t pgrp = tty->pgrp;
         spin_unlock(&tty->input_lock);
-        if (fg) signal_send(fg, SIGINT);
+        if (pgrp != 0) signal_send_pgrp(pgrp, SIGINT);
         if (ie) StiHelper();
         return;
     }

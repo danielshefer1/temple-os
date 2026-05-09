@@ -1,11 +1,28 @@
 #include "vga.h"
-#include "console.h"
+#include "vt.h"
 
 #define COM1_IER (COM1_BASE + 1)
 #define COM1_LCR (COM1_BASE + 3)
 #define COM1_MCR (COM1_BASE + 4)
 
 static spinlock_t vga_spinlock = {0};
+
+// IRQ-safe lock/unlock for the unified output path. Plain spin_lock leaves
+// IF on, so an IRQ that runs on the same core mid-kprintf and itself does
+// kernel output races at character granularity (visible as interleaved
+// glyphs) or — worse — same-core deadlocks if the IRQ tries to re-acquire.
+// Save/restore IF around the critical section so kprintf is atomic vs. all
+// IRQ-context writers (timer logs, panic, keyboard echo).
+static inline bool vga_lock(void) {
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&vga_spinlock);
+    return ie;
+}
+static inline void vga_unlock(bool ie) {
+    spin_unlock(&vga_spinlock);
+    if (ie) StiHelper();
+}
 
 static void serial_init(void) {
     outb(COM1_IER, 0x00);
@@ -39,11 +56,12 @@ void internal_insert_tab() {
 }
 
 void internal_putchar(char c, uint8_t color) {
-    // Mirror to the screen console (no-op until M3 plugs in fb_console). The
-    // serial port is the source of truth for kernel logs; the screen is a
-    // best-effort visual mirror.
-    console_set_attr(color & 0x0F, (color >> 4) & 0x0F);
-    console_putc(c);
+    // The screen path goes through the VT parser; the parser owns the
+    // current SGR state, so we must NOT slam set_attr per character or we
+    // wipe out a CSI we just consumed. Callers that want a non-default color
+    // wrap their output in SGR escapes (kerror does \x1b[31m...\x1b[0m).
+    (void)color;
+    vt_write_active_(c);
 
     switch (c) {
         case '\t':
@@ -57,20 +75,13 @@ void internal_putchar(char c, uint8_t color) {
 }
 
 void putchar(char c, uint8_t color) {
-    (void)color;
-    spin_lock(&vga_spinlock);
-    switch (c) {
-        case '\t':
-            internal_insert_tab();
-            spin_unlock(&vga_spinlock);
-            return;
-        case '\b':
-            deletechar();
-            spin_unlock(&vga_spinlock);
-            return;
-    }
-    serial_putc(c);
-    spin_unlock(&vga_spinlock);
+    // Route through the same path as kprintf so keyboard echo (called by
+    // tty_input_byte under TTY_FLAG_ECHO) lands on both the framebuffer and
+    // the serial mirror. Previously this short-circuited straight to
+    // serial_putc, which is why typed keys never showed up on the VT.
+    bool ie = vga_lock();
+    internal_putchar(c, color);
+    vga_unlock(ie);
 }
 
 uint64_t str_len(const char* str) {
@@ -88,30 +99,38 @@ void internal_print_str(const char* str, uint8_t color) {
 
 void print_str(const char* str, uint8_t color) {
     (void)color;
-    spin_lock(&vga_spinlock);
+    bool ie = vga_lock();
     while (*str && *str != '\0') {
         internal_putchar(*str++, color);
     }
-    spin_unlock(&vga_spinlock);
+    vga_unlock(ie);
 }
 
 uint64_t print_str_SYSCALL(const char* str, uint8_t color, uint64_t length) {
     (void)color;
-    spin_lock(&vga_spinlock);
+    bool ie = vga_lock();
     uint64_t idx = 0;
     while (str[idx] != '\0' && idx < length) {
         internal_putchar(str[idx], color);
         idx++;
     }
-    spin_unlock(&vga_spinlock);
+    vga_unlock(ie);
     return idx;
 }
 
 void clear_screen() {
-    spin_lock(&vga_spinlock);
+    bool ie = vga_lock();
     serial_puts("\x1b[2J\x1b[H");
-    console_clear();
-    spin_unlock(&vga_spinlock);
+    // The VT layer handles ESC[2J via vt_write_byte; emit it as bytes here
+    // so both serial and the active VT clear consistently.
+    vt_write_active_(0x1B);
+    vt_write_active_('[');
+    vt_write_active_('2');
+    vt_write_active_('J');
+    vt_write_active_(0x1B);
+    vt_write_active_('[');
+    vt_write_active_('H');
+    vga_unlock(ie);
 }
 
 void newline() {
@@ -119,17 +138,17 @@ void newline() {
 }
 
 void insert_tab() {
-    spin_lock(&vga_spinlock);
+    bool ie = vga_lock();
     for (uint64_t i = 0; i < 4; i++) {
         serial_putc(' ');
     }
-    spin_unlock(&vga_spinlock);
+    vga_unlock(ie);
 }
 
 void kprintf(const char* format, ...) {
     va_list args;
     va_start(args, format);
-    spin_lock(&vga_spinlock);
+    bool ie = vga_lock();
 
     while (*format != '\0') {
         if (*format == '%') {
@@ -174,7 +193,7 @@ void kprintf(const char* format, ...) {
         }
         format++;
     }
-    spin_unlock(&vga_spinlock);
+    vga_unlock(ie);
 
     va_end(args);
 }
@@ -183,8 +202,14 @@ void kerror(const char* format, ...) {
     va_list args;
     va_start(args, format);
 
+    // Panic-style force-unlock so an exception inside a kprintf still gets
+    // its message out. We're about to halt anyway, so don't bother with the
+    // IRQ-safe wrapper here.
     vga_spinlock.locked = 0;
     spin_lock(&vga_spinlock);
+    // Bracket the message in SGR red on the screen path; the parser will
+    // ignore these on the serial side too (we just send the raw escape).
+    vt_write_active_(0x1B); vt_write_active_('['); vt_write_active_('3'); vt_write_active_('1'); vt_write_active_('m');
     while (*format != '\0') {
         if (*format == '%') {
             format++;
@@ -229,6 +254,7 @@ void kerror(const char* format, ...) {
         format++;
     }
 
+    vt_write_active_(0x1B); vt_write_active_('['); vt_write_active_('0'); vt_write_active_('m');
     va_end(args);
     spin_unlock(&vga_spinlock);
 }
