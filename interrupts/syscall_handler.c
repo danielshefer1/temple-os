@@ -10,6 +10,7 @@
 #include "signal.h"
 #include "waitpid.h"
 #include "timer.h"
+#include "paging.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
     uint64_t cs = frame->cs;
@@ -61,16 +62,65 @@ void syscall_handler(interrupt_frame_t* frame) {
     signal_deliver_on_return(frame);
 }
 
+// Anonymous user mmap: hand back `size` bytes of fresh, zeroed, RW/NX user
+// pages mapped at the next free slot in the task's [USER_MMAP_BASE, _END)
+// region. Bump-only — munmap holes are not reused. Pages are owned by the
+// caller's address space; exit/exec reaps them via free_user_address_space.
 int64_t MmapHandler(interrupt_frame_t* frame) {
-    int64_t size = frame->rbx;
-    void* ret = RequestBuddy(size, true);
-    return (int64_t) ret;
+    uint64_t size = frame->rbx;
+    if (size == 0) return -EINVAL;
+    size = (size + PAGE_SIZE - 1) & ~((uint64_t)PAGE_SIZE - 1);
+
+    task_t* cur = this_cpu()->current;
+    if (cur->mmap_next == 0) cur->mmap_next = USER_MMAP_BASE;
+    if (cur->mmap_next + size > USER_MMAP_END) return -ENOMEM;
+
+    uint64_t va_start = cur->mmap_next;
+    page_entry_t* pml4_kvirt = (page_entry_t*)(cur->cr3 + KERNEL_VIRTUAL);
+    uint64_t flags = PRESENT_PAGE | RW_PAGE | USER_PAGE | NX_PAGE;
+
+    uint64_t mapped = 0;
+    for (uint64_t off = 0; off < size; off += PAGE_SIZE) {
+        void* phys = RequestBuddy(PAGE_SIZE, false);
+        if (!phys) goto fail;
+        memset((void*)((uint64_t)phys + KERNEL_VIRTUAL), 0, PAGE_SIZE);
+        if (map_page_to_virt_in(pml4_kvirt, va_start + off, (uint64_t)phys, flags, false) < 0) {
+            FreeBuddy(phys, false);
+            goto fail;
+        }
+        mapped += PAGE_SIZE;
+    }
+    cur->mmap_next += size;
+    return (int64_t)va_start;
+
+fail:
+    for (uint64_t off = 0; off < mapped; off += PAGE_SIZE) {
+        uint64_t phys;
+        if (lookup_user_in_pml4(cur->cr3, va_start + off, &phys) == 0) {
+            unmap_page_in(pml4_kvirt, va_start + off);
+            FreeBuddy((void*)phys, false);
+        }
+    }
+    return -ENOMEM;
 }
 
 int64_t MunmapHandler(interrupt_frame_t* frame) {
-    int64_t addr = frame->rbx;
-    FreeBuddy((void*) addr, true);
-    return 1;
+    uint64_t addr = frame->rbx;
+    uint64_t size = frame->rcx;   // arg2: r10 → rcx by syscall_entry
+    if (addr & (PAGE_SIZE - 1)) return -EINVAL;
+    if (size == 0) return -EINVAL;
+    size = (size + PAGE_SIZE - 1) & ~((uint64_t)PAGE_SIZE - 1);
+    if (addr < USER_MMAP_BASE || addr + size > USER_MMAP_END) return -EINVAL;
+
+    task_t* cur = this_cpu()->current;
+    page_entry_t* pml4_kvirt = (page_entry_t*)(cur->cr3 + KERNEL_VIRTUAL);
+    for (uint64_t off = 0; off < size; off += PAGE_SIZE) {
+        uint64_t phys;
+        if (lookup_user_in_pml4(cur->cr3, addr + off, &phys) < 0) continue;
+        unmap_page_in(pml4_kvirt, addr + off);
+        FreeBuddy((void*)phys, false);
+    }
+    return 0;
 }
 
 int64_t UnknownSysCall() {
@@ -124,6 +174,7 @@ int64_t ExecHandler(interrupt_frame_t* frame) {
     uint64_t old_cr3 = cur->cr3;
 
     cur->cr3 = img.cr3_phys;
+    cur->mmap_next = USER_MMAP_BASE;
     switch_pml4((page_entry_t*)img.cr3_phys);
 
     free_user_address_space(old_cr3);

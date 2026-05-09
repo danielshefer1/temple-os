@@ -28,6 +28,7 @@ int64_t do_fork(interrupt_frame_t* parent_frame) {
     }
     child->cr3 = child_cr3;
     child->parent = parent;
+    child->mmap_next = parent->mmap_next;
 
     // Duplicate the parent's open-file table. Both tasks now reference the
     // same file_t structs (so they share file offsets, matching POSIX),

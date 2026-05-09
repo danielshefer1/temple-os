@@ -148,6 +148,74 @@ void _start(void) {
                   my_strlen(mr >= 0 && mfd >= 0 && w == 8 ? ok : fail));
     }
 
+    // mmap: 3 pages, write+read pattern, then munmap.
+    {
+        static const char ok[]   = "mmap ok\n";
+        static const char fail[] = "mmap FAIL\n";
+        unsigned long sz = 3 * 4096;
+        char* p = (char*)sys_mmap(sz);
+        int good = ((long)p > 0);
+        if (good) {
+            for (unsigned long i = 0; i < sz; i++) p[i] = (char)(i & 0xFF);
+            for (unsigned long i = 0; i < sz; i++) {
+                if (p[i] != (char)(i & 0xFF)) { good = 0; break; }
+            }
+            if (sys_munmap(p, sz) != 0) good = 0;
+        }
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // mmap + fork: parent writes a pattern, forks; child verifies its copy
+    // and unmaps; parent waits, then unmaps independently. Verifies that
+    // clone_user_pml4 deep-copies mmap'd pages and that munmap in one task
+    // doesn't pull pages out from under the other.
+    {
+        static const char ok[]   = "mmap fork ok\n";
+        static const char fail[] = "mmap fork FAIL\n";
+        unsigned long sz = 2 * 4096;
+        char* p = (char*)sys_mmap(sz);
+        int good = ((long)p > 0);
+        if (good) {
+            for (unsigned long i = 0; i < sz; i++) p[i] = (char)((i + 7) & 0xFF);
+            long pid = sys_fork();
+            if (pid == 0) {
+                int child_ok = 1;
+                for (unsigned long i = 0; i < sz; i++) {
+                    if (p[i] != (char)((i + 7) & 0xFF)) { child_ok = 0; break; }
+                }
+                p[0] = 'X';
+                sys_munmap(p, sz);
+                sys_exit(child_ok ? 42 : 1);
+            }
+            unsigned long status = 0;
+            sys_waitpid(pid, &status);
+            if (status != 42) good = 0;
+            if (good && p[0] != (char)(7 & 0xFF)) good = 0;
+            if (sys_munmap(p, sz) != 0) good = 0;
+        }
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // mmap negative tests.
+    {
+        static const char ok[]   = "mmap neg ok\n";
+        static const char fail[] = "mmap neg FAIL\n";
+        int good = 1;
+        if ((long)sys_mmap(0) >= 0) good = 0;
+        if (sys_munmap((void*)0, 4096) >= 0) good = 0;
+        char* p2 = (char*)sys_mmap(4096);
+        if ((long)p2 <= 0) good = 0;
+        else {
+            if (sys_munmap(p2 + 1, 4096) >= 0) good = 0;
+            if (sys_munmap(p2, 0) >= 0) good = 0;
+            if (sys_munmap(p2, 4096) != 0) good = 0;
+        }
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
     sys_write(STDOUT_FILENO, "sleep start\n", 12);
     sys_sleep(500);
     sys_write(STDOUT_FILENO, "sleep done\n", 11);

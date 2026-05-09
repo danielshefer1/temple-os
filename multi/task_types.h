@@ -88,4 +88,6 @@ typedef struct task_t {
 
     uint64_t sleep_deadline;   // tick value at which to wake (0 if not sleeping)
     struct task_t* sleep_next; // per-CPU sleep queue link (sorted ascending)
+
+    uint64_t mmap_next;        // next user VA for anonymous mmap (bump-only)
 } task_t;

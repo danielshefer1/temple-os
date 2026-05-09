@@ -8,6 +8,11 @@
 #define KERNEL_VIRTUAL 0xFFFFFFFF80000000ULL
 #define KERNEL_BASE 0x200000
 #define USER_VIRTUAL 0x40000000
+
+// User anonymous-mmap region: bump-allocated by MmapHandler, in canonical
+// low-half above the PIE/heap range and well below USER_STACK_TOP_VA.
+#define USER_MMAP_BASE 0x0000500000000000ULL
+#define USER_MMAP_END  0x0000700000000000ULL
 #define TABLE_SIZE (PAGE_SIZE * 512)
 #define PAGE_SIZE_LOG2 12
 #define STACK_PAGES 4

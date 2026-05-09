@@ -7,6 +7,8 @@
 
 #define FWRITE_SYSCALL    10
 #define EXIT_SYSCALL       1
+#define MMAP_SYSCALL       5
+#define MUNMAP_SYSCALL     6
 #define OPEN_SYSCALL       7
 #define CLOSE_SYSCALL      8
 #define FORK_SYSCALL      24
@@ -166,6 +168,27 @@ static inline long sys_sleep(unsigned long ms) {
         "syscall"
         : "=a"(ret)
         : "a"((long)SLEEP_SYSCALL), "b"(ms)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline void* sys_mmap(unsigned long size) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)MMAP_SYSCALL), "b"(size)
+        : "rcx", "r11", "memory");
+    return (void*)ret;
+}
+
+static inline long sys_munmap(void* addr, unsigned long size) {
+    long ret;
+    register unsigned long r10_ asm("r10") = size;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)MUNMAP_SYSCALL), "b"(addr), "r"(r10_)
         : "rcx", "r11", "memory");
     return ret;
 }

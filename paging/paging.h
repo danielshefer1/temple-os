@@ -35,6 +35,12 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
 // are intentional behavior that AddKernelPages relies on.
 int64_t map_page_to_virt_in(page_entry_t* pml4_base,
                             uint64_t virt, uint64_t phy, uint64_t flags, bool big_page);
+
+// Clear the 4KB mapping for `virt` in the given PML4. Returns 0 if it was
+// present (and a TLB shootdown was issued), -ENOENT if no mapping existed.
+// Page-table pages above the PT level are left in place — free_user_address_space
+// reaps them when the task exits.
+int64_t unmap_page_in(page_entry_t* pml4_base, uint64_t virt);
 uint64_t GetCurrPrimitveAddr();
 
 // Invalidate `addr` (single page) on the local TLB and broadcast a TLB

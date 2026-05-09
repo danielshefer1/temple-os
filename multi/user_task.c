@@ -10,6 +10,7 @@ task_t* create_user_task(const elf64_image_t* img, const char* name) {
     if (!t) return NULL;
 
     t->cr3 = img->cr3_phys;
+    t->mmap_next = USER_MMAP_BASE;
 
     // Build kstack so first context_switch RET lands in user_task_entry_trampoline,
     // which then IRETQs into ring 3.

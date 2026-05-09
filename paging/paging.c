@@ -325,6 +325,40 @@ void map_page_to_virt(uint64_t virt, uint64_t phy, uint64_t flags, bool big_page
     map_page_to_virt_in(pml4, virt, phy, flags, big_page);
 }
 
+int64_t unmap_page_in(page_entry_t* pml4_base, uint64_t virt) {
+    uint64_t i4 = PML4_IDX(virt);
+    uint64_t i3 = PDPT_IDX(virt);
+    uint64_t i2 = PD_IDX(virt);
+    uint64_t i1 = PT_IDX(virt);
+
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&paging_lock);
+    int64_t r = -ENOENT;
+    bool need_shootdown = false;
+
+    if (!pml4_base[i4].present) goto out;
+    page_entry_t* p3 = (page_entry_t*)(((uint64_t)pml4_base[i4].address << 12) + KERNEL_VIRTUAL);
+    if (!p3[i3].present) goto out;
+    page_entry_t* p2 = (page_entry_t*)(((uint64_t)p3[i3].address << 12) + KERNEL_VIRTUAL);
+    if (!p2[i2].present) goto out;
+    // 2MB big page mappings aren't issued by the user-mmap path; bail out
+    // rather than scribble on a phys frame field as if it were a PT pointer.
+    if (p2[i2].page_size) goto out;
+    page_entry_t* p1 = (page_entry_t*)(((uint64_t)p2[i2].address << 12) + KERNEL_VIRTUAL);
+    if (!p1[i1].present) goto out;
+
+    p1[i1].present = 0;
+    need_shootdown = true;
+    r = 0;
+
+out:
+    spin_unlock(&paging_lock);
+    if (need_shootdown) tlb_flush_remote(virt);
+    if (ie) StiHelper();
+    return r;
+}
+
 
 void FillPageDirectoryGeneral(void* virt, void* phy, uint64_t size, uint64_t flags) {
     uint64_t start_addr = (uint64_t)virt;
