@@ -21,6 +21,7 @@
 #define SIGCONT 18
 #define SIGSTOP 19
 #define SIGTSTP 20
+#define SIGWINCH 28
 
 // Number of signals supported. Bit (signo - 1) in pending_signals corresponds
 // to the signal of that number; signo=1..31 fits in a uint64_t bitmask.

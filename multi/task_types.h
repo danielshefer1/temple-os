@@ -102,4 +102,10 @@ typedef struct task_t {
     // to vfs_root in alloc_blank_task; inherited from parent on fork; survives
     // exec. NULL only briefly during very early boot before vfs_root exists.
     struct dentry_t* cwd;
+
+    // Controlling terminal. NULL by default; set by ioctl(TIOCSCTTY) on a
+    // tty/pty slave fd. Inherited by fork. Used to back open("/dev/tty"):
+    // when set, that path resolves to this file_t instead of console_tty.
+    // Borrowed reference — kept alive by the fd that originally set it.
+    struct file_t* ctty;
 } task_t;

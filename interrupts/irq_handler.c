@@ -4,6 +4,7 @@
 #include "signal.h"
 #include "tty.h"
 #include "vt.h"
+#include "kbd_dev.h"
 
 static const char kbd_us[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
@@ -125,6 +126,15 @@ static const char* const fkey_seq[12] = {
 
 void KeyboardHandler() {
     uint8_t scancode = inb(0x60);
+
+    // /dev/kbd hijack: when the userspace terminal has the device open, hand
+    // it raw scancodes (including 0xE0 prefix bytes — the userspace term
+    // does its own modifier tracking and key translation). The console TTY
+    // path is dormant until /dev/kbd closes.
+    if (kbd_dev_active()) {
+        kbd_dev_input(scancode);
+        return;
+    }
 
     // Extended-scancode prefix: latch and wait for the second byte.
     if (scancode == KBD_EXTENDED) {

@@ -61,6 +61,8 @@ void syscall_handler(interrupt_frame_t* frame) {
         case CHDIR_SYSCALL:        ret = SysChdir(frame);         break;
         case GETCWD_SYSCALL:       ret = SysGetcwd(frame);        break;
         case GETDENTS_SYSCALL:     ret = SysGetdents(frame);      break;
+        case MMAP_FILE_SYSCALL:    ret = MmapFileHandler(frame);  break;
+        case SETSID_SYSCALL:       ret = SetsidHandler(frame);    break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -113,6 +115,67 @@ fail:
         }
     }
     return -ENOMEM;
+}
+
+// File-backed mmap. Maps `size` bytes of the file's physical pages into the
+// next free slot of the caller's mmap region. Used by /dev/fb so the
+// userspace term can splat pixels straight to the framebuffer with no copy.
+//
+// Driver responsibility (file_ops_t.mmap_phys): given a page-aligned offset,
+// return the device's physical page address. This handler walks page-by-page,
+// asks the driver for each phys, and maps it user-RW.
+int64_t MmapFileHandler(interrupt_frame_t* frame) {
+    int64_t  fd   = (int64_t)frame->rbx;
+    uint64_t size = frame->rcx;     // arg2: r10 -> rcx by syscall_entry
+    if (size == 0) return -EINVAL;
+    size = (size + PAGE_SIZE - 1) & ~((uint64_t)PAGE_SIZE - 1);
+
+    file_t* f = fd_lookup(fd);
+    if (f == NULL) return -EBADF;
+    if (f->ops == NULL || f->ops->mmap_phys == NULL) return -ENOTSUP;
+
+    task_t* cur = this_cpu()->current;
+    if (cur->mmap_next == 0) cur->mmap_next = USER_MMAP_BASE;
+    if (cur->mmap_next + size > USER_MMAP_END) return -ENOMEM;
+
+    uint64_t va_start = cur->mmap_next;
+    page_entry_t* pml4_kvirt = (page_entry_t*)(cur->cr3 + KERNEL_VIRTUAL);
+    uint64_t flags = PRESENT_PAGE | RW_PAGE | USER_PAGE | NX_PAGE
+                   | WRITE_THROUGH_PAGE | CACHE_DIS_PAGE;
+
+    uint64_t mapped = 0;
+    for (uint64_t off = 0; off < size; off += PAGE_SIZE) {
+        uint64_t phys = 0;
+        int64_t r = f->ops->mmap_phys(f, off, &phys);
+        if (r < 0) goto fail;
+        if (map_page_to_virt_in(pml4_kvirt, va_start + off, phys, flags, false) < 0) {
+            goto fail;
+        }
+        mapped += PAGE_SIZE;
+    }
+    cur->mmap_next += size;
+    return (int64_t)va_start;
+
+fail:
+    // Walk back the partial mapping. We do NOT FreeBuddy these — the pages
+    // are owned by the device, not the buddy.
+    for (uint64_t off = 0; off < mapped; off += PAGE_SIZE) {
+        unmap_page_in(pml4_kvirt, va_start + off);
+    }
+    return -ENOMEM;
+}
+
+// setsid(): make the calling task a new session leader and a new process
+// group leader (sid = pgid = pid). Detaches it from its previous controlling
+// terminal so a subsequent ioctl(TIOCSCTTY) on a pty slave can attach a
+// fresh ctty without inheriting the parent's.
+int64_t SetsidHandler(interrupt_frame_t* frame) {
+    (void)frame;
+    task_t* me = this_cpu()->current;
+    me->sid  = me->pid;
+    me->pgid = me->pid;
+    me->ctty = NULL;
+    return (int64_t)me->sid;
 }
 
 int64_t MunmapHandler(interrupt_frame_t* frame) {

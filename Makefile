@@ -42,7 +42,7 @@ QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/fb.c drivers/fb_console.c drivers/vt.c drivers/tty.c drivers/devfs.c \
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/fb.c drivers/fb_console.c drivers/vt.c drivers/tty.c drivers/tty_ldisc.c drivers/pty.c drivers/fb_dev.c drivers/kbd_dev.c drivers/devfs.c \
                 drivers/mem_devs.c drivers/ram_block.c drivers/disk_devs.c drivers/procfs.c init/kernel.c init/limine_entry.c \
                 allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
@@ -74,6 +74,8 @@ K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.as
 # ============================================================================
 USER_DIR     = $(BUILD_DIR)/user
 USER_HELLO   = $(USER_DIR)/hello.elf
+USER_TERM    = $(USER_DIR)/term.elf
+USER_FONT_OBJ = $(USER_DIR)/font.o
 USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
@@ -96,12 +98,28 @@ $(USER_HELLO): user/hello.c user/syscall_inline.h user/sys/wait.h user/sys/diren
 	@$(CC64) $(USER_CFLAGS) -c user/hello.c -o $(USER_DIR)/hello.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/hello.o
 
+# Embed assets/font.psf as a binary blob into user/term so the userspace
+# rasterizer can use the same glyph table as the kernel fb_console.
+$(USER_FONT_OBJ): $(FONT_PSF) | $(USER_DIR)
+	@echo "[USER] Embedding $<"
+	@cd $(dir $<) && objcopy -I binary -O elf64-x86-64 -B i386:x86-64 \
+	    --rename-section .data=.rodata,alloc,load,readonly,data,contents \
+	    $(notdir $<) $(abspath $@)
+
+$(USER_TERM): user/term.c user/syscall_inline.h user/hello_linker.ld $(USER_FONT_OBJ) | $(USER_DIR)
+	@echo "[USER] Building $@"
+	@$(CC64) $(USER_CFLAGS) -c user/term.c -o $(USER_DIR)/term.o
+	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/term.o $(USER_FONT_OBJ)
+
 # Install built user programs into data.img (idempotent; rm-then-write).
-user-img: $(USER_HELLO) $(DATA_IMG)
+user-img: $(USER_HELLO) $(USER_TERM) $(DATA_IMG)
 	@echo "[USER] Installing $(USER_HELLO) -> /bin/hello on $(DATA_IMG)"
 	@debugfs -w -R "mkdir /bin" $(DATA_IMG) 2>/dev/null || true
 	@debugfs -w -R "rm /bin/hello" $(DATA_IMG) 2>/dev/null || true
 	@debugfs -w -R "write $(USER_HELLO) /bin/hello" $(DATA_IMG)
+	@echo "[USER] Installing $(USER_TERM) -> /bin/term on $(DATA_IMG)"
+	@debugfs -w -R "rm /bin/term" $(DATA_IMG) 2>/dev/null || true
+	@debugfs -w -R "write $(USER_TERM) /bin/term" $(DATA_IMG)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

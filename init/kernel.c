@@ -31,13 +31,19 @@ void kmain() {
     create_kernel_task(task_b, "task_b");
     create_kernel_task(idle_task, "idle");
 
-    // step 1: full loader + user task
+    // Launch the userspace terminal emulator. /bin/term opens /dev/fb,
+    // /dev/kbd, and /dev/ptmx, then forks /bin/hello inside the pty so its
+    // output is rendered through the userspace VT instead of the kernel
+    // console. While /bin/term holds /dev/kbd, the keyboard IRQ no longer
+    // feeds the kernel console_tty; closing /bin/term restores it.
     elf64_image_t img;
-    int64_t r = load_elf64("/bin/hello", &img);
+    int64_t r = load_elf64("/bin/term", &img);
     if (r < 0) {
-        kprintf("load_elf64=%d\n", r);
+        kprintf("load_elf64(/bin/term)=%d, falling back to /bin/hello\n", r);
+        r = load_elf64("/bin/hello", &img);
+        if (r >= 0) create_user_task(&img, "hello");
     } else {
-        create_user_task(&img, "hello");
+        create_user_task(&img, "term");
     }
     VerifyKernelBuddyShadow();
 

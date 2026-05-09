@@ -1,0 +1,481 @@
+// /bin/term — userspace terminal emulator.
+//
+// Owns the framebuffer (via mmap of /dev/fb), the keyboard (via /dev/kbd),
+// and a fresh pty pair (/dev/ptmx + /dev/pts/N). Forks a shell into the
+// slave's stdio; reads keystrokes from /dev/kbd and writes them through the
+// master; reads program output from the master and renders it via an
+// in-process xterm-ish parser to pixel cells on the framebuffer.
+//
+// Three processes when running:
+//   parent   — render loop (reads master, parses VT, blits cells)
+//   child A  — input pump (reads kbd, translates, writes master)
+//   child B  — the program itself (currently /bin/hello)
+//
+// PSF2 font is embedded by the Makefile via objcopy as a binary blob.
+
+#include "syscall_inline.h"
+
+extern const unsigned char _binary_font_psf_start[];
+extern const unsigned char _binary_font_psf_end[];
+
+// ---- PSF2 ---------------------------------------------------------------
+
+typedef struct __attribute__((packed)) {
+    unsigned char  magic[4];
+    unsigned int   version;
+    unsigned int   header_size;
+    unsigned int   flags;
+    unsigned int   num_glyphs;
+    unsigned int   bytes_per_glyph;
+    unsigned int   height;
+    unsigned int   width;
+} psf2_header_t;
+
+// ---- VT cell + state ----------------------------------------------------
+
+typedef struct {
+    unsigned char ch;
+    unsigned char fg;
+    unsigned char bg;
+} vt_cell_t;
+
+static fb_var_info_t fbv;
+static volatile unsigned int* fb_pixels;
+static unsigned long pitch_px;
+
+static const psf2_header_t* psf;
+static const unsigned char* glyphs;
+static unsigned long glyph_w, glyph_h, bytes_per_row;
+
+static unsigned long term_cols, term_rows;
+static vt_cell_t* cells;
+
+static unsigned char cur_fg = 7;
+static unsigned char cur_bg = 0;
+static int           cur_bold = 0;
+static unsigned long cur_row, cur_col;
+
+#define VT_GROUND 0
+#define VT_ESC    1
+#define VT_CSI    2
+static int          pstate;
+static unsigned int params[8];
+static int          n_params;
+static int          has_param;
+
+// CGA palette in 0xRRGGBB.
+static const unsigned int cga[16] = {
+    0x000000, 0x0000AA, 0x00AA00, 0x00AAAA,
+    0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
+    0x555555, 0x5555FF, 0x55FF55, 0x55FFFF,
+    0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
+};
+
+// ANSI color order -> CGA color order (same translation as the kernel VT).
+static const unsigned char ansi_to_cga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
+
+static void my_memcpy(void* dst, const void* src, unsigned long n) {
+    unsigned char* d = dst; const unsigned char* s = src;
+    while (n--) *d++ = *s++;
+}
+
+// ---- framebuffer rendering ---------------------------------------------
+
+static unsigned int pack_color(unsigned char idx) {
+    unsigned int rgb = cga[idx & 0x0F];
+    unsigned int r = (rgb >> 16) & 0xFF;
+    unsigned int g = (rgb >> 8)  & 0xFF;
+    unsigned int b =  rgb        & 0xFF;
+    // 32bpp framebuffer assumed (the kernel skips fb_console for non-32bpp).
+    return (r << 16) | (g << 8) | b;
+}
+
+static void blit_cell(unsigned long row, unsigned long col, vt_cell_t cell) {
+    if (row >= term_rows || col >= term_cols) return;
+    unsigned int fg = pack_color(cell.fg);
+    unsigned int bg = pack_color(cell.bg);
+    unsigned char idx = (cell.ch < 32 || cell.ch > 126) ? '?' : cell.ch;
+    const unsigned char* glyph = glyphs + (unsigned long)idx * psf->bytes_per_glyph;
+    unsigned long px_x = col * glyph_w;
+    unsigned long px_y = row * glyph_h;
+    for (unsigned long gy = 0; gy < glyph_h; gy++) {
+        const unsigned char* line = glyph + gy * bytes_per_row;
+        volatile unsigned int* prow = fb_pixels + (px_y + gy) * pitch_px + px_x;
+        for (unsigned long gx = 0; gx < glyph_w; gx++) {
+            unsigned long bit = 7 - (gx & 7);
+            unsigned char byte = line[gx >> 3];
+            prow[gx] = (byte & (1u << bit)) ? fg : bg;
+        }
+    }
+}
+
+static void fill_rect(unsigned long px_x, unsigned long px_y,
+                      unsigned long w, unsigned long h, unsigned int pix) {
+    for (unsigned long dy = 0; dy < h; dy++) {
+        volatile unsigned int* row = fb_pixels + (px_y + dy) * pitch_px + px_x;
+        for (unsigned long dx = 0; dx < w; dx++) row[dx] = pix;
+    }
+}
+
+static void clear_screen(void) {
+    unsigned int bg = pack_color(cur_bg);
+    fill_rect(0, 0, fbv.width, fbv.height, bg);
+    vt_cell_t blank = { ' ', cur_fg, cur_bg };
+    for (unsigned long i = 0; i < term_rows * term_cols; i++) cells[i] = blank;
+}
+
+static void scroll_one(void) {
+    // Shift cells up by one row in the backing array.
+    my_memcpy(cells, cells + term_cols,
+              (term_rows - 1) * term_cols * sizeof(vt_cell_t));
+    vt_cell_t blank = { ' ', cur_fg, cur_bg };
+    for (unsigned long c = 0; c < term_cols; c++) {
+        cells[(term_rows - 1) * term_cols + c] = blank;
+    }
+    // Pixel-level scroll on the framebuffer.
+    unsigned long row_bytes_px = pitch_px * glyph_h;
+    volatile unsigned int* base = fb_pixels;
+    for (unsigned long y = 0; y < (term_rows - 1) * glyph_h; y++) {
+        volatile unsigned int* dst = base + y * pitch_px;
+        volatile unsigned int* src = base + (y + glyph_h) * pitch_px;
+        for (unsigned long x = 0; x < term_cols * glyph_w; x++) dst[x] = src[x];
+    }
+    (void)row_bytes_px;
+    fill_rect(0, (term_rows - 1) * glyph_h,
+              term_cols * glyph_w, glyph_h, pack_color(cur_bg));
+}
+
+static void newline(void) {
+    cur_col = 0;
+    cur_row++;
+    if (cur_row >= term_rows) {
+        scroll_one();
+        cur_row = term_rows - 1;
+    }
+}
+
+static void put_glyph_at_cursor(char ch) {
+    unsigned long idx = cur_row * term_cols + cur_col;
+    cells[idx].ch = (unsigned char)ch;
+    cells[idx].fg = cur_fg;
+    cells[idx].bg = cur_bg;
+    blit_cell(cur_row, cur_col, cells[idx]);
+}
+
+// ---- VT parser ---------------------------------------------------------
+
+static unsigned int param_or(unsigned int i, unsigned int def) {
+    if ((int)i >= n_params) return def;
+    return params[i];
+}
+
+static void apply_sgr(void) {
+    unsigned int count = (n_params == 0) ? 1 : (unsigned int)n_params;
+    for (unsigned int i = 0; i < count; i++) {
+        unsigned int p = ((int)i < n_params) ? params[i] : 0;
+        if (p == 0)              { cur_fg = 7; cur_bg = 0; cur_bold = 0; }
+        else if (p == 1)         { cur_bold = 1; }
+        else if (p == 22)        { cur_bold = 0; }
+        else if (p == 39)        { cur_fg = 7; }
+        else if (p == 49)        { cur_bg = 0; }
+        else if (p >= 30 && p <= 37)   cur_fg = ansi_to_cga[p - 30];
+        else if (p >= 40 && p <= 47)   cur_bg = ansi_to_cga[p - 40];
+        else if (p >= 90 && p <= 97)   cur_fg = ansi_to_cga[p - 90] | 0x08;
+        else if (p >= 100 && p <= 107) cur_bg = ansi_to_cga[p - 100] | 0x08;
+    }
+    if (cur_bold) cur_fg |= 0x08;
+}
+
+static void clear_line_to_eol(void) {
+    vt_cell_t blank = { ' ', cur_fg, cur_bg };
+    for (unsigned long c = cur_col; c < term_cols; c++) {
+        cells[cur_row * term_cols + c] = blank;
+        blit_cell(cur_row, c, blank);
+    }
+}
+
+static void dispatch_csi(char final) {
+    switch (final) {
+        case 'A': {
+            unsigned int n = param_or(0, 1);
+            if (n == 0) n = 1;
+            cur_row = (cur_row > n) ? cur_row - n : 0;
+            break;
+        }
+        case 'B': {
+            unsigned int n = param_or(0, 1);
+            if (n == 0) n = 1;
+            cur_row += n;
+            if (cur_row >= term_rows) cur_row = term_rows - 1;
+            break;
+        }
+        case 'C': {
+            unsigned int n = param_or(0, 1);
+            if (n == 0) n = 1;
+            cur_col += n;
+            if (cur_col >= term_cols) cur_col = term_cols - 1;
+            break;
+        }
+        case 'D': {
+            unsigned int n = param_or(0, 1);
+            if (n == 0) n = 1;
+            cur_col = (cur_col > n) ? cur_col - n : 0;
+            break;
+        }
+        case 'H':
+        case 'f': {
+            unsigned int row = param_or(0, 1);
+            unsigned int col = param_or(1, 1);
+            if (row == 0) row = 1; if (col == 0) col = 1;
+            if (row > term_rows) row = term_rows;
+            if (col > term_cols) col = term_cols;
+            cur_row = row - 1;
+            cur_col = col - 1;
+            break;
+        }
+        case 'J': {
+            unsigned int mode = param_or(0, 0);
+            if (mode == 2) {
+                clear_screen();
+                cur_row = 0;
+                cur_col = 0;
+            }
+            break;
+        }
+        case 'K':
+            if (param_or(0, 0) == 0) {
+                clear_line_to_eol();
+            }
+            break;
+        case 'm':
+            apply_sgr();
+            break;
+        default: break;
+    }
+}
+
+static void reset_csi(void) {
+    n_params = 0;
+    has_param = 0;
+    for (int i = 0; i < 8; i++) params[i] = 0;
+}
+
+static void vt_input_byte(char c) {
+    switch (pstate) {
+        case VT_GROUND:
+            if (c == 0x1B) { pstate = VT_ESC; break; }
+            switch (c) {
+                case '\n': newline(); break;
+                case '\r': cur_col = 0; break;
+                case '\b':
+                    if (cur_col > 0) {
+                        cur_col--;
+                        vt_cell_t blank = { ' ', cur_fg, cur_bg };
+                        cells[cur_row * term_cols + cur_col] = blank;
+                        blit_cell(cur_row, cur_col, blank);
+                    }
+                    break;
+                case '\t': {
+                    unsigned long next = (cur_col + 4) & ~((unsigned long)3);
+                    if (next > term_cols) next = term_cols;
+                    while (cur_col < next) { put_glyph_at_cursor(' '); cur_col++; }
+                    break;
+                }
+                default:
+                    put_glyph_at_cursor(c);
+                    cur_col++;
+                    if (cur_col >= term_cols) newline();
+                    break;
+            }
+            break;
+        case VT_ESC:
+            if (c == '[') { pstate = VT_CSI; reset_csi(); }
+            else          { pstate = VT_GROUND; }
+            break;
+        case VT_CSI:
+            if (c >= '0' && c <= '9') {
+                if (n_params < 8) {
+                    params[n_params] = params[n_params] * 10 + (unsigned int)(c - '0');
+                    has_param = 1;
+                }
+            } else if (c == ';') {
+                if (has_param || n_params < 8) n_params++;
+                has_param = 0;
+            } else if (c >= 0x40 && c <= 0x7E) {
+                if (has_param) n_params++;
+                dispatch_csi(c);
+                pstate = VT_GROUND;
+            }
+            break;
+    }
+}
+
+// ---- scancode -> bytes -------------------------------------------------
+
+// US scancode set 1, base layer. 0 = no ASCII (modifier or unknown).
+static const char kbd_us[128] = {
+    0,  27, '1','2','3','4','5','6','7','8','9','0','-','=','\b',
+    '\t', 'q','w','e','r','t','y','u','i','o','p','[',']','\n',
+    0,  'a','s','d','f','g','h','j','k','l',';','\'','`',
+    0,  '\\','z','x','c','v','b','n','m',',','.','/',
+    0,  '*', 0, ' ',
+};
+static const char kbd_us_shift[128] = {
+    0,  27, '!','@','#','$','%','^','&','*','(',')','_','+','\b',
+    '\t', 'Q','W','E','R','T','Y','U','I','O','P','{','}','\n',
+    0,  'A','S','D','F','G','H','J','K','L',':','"','~',
+    0,  '|','Z','X','C','V','B','N','M','<','>','?',
+    0,  '*', 0, ' ',
+};
+
+#define MOD_SHIFT 1
+#define MOD_CTRL  2
+#define MOD_ALT   4
+
+static unsigned char mods;
+static int           pending_extended;
+
+// Translate one scancode byte. Returns # bytes written into out (0..6).
+static int translate_one(unsigned char sc, char* out) {
+    if (sc == 0xE0) { pending_extended = 1; return 0; }
+    int extended = pending_extended; pending_extended = 0;
+    int release = (sc & 0x80) != 0;
+    unsigned char code = sc & 0x7F;
+
+    if (code == 0x2A || code == 0x36) { // shift make/break
+        if (release) mods &= ~MOD_SHIFT; else mods |= MOD_SHIFT;
+        return 0;
+    }
+    if (code == 0x1D) { if (release) mods &= ~MOD_CTRL;  else mods |= MOD_CTRL;  return 0; }
+    if (code == 0x38) { if (release) mods &= ~MOD_ALT;   else mods |= MOD_ALT;   return 0; }
+    if (release) return 0;
+
+    if (extended) {
+        // Arrow keys, etc.
+        const char* seq = 0;
+        switch (code) {
+            case 0x48: seq = "\x1b[A"; break;
+            case 0x50: seq = "\x1b[B"; break;
+            case 0x4D: seq = "\x1b[C"; break;
+            case 0x4B: seq = "\x1b[D"; break;
+            case 0x47: seq = "\x1b[H"; break;
+            case 0x4F: seq = "\x1b[F"; break;
+            default: return 0;
+        }
+        int n = 0; while (seq[n]) { out[n] = seq[n]; n++; }
+        return n;
+    }
+
+    if (code >= 128) return 0;
+    char c = (mods & MOD_SHIFT) ? kbd_us_shift[code] : kbd_us[code];
+    if (c == 0) return 0;
+    if (mods & MOD_CTRL) {
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 1;
+        else if (c >= 'A' && c <= 'Z') c = c - 'A' + 1;
+    }
+    out[0] = c;
+    return 1;
+}
+
+// ---- itoa for the pts path --------------------------------------------
+
+static int u_to_str(unsigned int v, char* out) {
+    char tmp[16]; int n = 0;
+    if (v == 0) tmp[n++] = '0';
+    while (v) { tmp[n++] = '0' + (char)(v % 10); v /= 10; }
+    for (int i = 0; i < n; i++) out[i] = tmp[n - 1 - i];
+    return n;
+}
+
+// ---- main --------------------------------------------------------------
+
+void _start(void) {
+    long fb_fd = sys_open("/dev/fb", O_RDWR, 0);
+    if (fb_fd < 0) sys_exit(1);
+    if (sys_ioctl(fb_fd, FBIOGET_VSCREENINFO, &fbv) < 0) sys_exit(2);
+    if (fbv.bpp != 32) sys_exit(3);
+    pitch_px = fbv.pitch / 4;
+
+    unsigned long fb_size = (unsigned long)fbv.height * fbv.pitch;
+    fb_pixels = (volatile unsigned int*)sys_mmap_file(fb_fd, fb_size);
+    if ((long)fb_pixels < 0 || fb_pixels == 0) sys_exit(4);
+
+    // Parse PSF2 header.
+    psf = (const psf2_header_t*)_binary_font_psf_start;
+    if (psf->magic[0] != 0x72 || psf->magic[1] != 0xB5 ||
+        psf->magic[2] != 0x4A || psf->magic[3] != 0x86) sys_exit(5);
+    glyphs = _binary_font_psf_start + psf->header_size;
+    glyph_w = psf->width;
+    glyph_h = psf->height;
+    bytes_per_row = (psf->width + 7) / 8;
+    term_cols = fbv.width  / glyph_w;
+    term_rows = fbv.height / glyph_h;
+
+    // Cell backing buffer (sys_mmap rounds up to pages — fine).
+    cells = (vt_cell_t*)sys_mmap(term_rows * term_cols * sizeof(vt_cell_t));
+    if ((long)cells <= 0) sys_exit(6);
+    clear_screen();
+
+    long ptmx = sys_open("/dev/ptmx", O_RDWR, 0);
+    if (ptmx < 0) sys_exit(7);
+    unsigned int n = 0;
+    sys_ioctl(ptmx, TIOCGPTN, &n);
+    int unlock = 0;
+    sys_ioctl(ptmx, TIOCSPTLCK, &unlock);
+
+    char pts_path[24];
+    const char* pre = "/dev/pts/";
+    int pos = 0; while (pre[pos]) { pts_path[pos] = pre[pos]; pos++; }
+    pos += u_to_str(n, pts_path + pos);
+    pts_path[pos] = '\0';
+
+    // Initial winsize.
+    winsize_t ws = { (unsigned short)term_rows, (unsigned short)term_cols,
+                     (unsigned short)fbv.width, (unsigned short)fbv.height };
+    sys_ioctl(ptmx, TIOCSWINSZ, &ws);
+
+    // Fork the program-to-run.
+    long shell_pid = sys_fork();
+    if (shell_pid == 0) {
+        sys_setsid();
+        long slave = sys_open(pts_path, O_RDWR, 0);
+        if (slave < 0) sys_exit(20);
+        sys_ioctl(slave, TIOCSCTTY, 0);
+        sys_dup2(slave, 0);
+        sys_dup2(slave, 1);
+        sys_dup2(slave, 2);
+        if (slave > 2) sys_close(slave);
+        sys_close(ptmx);
+        sys_close(fb_fd);
+        sys_exec("/bin/hello");
+        sys_exit(127);
+    }
+
+    // Fork the input pump.
+    long input_pid = sys_fork();
+    if (input_pid == 0) {
+        sys_close(fb_fd);
+        long kbd_fd = sys_open("/dev/kbd", O_RDONLY, 0);
+        if (kbd_fd < 0) sys_exit(30);
+        unsigned char sc;
+        char out[8];
+        while (1) {
+            long r = sys_read(kbd_fd, &sc, 1);
+            if (r <= 0) break;
+            int len = translate_one(sc, out);
+            if (len > 0) sys_write(ptmx, out, len);
+        }
+        sys_exit(0);
+    }
+
+    // Render loop.
+    char rbuf[256];
+    while (1) {
+        long r = sys_read(ptmx, rbuf, sizeof(rbuf));
+        if (r <= 0) break;
+        for (long i = 0; i < r; i++) vt_input_byte(rbuf[i]);
+    }
+
+    sys_kill(input_pid, SIGTERM);
+    sys_exit(0);
+}

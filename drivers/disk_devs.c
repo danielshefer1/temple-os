@@ -1,5 +1,6 @@
 #include "disk_devs.h"
 #include "devfs.h"
+#include "pty_defs.h"
 #include "vfs_types.h"
 #include "vfs_defs.h"
 #include "vfs_path_ops.h"
@@ -177,6 +178,26 @@ static void make_static_dev_nodes(void) {
     ensure_node("/dev/null", VFS_TYPE_CHARDEV,  MKDEV(1, 3));
     ensure_node("/dev/zero", VFS_TYPE_CHARDEV,  MKDEV(1, 5));
     ensure_node("/dev/ram0", VFS_TYPE_BLOCKDEV, MKDEV(1, 0));
+
+    // Pseudo-terminal multiplexor + slave nodes. Slave devices register in
+    // devfs with token == &pty_table[N]; opening /dev/pts/N enters that
+    // pair. /dev/fb is the framebuffer chardev for userspace mmap; /dev/kbd
+    // is the raw scancode source the userspace term consumes.
+    ensure_node("/dev/ptmx", VFS_TYPE_CHARDEV, MKDEV(PTY_PTMX_MAJOR, PTY_PTMX_MINOR));
+    ensure_dir("/dev/pts", 0755);
+    for (uint16_t i = 0; i < PTY_MAX_PAIRS; i++) {
+        char path[24];
+        const char* pre = "/dev/pts/";
+        uint64_t pos = 0;
+        while (pre[pos]) { path[pos] = pre[pos]; pos++; }
+        if (i >= 10) path[pos++] = '0' + (char)(i / 10);
+        path[pos++] = '0' + (char)(i % 10);
+        path[pos] = '\0';
+        ensure_node(path, VFS_TYPE_CHARDEV, MKDEV(PTY_SLAVE_MAJOR, i));
+    }
+    ensure_node("/dev/fb",  VFS_TYPE_CHARDEV, MKDEV(29, 0));
+    ensure_node("/dev/kbd", VFS_TYPE_CHARDEV, MKDEV(13, 0));
+    kprintf("[devs] all done\n");
 }
 
 // Count partitions belonging to a given physical device by scanning parts_head

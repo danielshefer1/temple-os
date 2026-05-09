@@ -155,6 +155,13 @@ typedef struct file_ops_t {
 
     // misc
     int64_t  (*ioctl)       (file_t* file, uint64_t cmd, void* arg);
+
+    // Return the physical page address for `offset` (page-aligned, < file's
+    // mappable region). The kernel mmap path uses this to populate a user
+    // PML4 with the device's physical pages — used by /dev/fb so userspace
+    // can mmap the framebuffer without a copy. Returning -ENOTSUP / NULL
+    // ops->mmap_phys means "not mmap-able".
+    int64_t  (*mmap_phys)   (file_t* file, uint64_t offset, uint64_t* phys_out);
 } file_ops_t;
 
 // directory iteration callback (used by vfs_iterate)

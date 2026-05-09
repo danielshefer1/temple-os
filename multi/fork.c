@@ -38,6 +38,9 @@ int64_t do_fork(interrupt_frame_t* parent_frame) {
     // Inherit cwd from parent. Dentries aren't refcounted today (they live
     // in the dcache for as long as needed), so we just share the pointer.
     child->cwd  = parent->cwd;
+    // Inherit controlling terminal. The file_t stays alive via parent's fd
+    // (typically still in child's fd table after the fd-table copy below).
+    child->ctty = parent->ctty;
 
     // Duplicate the parent's open-file table. Both tasks now reference the
     // same file_t structs (so they share file offsets, matching POSIX),

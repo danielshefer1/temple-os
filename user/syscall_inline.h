@@ -28,12 +28,36 @@
 #define CHDIR_SYSCALL     37
 #define GETCWD_SYSCALL    38
 #define GETDENTS_SYSCALL  39
+#define MMAP_FILE_SYSCALL 40
+#define SETSID_SYSCALL    41
+#define EXEC_SYSCALL      22
+#define FREAD_SYSCALL_NUM  9
 
 // Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
 #define S_IFIFO_T 0x06
 
 // tty ioctl commands
 #define TIOCGWINSZ        0x105
+
+// Pty + framebuffer + kbd ioctls (must match drivers/pty_defs.h and
+// drivers/fb_dev.h on the kernel side).
+#define TIOCSPGRP_U       0x103
+#define TIOCGPTN          0x110
+#define TIOCSPTLCK        0x111
+#define TIOCSCTTY         0x112
+#define TIOCSWINSZ        0x113
+#define FBIOGET_VSCREENINFO 0x120
+
+#define SIGTERM           15
+#define SIGCHLD           17
+#define SIGWINCH          28
+
+typedef struct fb_var_info_t {
+    unsigned int width;
+    unsigned int height;
+    unsigned int pitch;
+    unsigned int bpp;
+} fb_var_info_t;
 
 typedef struct winsize {
     unsigned short ws_row;
@@ -305,6 +329,48 @@ static inline long sys_getcwd(char* buf, unsigned long size) {
         "syscall"
         : "=a"(ret)
         : "a"((long)GETCWD_SYSCALL), "b"(buf), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_read(long fd, void* buf, unsigned long size) {
+    long ret;
+    register void* r10_ asm("r10") = buf;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)FREAD_SYSCALL_NUM), "b"(fd), "r"(r10_), "d"(size)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline void* sys_mmap_file(long fd, unsigned long size) {
+    long ret;
+    register unsigned long r10_ asm("r10") = size;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)MMAP_FILE_SYSCALL), "b"(fd), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return (void*)ret;
+}
+
+static inline long sys_setsid(void) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)SETSID_SYSCALL)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_exec(const char* path) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)EXEC_SYSCALL), "b"(path)
         : "rcx", "r11", "memory");
     return ret;
 }

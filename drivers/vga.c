@@ -202,11 +202,29 @@ void kerror(const char* format, ...) {
     va_list args;
     va_start(args, format);
 
-    // Panic-style force-unlock so an exception inside a kprintf still gets
-    // its message out. We're about to halt anyway, so don't bother with the
-    // IRQ-safe wrapper here.
-    vga_spinlock.locked = 0;
-    spin_lock(&vga_spinlock);
+    // Step 1: shut off IRQs on this CPU before we touch anything. kerror is
+    // panic-class output and we never want a timer/keyboard IRQ stitching
+    // its own writes between our characters.
+    CliHelper();
+
+    // Step 2: take the print lock. Try-lock atomically (xchg) for a bounded
+    // window so an in-flight kprintf on another CPU finishes cleanly. Only
+    // force-clear and retry once if we time out — that path covers a true
+    // deadlock (e.g. fault inside kprintf with the lock held).
+    bool got = false;
+    for (uint64_t i = 0; i < 100000000UL; i++) {
+        uint64_t prev_lock;
+        __asm__ volatile("xchgq %0, %1"
+                         : "=r"(prev_lock), "+m"(vga_spinlock.locked)
+                         : "0"((uint64_t)1)
+                         : "memory");
+        if (prev_lock == 0) { got = true; break; }
+        __asm__ volatile("pause");
+    }
+    if (!got) {
+        vga_spinlock.locked = 0;
+        spin_lock(&vga_spinlock);
+    }
     // Bracket the message in SGR red on the screen path; the parser will
     // ignore these on the serial side too (we just send the raw escape).
     vt_write_active_(0x1B); vt_write_active_('['); vt_write_active_('3'); vt_write_active_('1'); vt_write_active_('m');

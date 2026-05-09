@@ -104,6 +104,23 @@ void ExecptionHandler(interrupt_frame_t* frame) {
            c ? (uint64_t)c->cpu_index : (uint64_t)-1,
            frame->int_no, frame->rip, frame->cs,
            (c && c->current) ? c->current->name : "?");
+
+    // Walk the saved RBP chain to print kernel return addresses. Functions in
+    // this kernel build with frame pointers (saw `push rbp; mov rbp, rsp`
+    // prologue in objdump), so [rbp] = caller's rbp, [rbp+8] = saved return
+    // address. Stop if rbp leaves the kernel half or doesn't advance.
+    kerror("backtrace:\n");
+    kerror("  [0] %x\n", frame->rip);
+    uint64_t rbp = frame->rbp;
+    for (int depth = 1; depth < 16; depth++) {
+        if (rbp < 0xFFFFFFFF80000000ULL) break;
+        if ((rbp & 0x7) != 0) break;
+        uint64_t next_rbp = ((uint64_t*)rbp)[0];
+        uint64_t ret      = ((uint64_t*)rbp)[1];
+        kerror("  [%d] %x\n", (uint64_t)depth, ret);
+        if (next_rbp <= rbp) break;
+        rbp = next_rbp;
+    }
     while (1) { __asm__ volatile("cli; hlt"); }
 }
 

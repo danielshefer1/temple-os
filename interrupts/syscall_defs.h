@@ -38,6 +38,8 @@
 #define CHDIR_SYSCALL      37   // chdir(path)
 #define GETCWD_SYSCALL     38   // getcwd(buf, size)
 #define GETDENTS_SYSCALL   39   // getdents(fd, buf, size); linux_dirent64 ABI
+#define MMAP_FILE_SYSCALL  40   // mmap_file(fd, size) -> user VA; uses f->ops->mmap_phys
+#define SETSID_SYSCALL     41   // setsid(); make caller a new session leader
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256

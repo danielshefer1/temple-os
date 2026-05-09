@@ -2,6 +2,7 @@
 #include "cpu_local.h"
 #include "scheduler.h"
 #include "tty.h"
+#include "pty.h"
 #include "devfs.h"
 #include "mem_devs.h"
 #include "ram_block.h"
@@ -10,6 +11,8 @@
 #include "vfs_path.h"
 #include "vfs_path_ops.h"
 #include "fb.h"
+#include "fb_dev.h"
+#include "kbd_dev.h"
 #include "vt.h"
 
 void start() {
@@ -31,11 +34,14 @@ void start() {
 
     devfs_init();
     tty_init(&console_tty);
+    pty_init();
     mem_devs_init();
     ram_block_init();
 
     fb_map();
     vt_init_all();
+    fb_dev_init();
+    kbd_dev_init();
 
     InitRsdt();
     InitMadt();

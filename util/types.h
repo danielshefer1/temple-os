@@ -23,3 +23,4 @@
 #include "vt_types.h"
 #include "devfs_types.h"
 #include "elf64_types.h"
+#include "pty_types.h"

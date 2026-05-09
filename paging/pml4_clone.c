@@ -79,6 +79,17 @@ int64_t clone_user_pml4(uint64_t parent_pml4_phys, uint64_t* out_child_phys) {
 
                 for (uint64_t i1 = 0; i1 < 512; i1++) {
                     if (!p1[i1].present) continue;
+                    // Device/MMIO mappings (e.g. /dev/fb mapped via
+                    // MmapFileHandler with PCD set) point at hardware
+                    // physical pages — those aren't owned by the buddy and
+                    // (phys + KERNEL_VIRTUAL) may not even be a valid
+                    // kernel-virt alias since the kernel mapping doesn't
+                    // cover the full phys range. Alias the PTE so child and
+                    // parent share the same device pages; do NOT memcpy.
+                    if (p1[i1].pcd) {
+                        c1[i1] = p1[i1];
+                        continue;
+                    }
                     void* new_page = RequestBuddy(PAGE_SIZE, false);
                     if (!new_page) { r = -ENOMEM; goto fail; }
                     void* parent_kvirt = (void*)(((uint64_t)p1[i1].address << 12) + KERNEL_VIRTUAL);
@@ -128,6 +139,13 @@ void free_user_address_space(uint64_t pml4_phys) {
                 page_entry_t* p1 = table_kvirt(pt_phys);
                 for (uint64_t i1 = 0; i1 < 512; i1++) {
                     if (!p1[i1].present) continue;
+                    // Aliased device pages (PCD set, see clone_user_pml4)
+                    // are owned by the device, not the buddy. Just clear
+                    // the PTE — never feed MMIO phys back to FreeBuddy.
+                    if (p1[i1].pcd) {
+                        memset(&p1[i1], 0, sizeof(p1[i1]));
+                        continue;
+                    }
                     FreeBuddy((void*)((uint64_t)p1[i1].address << 12), false);
                     memset(&p1[i1], 0, sizeof(p1[i1]));
                 }
