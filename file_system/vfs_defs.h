@@ -34,6 +34,7 @@
 #define ELOOP        40   // too many levels of symlinks
 #define ENAMETOOLONG 36   // file name too long
 #define EPIPE        32   // broken pipe (write to pipe with no readers)
+#define ERANGE       34   // result not representable / output buffer too small
 
 // open(2) flags
 #define O_RDONLY     0x0000

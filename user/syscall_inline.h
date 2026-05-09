@@ -25,6 +25,9 @@
 #define PIPE_SYSCALL      34
 #define DUP_SYSCALL       35
 #define DUP2_SYSCALL      36
+#define CHDIR_SYSCALL     37
+#define GETCWD_SYSCALL    38
+#define GETDENTS_SYSCALL  39
 
 // Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
 #define S_IFIFO_T 0x06
@@ -281,6 +284,38 @@ static inline long sys_mkdir_for_test_(const char* path, long perm) {
         "syscall"
         : "=a"(ret)
         : "a"((long)MKDIR_SYSCALL), "b"(path), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_chdir(const char* path) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)CHDIR_SYSCALL), "b"(path)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_getcwd(char* buf, unsigned long size) {
+    long ret;
+    register unsigned long r10_ asm("r10") = size;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)GETCWD_SYSCALL), "b"(buf), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_getdents(long fd, void* buf, unsigned long size) {
+    long ret;
+    register void* r10_ asm("r10") = buf;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)GETDENTS_SYSCALL), "b"(fd), "r"(r10_), "d"(size)
         : "rcx", "r11", "memory");
     return ret;
 }

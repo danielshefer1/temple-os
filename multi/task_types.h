@@ -96,4 +96,10 @@ typedef struct task_t {
     // exec preserves them. tty's foreground pgrp uses the pgid value.
     uint64_t pgid;
     uint64_t sid;
+
+    // Current working directory. Path-taking syscalls resolve relative
+    // paths from here; absolute paths still anchor at vfs_root. Initialised
+    // to vfs_root in alloc_blank_task; inherited from parent on fork; survives
+    // exec. NULL only briefly during very early boot before vfs_root exists.
+    struct dentry_t* cwd;
 } task_t;

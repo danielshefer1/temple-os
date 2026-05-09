@@ -192,6 +192,11 @@ task_t* alloc_blank_task(const char* name) {
         for (uint64_t i = 0; i < 31 && name[i]; i++) t->name[i] = name[i];
     }
 
+    // cwd defaults to the global root. Tasks created before vfs_mount_root
+    // (e.g. the BSP bootstrap task) get NULL here, which vfs_namei treats as
+    // "fall back to vfs_root". fork() overrides this with the parent's cwd.
+    t->cwd = vfs_root;
+
     memcpy(t->fxstate, default_fxstate, sizeof(t->fxstate));
     return t;
 }

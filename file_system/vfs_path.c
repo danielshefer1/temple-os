@@ -1,4 +1,16 @@
 #include "vfs.h"
+#include "cpu_local.h"
+
+// Pick the anchor for a path: absolute paths start at vfs_root; relative
+// paths start at the current task's cwd, falling back to vfs_root if there
+// is no current task (early-boot kernel callers) or no cwd set yet.
+static dentry_t* path_anchor(const char* path) {
+    if (path != NULL && path[0] == '/') return vfs_root;
+    cpu_local_t* cpu = this_cpu();
+    if (cpu == NULL || cpu->current == NULL) return vfs_root;
+    dentry_t* cwd = cpu->current->cwd;
+    return cwd ? cwd : vfs_root;
+}
 
 // Copy one path component starting at *p into out (cap bytes incl. NUL).
 // Advances *p past the component and any trailing '/'. Returns component
@@ -83,7 +95,7 @@ int64_t vfs_path_walk(dentry_t* start, const char* rel, dentry_t** out) {
 
 int64_t vfs_namei(const char* path, dentry_t** out) {
     if (vfs_root == NULL) return -ENOENT;
-    return walk_inner(vfs_root, path, out, 0);
+    return walk_inner(path_anchor(path), path, out, 0);
 }
 
 int64_t vfs_namei_parent(const char* path,
@@ -110,8 +122,11 @@ int64_t vfs_namei_parent(const char* path,
     leaf_out[leaf_len] = '\0';
 
     if (last_slash < 0) {
-        if (vfs_root == NULL) return -ENOENT;
-        *parent_out = vfs_root;
+        // No slash at all: parent is wherever the path resolves from. For
+        // a relative input that's the cwd; for "foo" with no cwd, vfs_root.
+        dentry_t* anchor = path_anchor(path);
+        if (anchor == NULL) return -ENOENT;
+        *parent_out = anchor;
         return 0;
     }
     if (last_slash == 0) {

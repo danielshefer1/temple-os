@@ -1,5 +1,6 @@
 #include "syscall_inline.h"
 #include "sys/wait.h"
+#include "sys/dirent.h"
 
 static const char start_m[]  = "starting\n";
 static const char child_m[]  = "child running\n";
@@ -364,6 +365,109 @@ void _start(void) {
         } else {
             sys_write(STDOUT_FILENO, fail, my_strlen(fail));
         }
+    }
+
+    // ---- M8 PR B tests ----
+
+    // Test 6: chdir + getcwd round-trip.
+    {
+        static const char ok[]   = "chdir/getcwd ok\n";
+        static const char fail[] = "chdir/getcwd FAIL\n";
+        char buf[64];
+        int good = 1;
+
+        // Start by going to root and confirming.
+        if (sys_chdir("/") < 0) good = 0;
+        long n = sys_getcwd(buf, sizeof(buf));
+        if (!(n > 0 && buf[0] == '/' && buf[1] == '\0')) good = 0;
+
+        // Switch to /dev (a directory we know exists).
+        if (good && sys_chdir("/dev") < 0) good = 0;
+        if (good) {
+            n = sys_getcwd(buf, sizeof(buf));
+            const char* exp = "/dev";
+            if (n != 5) good = 0;
+            for (int i = 0; good && i < 4; i++) if (buf[i] != exp[i]) good = 0;
+            if (good && buf[4] != '\0') good = 0;
+        }
+
+        // ".." should take us back to root.
+        if (good && sys_chdir("..") < 0) good = 0;
+        if (good) {
+            n = sys_getcwd(buf, sizeof(buf));
+            if (!(n == 2 && buf[0] == '/' && buf[1] == '\0')) good = 0;
+        }
+
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 7: relative open after chdir.
+    {
+        static const char ok[]   = "relative open ok\n";
+        static const char fail[] = "relative open FAIL\n";
+        int good = 1;
+        if (sys_chdir("/dev") < 0) good = 0;
+        long fd = good ? sys_open("tty", O_RDWR, 0) : -1;
+        if (fd < 0) good = 0;
+        if (fd >= 0) sys_close(fd);
+        sys_chdir("/");
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 8: getdents on /dev. Confirm we see "tty" with type DT_CHR (2).
+    {
+        static const char ok[]   = "getdents ok\n";
+        static const char fail[] = "getdents FAIL\n";
+        int good = 1;
+        long fd = sys_open("/dev", O_RDONLY, 0);
+        if (fd < 0) good = 0;
+
+        char buf[1024];
+        int found_tty = 0, found_chr_tty = 0, count = 0;
+        if (good) {
+            long n = sys_getdents(fd, buf, sizeof(buf));
+            if (n <= 0) good = 0;
+            for (long off = 0; good && off < n;) {
+                struct linux_dirent64* e = (struct linux_dirent64*)(buf + off);
+                if (e->d_reclen == 0) { good = 0; break; }
+                count++;
+                const char* name = e->d_name;
+                if (name[0] == 't' && name[1] == 't' && name[2] == 'y' && name[3] == '\0') {
+                    found_tty = 1;
+                    if (e->d_type == DT_CHR) found_chr_tty = 1;
+                }
+                off += e->d_reclen;
+            }
+        }
+        if (fd >= 0) sys_close(fd);
+        if (!(good && found_tty && found_chr_tty && count >= 3)) good = 0;
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
+    }
+
+    // Test 9: fork inherits cwd. Parent chdir's to /dev, then forks; child
+    // opens "tty" relative and exits 0 on success, 1 on failure.
+    {
+        static const char ok[]   = "fork cwd ok\n";
+        static const char fail[] = "fork cwd FAIL\n";
+        int good = 1;
+        if (sys_chdir("/dev") < 0) good = 0;
+        long pid = good ? sys_fork() : -1;
+        if (pid == 0) {
+            long fd = sys_open("tty", O_WRONLY, 0);
+            if (fd < 0) sys_exit(1);
+            sys_close(fd);
+            sys_exit(0);
+        }
+        unsigned long st = 0;
+        if (pid > 0) sys_waitpid(pid, &st);
+        else good = 0;
+        if (!(WIFEXITED(st) && WEXITSTATUS(st) == 0)) good = 0;
+        sys_chdir("/");
+        sys_write(STDOUT_FILENO, good ? ok : fail,
+                  my_strlen(good ? ok : fail));
     }
 
     sys_exit(0);

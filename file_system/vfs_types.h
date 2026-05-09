@@ -87,6 +87,14 @@ typedef struct file_t {
 
     _Atomic uint64_t ref_count;
     void* private_data;
+
+    // getdents-only push-back slot. If a readdir() advanced past an entry
+    // that didn't fit in the user's buffer, we save the encoded record here
+    // so the next getdents call delivers it before resuming readdir. NULL
+    // when no entry is stashed; the buffer is kmalloc'd and owned by the
+    // file_t (freed in vfs_close / vfs_file_put).
+    void*    dirent_stash;
+    uint64_t dirent_stash_len;
 } file_t;
 
 typedef struct superblock_ops_t {

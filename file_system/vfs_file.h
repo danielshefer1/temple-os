@@ -13,6 +13,11 @@ int64_t vfs_close    (file_t* f);
 int64_t vfs_flush    (file_t* f);
 int64_t vfs_ioctl    (file_t* f, uint64_t cmd, void* arg);
 
+// Pack as many directory entries into `buf` as fit in `size` bytes, in
+// linux_dirent64 ABI form. Returns total bytes written, 0 at EOD, or
+// -EINVAL if a single entry exceeds `size`.
+int64_t vfs_getdents (file_t* f, void* buf, uint64_t size);
+
 // file_t lifecycle
 file_t* vfs_file_alloc (void);
 void    vfs_file_get   (file_t* f);

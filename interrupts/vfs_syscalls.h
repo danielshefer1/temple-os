@@ -25,3 +25,6 @@ int64_t SysStat     (interrupt_frame_t* f);
 int64_t SysSync     (interrupt_frame_t* f);
 int64_t SysIoctl    (interrupt_frame_t* f);
 int64_t SysMknod    (interrupt_frame_t* f);
+int64_t SysChdir    (interrupt_frame_t* f);
+int64_t SysGetcwd   (interrupt_frame_t* f);
+int64_t SysGetdents (interrupt_frame_t* f);

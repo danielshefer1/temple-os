@@ -91,7 +91,7 @@ $(DATA_IMG):
 $(USER_DIR):
 	@mkdir -p $@
 
-$(USER_HELLO): user/hello.c user/syscall_inline.h user/sys/wait.h user/hello_linker.ld | $(USER_DIR)
+$(USER_HELLO): user/hello.c user/syscall_inline.h user/sys/wait.h user/sys/dirent.h user/hello_linker.ld | $(USER_DIR)
 	@echo "[USER] Building $@"
 	@$(CC64) $(USER_CFLAGS) -c user/hello.c -o $(USER_DIR)/hello.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/hello.o

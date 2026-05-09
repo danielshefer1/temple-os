@@ -35,6 +35,9 @@
 #define PIPE_SYSCALL       34   // pipe(int fds[2]); fds[0]=read end, fds[1]=write end
 #define DUP_SYSCALL        35   // dup(fd) -> new fd ≥ 3
 #define DUP2_SYSCALL       36   // dup2(oldfd, newfd) -> newfd
+#define CHDIR_SYSCALL      37   // chdir(path)
+#define GETCWD_SYSCALL     38   // getcwd(buf, size)
+#define GETDENTS_SYSCALL   39   // getdents(fd, buf, size); linux_dirent64 ABI
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256

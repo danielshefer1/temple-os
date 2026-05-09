@@ -58,6 +58,9 @@ void syscall_handler(interrupt_frame_t* frame) {
         case PIPE_SYSCALL:         ret = PipeHandler(frame);      break;
         case DUP_SYSCALL:          ret = DupHandler(frame);       break;
         case DUP2_SYSCALL:         ret = Dup2Handler(frame);      break;
+        case CHDIR_SYSCALL:        ret = SysChdir(frame);         break;
+        case GETCWD_SYSCALL:       ret = SysGetcwd(frame);        break;
+        case GETDENTS_SYSCALL:     ret = SysGetdents(frame);      break;
 
         default:                   ret = UnknownSysCall();
     }
