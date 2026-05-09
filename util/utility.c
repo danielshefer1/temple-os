@@ -6,6 +6,9 @@
 #include "mem_devs.h"
 #include "ram_block.h"
 #include "disk_devs.h"
+#include "procfs.h"
+#include "vfs_path.h"
+#include "vfs_path_ops.h"
 
 void start() {
     SetGDT();
@@ -54,6 +57,32 @@ void start() {
     superblock_t* sb = EXT2MountRoot();
     vfs_mount_root(sb);
     disk_devs_init();
+
+    // Mount procfs at /proc. The mount point is an ext2 directory created on
+    // first boot and reused thereafter; the procfs superblock is allocated
+    // afresh each boot since none of its content is persistent.
+    procfs_init();
+    {
+        dentry_t* proc_dir = NULL;
+        int64_t r = vfs_namei("/proc", &proc_dir);
+        if (r == -ENOENT) {
+            vfs_mkdir_path("/proc", 0755);
+            r = vfs_namei("/proc", &proc_dir);
+        }
+        if (r == 0 && proc_dir != NULL) {
+            superblock_t* psb = procfs_create_sb();
+            if (psb != NULL) {
+                int64_t mr = vfs_mount_at(proc_dir, psb);
+                if (mr < 0) {
+                    kprintf("procfs: mount failed: %d\n", (int)mr);
+                }
+            } else {
+                kprintf("procfs: create_sb failed\n");
+            }
+        } else {
+            kprintf("procfs: /proc lookup failed: %d\n", (int)r);
+        }
+    }
 
     BootCores();
 

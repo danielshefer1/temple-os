@@ -43,7 +43,7 @@ QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
 # Source & Object Definitions
 # ============================================================================
 KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c drivers/devfs.c \
-                drivers/mem_devs.c drivers/ram_block.c drivers/disk_devs.c init/kernel.c init/limine_entry.c \
+                drivers/mem_devs.c drivers/ram_block.c drivers/disk_devs.c drivers/procfs.c init/kernel.c init/limine_entry.c \
                 allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
                 wrappers/keyboard.c util/global.c util/string.c interrupts/syscall_handler.c \
@@ -95,9 +95,10 @@ $(USER_HELLO): user/hello.c user/syscall_inline.h user/hello_linker.ld | $(USER_
 
 # Install built user programs into data.img (idempotent; rm-then-write).
 user-img: $(USER_HELLO) $(DATA_IMG)
-	@echo "[USER] Installing $(USER_HELLO) -> /hello on $(DATA_IMG)"
-	@debugfs -w -R "rm /hello" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "write $(USER_HELLO) hello" $(DATA_IMG)
+	@echo "[USER] Installing $(USER_HELLO) -> /bin/hello on $(DATA_IMG)"
+	@debugfs -w -R "mkdir /bin" $(DATA_IMG) 2>/dev/null || true
+	@debugfs -w -R "rm /bin/hello" $(DATA_IMG) 2>/dev/null || true
+	@debugfs -w -R "cd /bin; write $(USER_HELLO) hello" $(DATA_IMG)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

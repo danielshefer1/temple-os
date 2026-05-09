@@ -535,6 +535,60 @@ void PrintBuddyNode(buddy_node_t* node) {
     kprintf("Address: %x\n", p->address);
 }
 
+uint64_t buddy_kernel_total_pages(void) {
+    // Every PFN tracked by the shadow is a page in the kernel pool.
+    return kshadow_pfn_count;
+}
+
+uint64_t buddy_kernel_free_pages(void) {
+    if (kshadow == NULL) return 0;
+    bool sti = check_interrupts();
+    CliHelper();
+    spin_lock(&kernel_buddy_lock);
+    uint64_t pages = 0;
+    for (uint64_t order = 0; order < MAX_ORDER; order++) {
+        for (void* p = kernel_inline_heads[order]; p != NULL; p = *inline_slot(p)) {
+            pages += (1ULL << order) >> PAGE_SIZE_LOG2;
+        }
+    }
+    spin_unlock(&kernel_buddy_lock);
+    if (sti) StiHelper();
+    return pages;
+}
+
+uint64_t buddy_user_total_pages(void) {
+    bool sti = check_interrupts();
+    CliHelper();
+    spin_lock(&user_buddy_lock);
+    uint64_t pages = 0;
+    for (uint64_t order = 0; order < MAX_ORDER; order++) {
+        for (buddy_node_t* n = user_bins[order].head_free; n != NULL; n = n->next) {
+            pages += (1ULL << order) >> PAGE_SIZE_LOG2;
+        }
+        for (buddy_node_t* n = user_bins[order].head_used; n != NULL; n = n->next) {
+            pages += (1ULL << order) >> PAGE_SIZE_LOG2;
+        }
+    }
+    spin_unlock(&user_buddy_lock);
+    if (sti) StiHelper();
+    return pages;
+}
+
+uint64_t buddy_user_free_pages(void) {
+    bool sti = check_interrupts();
+    CliHelper();
+    spin_lock(&user_buddy_lock);
+    uint64_t pages = 0;
+    for (uint64_t order = 0; order < MAX_ORDER; order++) {
+        for (buddy_node_t* n = user_bins[order].head_free; n != NULL; n = n->next) {
+            pages += (1ULL << order) >> PAGE_SIZE_LOG2;
+        }
+    }
+    spin_unlock(&user_buddy_lock);
+    if (sti) StiHelper();
+    return pages;
+}
+
 void InitKernelBuddyShadow(uint64_t pool_start_phys, uint64_t pool_end_phys) {
     if (pool_end_phys <= pool_start_phys) return;
     kshadow_base_pfn  = pool_start_phys >> PAGE_SIZE_LOG2;

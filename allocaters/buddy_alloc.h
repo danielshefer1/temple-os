@@ -32,3 +32,12 @@ void RemoveBuddyNode(buddy_bin_t* bin, void* address, bool free_list);
 void* SplitNode(buddy_node_t* node, uint64_t target_order, buddy_bin_t* bins);
 void FreeBuddy(void* address, bool user);
 uint64_t FindLowest(buddy_bin_t* bins);
+
+// Page-counted snapshots of each pool. Counts pages, not bytes; multiply by
+// PAGE_SIZE for byte totals. The "total" figure for the kernel pool is the
+// shadow's size (every PFN under buddy management). The user pool has no
+// shadow, so total is summed from the structure-based free+used lists.
+uint64_t buddy_kernel_total_pages(void);
+uint64_t buddy_kernel_free_pages(void);
+uint64_t buddy_user_total_pages(void);
+uint64_t buddy_user_free_pages(void);
