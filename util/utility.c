@@ -5,6 +5,7 @@
 #include "devfs.h"
 #include "mem_devs.h"
 #include "ram_block.h"
+#include "disk_devs.h"
 
 void start() {
     SetGDT();
@@ -52,6 +53,7 @@ void start() {
 
     superblock_t* sb = EXT2MountRoot();
     vfs_mount_root(sb);
+    disk_devs_init();
 
     BootCores();
 

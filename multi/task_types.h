@@ -37,6 +37,8 @@ typedef struct cpu_local_t {
     struct task_t* current;     // offset 48 — currently running task on this CPU
     struct task_t* pending_reap;// offset 56 — zombie left behind by previous switch
     run_queue_t rq;             // this CPU's runnable tasks
+    struct task_t* sleep_head;  // sorted ascending by sleep_deadline
+    spinlock_t sleep_lock;
 } __attribute__((packed)) cpu_local_t;
 
 // ---- Multi-tasking ----
@@ -83,4 +85,7 @@ typedef struct task_t {
     uint64_t wait_target;      // when state==BLOCKED for waitpid: 0=any child, else PID
     uint64_t exit_code;        // set by task_exit; readable by waitpid
     struct task_t* zombie_next;// link in the global zombie list
+
+    uint64_t sleep_deadline;   // tick value at which to wake (0 if not sleeping)
+    struct task_t* sleep_next; // per-CPU sleep queue link (sorted ascending)
 } task_t;

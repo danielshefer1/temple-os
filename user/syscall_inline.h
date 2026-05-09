@@ -16,6 +16,7 @@
 #define GETPID_SYSCALL    28
 #define WAITPID_SYSCALL   29
 #define MKNOD_SYSCALL     30
+#define SLEEP_SYSCALL     31
 
 // Inode types — must match VFS_TYPE_* in file_system/vfs_defs.h.
 #define S_IFCHR_T  0x04
@@ -155,6 +156,16 @@ static inline long sys_waitpid(long pid, unsigned long* status) {
         "syscall"
         : "=a"(ret)
         : "a"((long)WAITPID_SYSCALL), "b"(pid), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
+static inline long sys_sleep(unsigned long ms) {
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)SLEEP_SYSCALL), "b"(ms)
         : "rcx", "r11", "memory");
     return ret;
 }

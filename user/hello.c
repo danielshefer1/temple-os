@@ -148,5 +148,9 @@ void _start(void) {
                   my_strlen(mr >= 0 && mfd >= 0 && w == 8 ? ok : fail));
     }
 
+    sys_write(STDOUT_FILENO, "sleep start\n", 12);
+    sys_sleep(500);
+    sys_write(STDOUT_FILENO, "sleep done\n", 11);
+
     sys_exit(0);
 }

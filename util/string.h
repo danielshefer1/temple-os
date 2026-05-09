@@ -1,6 +1,8 @@
 #pragma once
 
 #include "includes.h"
+#include "memory.h"   // memset/memcpy live here; re-exported so callers that
+                      // include "string.h" (the historical convention) keep working.
 
 void itoa(uint64_t value, char* str, uint64_t base, uint64_t min_width);
 void flip_str(char* str);

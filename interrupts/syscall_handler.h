@@ -25,3 +25,4 @@ int64_t KillHandler(interrupt_frame_t* frame);
 int64_t SignalHandler(interrupt_frame_t* frame);
 int64_t SigreturnHandler(interrupt_frame_t* frame);
 int64_t GetpidHandler(interrupt_frame_t* frame);
+int64_t SleepHandler(interrupt_frame_t* frame);

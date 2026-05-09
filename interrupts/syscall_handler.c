@@ -9,6 +9,7 @@
 #include "fork.h"
 #include "signal.h"
 #include "waitpid.h"
+#include "timer.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
     uint64_t cs = frame->cs;
@@ -47,6 +48,7 @@ void syscall_handler(interrupt_frame_t* frame) {
         case GETPID_SYSCALL:       ret = GetpidHandler(frame);    break;
         case WAITPID_SYSCALL:      ret = WaitpidHandler(frame);   break;
         case MKNOD_SYSCALL:        ret = SysMknod(frame);         break;
+        case SLEEP_SYSCALL:        ret = SleepHandler(frame);     break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -185,6 +187,11 @@ int64_t SigreturnHandler(interrupt_frame_t* frame) {
 int64_t GetpidHandler(interrupt_frame_t* frame) {
     (void)frame;
     return (int64_t) this_cpu()->current->pid;
+}
+
+int64_t SleepHandler(interrupt_frame_t* frame) {
+    sleep(frame->rbx);
+    return 0;
 }
 
 int64_t WaitpidHandler(interrupt_frame_t* frame) {

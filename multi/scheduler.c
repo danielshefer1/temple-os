@@ -135,10 +135,37 @@ task_t* task_for_pid(uint64_t pid) {
 void SchedulerInit(void) {
     for (uint32_t i = 0; i < MAX_CPUS; i++) {
         rq_init(&cpu_locals[i].rq);
+        cpu_locals[i].sleep_head = NULL;
+        cpu_locals[i].sleep_lock.locked = 0;
     }
     pid_lock.locked = 0;
     next_pid = 1;
     next_assign_cpu = 0;
+}
+
+void sleep_queue_insert(cpu_local_t* cpu, task_t* t) {
+    spin_lock(&cpu->sleep_lock);
+    task_t** link = &cpu->sleep_head;
+    while (*link && (*link)->sleep_deadline <= t->sleep_deadline) {
+        link = &(*link)->sleep_next;
+    }
+    t->sleep_next = *link;
+    *link = t;
+    spin_unlock(&cpu->sleep_lock);
+}
+
+void sleep_queue_wake_expired(cpu_local_t* cpu) {
+    uint64_t now = timer_ticks[cpu->cpu_index];
+    spin_lock(&cpu->sleep_lock);
+    while (cpu->sleep_head && cpu->sleep_head->sleep_deadline <= now) {
+        task_t* t = cpu->sleep_head;
+        cpu->sleep_head = t->sleep_next;
+        t->sleep_next = NULL;
+        t->sleep_deadline = 0;
+        t->state = TASK_STATE_READY;
+        rq_enqueue_external(t);
+    }
+    spin_unlock(&cpu->sleep_lock);
 }
 
 task_t* alloc_blank_task(const char* name) {
@@ -435,6 +462,7 @@ int task_has_children(task_t* parent, uint64_t target_pid) {
 
 void scheduler_tick(void) {
     cpu_local_t* cpu = this_cpu();
+    sleep_queue_wake_expired(cpu);
     task_t* cur = cpu->current;
     if (!cur) return;
     if (cur->time_slice > 0) cur->time_slice--;

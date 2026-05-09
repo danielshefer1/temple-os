@@ -60,6 +60,14 @@ extern void task_entry_trampoline(void);
 // filled in. Used by both create_kernel_task and create_user_task.
 task_t* alloc_blank_task(const char* name);
 
+// Park `t` on `cpu`'s sleep queue with `t->sleep_deadline` already set.
+// Caller is responsible for setting state and calling schedule().
+void sleep_queue_insert(struct cpu_local_t* cpu, struct task_t* t);
+
+// Called from scheduler_tick on the IRQ stack. Walks this CPU's sleep queue
+// head and wakes every task whose deadline has passed.
+void sleep_queue_wake_expired(struct cpu_local_t* cpu);
+
 // Find the task with the given PID across all CPUs. Walks each CPU's
 // `current` and run queue. Returns NULL if no such task exists.
 // Snapshot semantics — the returned task may already be exiting.
