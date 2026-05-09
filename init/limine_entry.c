@@ -2,6 +2,7 @@
 #include "includes.h"
 #include "types.h"
 #include "defintions.h"
+#include "global.h"
 
 extern char _stack_top[];
 extern char _kernel_VMA_start[];
@@ -27,6 +28,12 @@ static volatile struct limine_hhdm_request hhdm_request = {
 __attribute__((used))
 static volatile struct limine_kernel_address_request kernel_address_request = {
     .id = LIMINE_KERNEL_ADDRESS_REQUEST,
+    .revision = 0,
+};
+
+__attribute__((used))
+static volatile struct limine_framebuffer_request framebuffer_request = {
+    .id = LIMINE_FRAMEBUFFER_REQUEST,
     .revision = 0,
 };
 
@@ -143,6 +150,35 @@ static void build_shim_page_tables(void) {
 // inverted from intent) into an immediate fault on the first BSS write after
 // switching to kernel page tables. Matching the original boot environment
 // keeps the kernel unmodified.
+// Capture framebuffer info before we leave Limine's page tables. The address
+// Limine reports is a virtual pointer in its HHDM mapping; convert it to a
+// physical address now and stash it in fb_info so start() can map it later.
+static void capture_framebuffer(uint64_t hhdm) {
+    struct limine_framebuffer_response* fbr = framebuffer_request.response;
+    if (fbr == NULL || fbr->framebuffer_count == 0) return;
+    struct limine_framebuffer* fb = fbr->framebuffers[0];
+    if (fb == NULL || fb->address == NULL) return;
+
+    uint64_t fb_virt_hhdm = (uint64_t)fb->address;
+    uint64_t fb_phys      = fb_virt_hhdm - hhdm;
+    uint64_t bytes        = fb->pitch * fb->height;
+    uint64_t size_aligned = (bytes + PAGE_SIZE - 1) & ~((uint64_t)PAGE_SIZE - 1);
+
+    fb_info.fb_phys     = fb_phys;
+    fb_info.fb_virt     = 0;
+    fb_info.pitch       = fb->pitch;
+    fb_info.width       = fb->width;
+    fb_info.height      = fb->height;
+    fb_info.size        = size_aligned;
+    fb_info.bpp         = fb->bpp;
+    fb_info.red_shift   = fb->red_mask_shift;
+    fb_info.red_size    = fb->red_mask_size;
+    fb_info.green_shift = fb->green_mask_shift;
+    fb_info.green_size  = fb->green_mask_size;
+    fb_info.blue_shift  = fb->blue_mask_shift;
+    fb_info.blue_size   = fb->blue_mask_size;
+}
+
 static void clear_cr0_wp(void) {
     uint64_t cr0;
     __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
@@ -175,6 +211,7 @@ void limine_entry(void) {
 
     populate_e820_entries();
     write_e820_header(hhdm);
+    capture_framebuffer(hhdm);
 
     if (relocate) {
         uint64_t kernel_size = (uint64_t)_kernel_VMA_end - (uint64_t)_kernel_VMA_start;

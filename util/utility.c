@@ -9,6 +9,8 @@
 #include "procfs.h"
 #include "vfs_path.h"
 #include "vfs_path_ops.h"
+#include "fb.h"
+#include "fb_console.h"
 
 void start() {
     SetGDT();
@@ -31,6 +33,9 @@ void start() {
     tty_init(&console_tty);
     mem_devs_init();
     ram_block_init();
+
+    fb_map();
+    fb_console_init();
 
     InitRsdt();
     InitMadt();

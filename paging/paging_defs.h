@@ -18,6 +18,13 @@
 #define STACK_PAGES 4
 #define KERNEL_VIRT_TO_PHYS(addr) ((uint64_t)(addr) - KERNEL_VIRTUAL)
 
+// Framebuffer aperture. Lives in PDPT slot 509 (fresh — kernel image's PDPT
+// slot 510 is fully covered by InitPaging's "headroom" big-page mappings, so
+// any 4 KB FB mapping placed in 0xFFFFFFFF80000000..0xFFFFFFFFBFFFFFFF would
+// silently hit the EEXIST big-page branch in map_page_to_virt and never get
+// installed). Plenty of room here for FB + back-buffer + scrollback later.
+#define FB_VIRTUAL 0xFFFFFFFF40000000
+
 #define MMIO_VIRTUAL 0xFFFFFFFFC0000000
 #define MMIO_BASE 0x7FFDF000
 #define MMIO_OFFSET (MMIO_VIRTUAL - MMIO_BASE)

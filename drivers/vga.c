@@ -1,4 +1,5 @@
 #include "vga.h"
+#include "console.h"
 
 #define COM1_IER (COM1_BASE + 1)
 #define COM1_LCR (COM1_BASE + 3)
@@ -38,7 +39,12 @@ void internal_insert_tab() {
 }
 
 void internal_putchar(char c, uint8_t color) {
-    (void)color;
+    // Mirror to the screen console (no-op until M3 plugs in fb_console). The
+    // serial port is the source of truth for kernel logs; the screen is a
+    // best-effort visual mirror.
+    console_set_attr(color & 0x0F, (color >> 4) & 0x0F);
+    console_putc(c);
+
     switch (c) {
         case '\t':
             internal_insert_tab();
@@ -104,6 +110,7 @@ uint64_t print_str_SYSCALL(const char* str, uint8_t color, uint64_t length) {
 void clear_screen() {
     spin_lock(&vga_spinlock);
     serial_puts("\x1b[2J\x1b[H");
+    console_clear();
     spin_unlock(&vga_spinlock);
 }
 

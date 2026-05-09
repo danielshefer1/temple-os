@@ -42,7 +42,7 @@ QEMU_COMMON_FLAGS = -m 16G -cpu host,+topoext -accel kvm -smp 12 -machine q35 \
 # ============================================================================
 # Source & Object Definitions
 # ============================================================================
-KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c drivers/devfs.c \
+KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/fb.c drivers/fb_console.c drivers/console.c drivers/tty.c drivers/devfs.c \
                 drivers/mem_devs.c drivers/ram_block.c drivers/disk_devs.c drivers/procfs.c init/kernel.c init/limine_entry.c \
                 allocaters/slab_alloc.c paging/paging.c util/math.c allocaters/buddy_alloc.c \
                 tables/set_gdt.c interrupts/isr_handler.c tables/set_idt.c wrappers/timer.c \
@@ -64,7 +64,10 @@ KERNEL_C_SRCS = drivers/E820.c drivers/vga.c drivers/tty.c drivers/devfs.c \
 KERNEL_ASM_SRCS = util/helpers.asm multi/trampoline_wrapper.asm interrupts/syscall_entry.asm \
                   interrupts/user_enter.asm multi/switch.asm multi/user_trampoline.asm
 
-K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o))
+FONT_PSF  = assets/font.psf
+FONT_OBJ  = $(K_OBJ_DIR)/font.o
+
+K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.asm=.o)) $(FONT_OBJ)
 
 # ============================================================================
 # Build Rules
@@ -115,6 +118,13 @@ $(K_OBJ_DIR)/%.o: %.asm | $(K_OBJ_DIR) $(TRAMPOLINE_BIN)
 	@mkdir -p $(dir $@)
 	@echo "[K64] Assembling $<"
 	@$(AS) $(ASFLAGS_ELF64) $< -o $@
+
+$(FONT_OBJ): $(FONT_PSF) | $(K_OBJ_DIR)
+	@mkdir -p $(dir $@)
+	@echo "[K64] Embedding $<"
+	@cd $(dir $<) && objcopy -I binary -O elf64-x86-64 -B i386:x86-64 \
+	    --rename-section .data=.rodata,alloc,load,readonly,data,contents \
+	    $(notdir $<) $(abspath $@)
 
 $(KERNEL_ELF): $(K_OBJS) linker64.ld
 	@echo "Linking Kernel ELF"
