@@ -316,6 +316,9 @@ int main(int argc, char** argv) {
     tok_kind_t kinds[TOKENS_MAX];
     stage_t    stages[STAGES_MAX];
 
+    sys_mkdir("/home", 0755);
+    sys_chdir("/home");
+
     for (;;) {
         prompt();
         long n = sys_read(0, line, sizeof(line) - 1);
