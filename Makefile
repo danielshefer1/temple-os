@@ -13,7 +13,7 @@ K_OBJ_DIR = $(BUILD_DIR)/kernel
 ISO_ROOT  = $(BUILD_DIR)/iso_root
 
 KERNEL_ELF     = $(BUILD_DIR)/kernel.elf
-ISO_IMG        = $(BUILD_DIR)/os.iso
+ISO_IMG        = $(BUILD_DIR)/temple_os.iso
 DATA_IMG       = data.img
 TRAMPOLINE_BIN = $(BUILD_DIR)/trampoline.bin
 
