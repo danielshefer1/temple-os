@@ -176,7 +176,11 @@ int64_t EXT2ExpandFile(inode_t* inode, uint64_t add) {
     }
     int64_t add_ret = AddBlocksToInode(inode, count_blocks);
     if (add_ret < 0) return add_ret;
-    uint64_t start_block_idx = inode->size / block_size, end_block_idx = start_block_idx + count_blocks;
+    uint64_t start_block_idx = inode->size / block_size;
+    // end_block_idx must cover both the previously-last partial block (when
+    // inode->size isn't block-aligned) and every newly allocated block, so we
+    // derive it from the target end offset rather than count_blocks.
+    uint64_t end_block_idx = (inode->size + add + block_size - 1) / block_size;
     uint64_t start, size, remain = add, buf;
     uint32_t curr_block;
 

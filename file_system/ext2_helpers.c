@@ -186,7 +186,20 @@ uint32_t EXT2AllocBlock(superblock_t* sb, uint32_t block_group) {
     bwrite(sb, block_bitmap_block);
     brelse(sb, block_bitmap_block);
 
-    return block_group * vol->blocks_per_group + bit_idx + vol->first_data_block + 1;
+    uint32_t new_block = block_group * vol->blocks_per_group + bit_idx + vol->first_data_block + 1;
+
+    // Zero the freshly-allocated block: the on-disk contents are whatever the
+    // previous owner left there (often ELF bytes from a deleted /bin binary),
+    // and a partial write would otherwise flush those stale bytes back to disk
+    // alongside the new data.
+    void* zbuf = bread(sb, new_block);
+    if (zbuf != NULL) {
+        memset(zbuf, 0, sb->block_size);
+        bwrite(sb, new_block);
+        brelse(sb, new_block);
+    }
+
+    return new_block;
 }
 
 int64_t AddIndirect(inode_t* inode, uint32_t block_idx, uint32_t block_number) {

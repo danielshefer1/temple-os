@@ -347,6 +347,10 @@ static int try_builtin(stage_t* st_) {
     return 0;
 }
 
+// Visible width of the prompt currently on screen (set by prompt()).
+// Used by the multi-line redraw to position the cursor on row 0.
+static int prompt_visible_width;
+
 static void prompt(void) {
     char cwd[256];
     long r = sys_getcwd(cwd, sizeof(cwd));
@@ -365,6 +369,8 @@ static void prompt(void) {
         collapsed[k] = 0;
         path = collapsed;
     }
+
+    prompt_visible_width = 2 + (int)st_strlen(path) + 3;  // "$ " + path + " > "
 
     st_puts("\x1b[93m$ ");        // yellow dollar
     st_puts("\x1b[96m");          // bright cyan
@@ -466,6 +472,56 @@ static void cursor_right(int n) {
     emit_n(buf, k);
 }
 
+static void cursor_up(int n) {
+    if (n <= 0) return;
+    char buf[16];
+    int  k = 0;
+    buf[k++] = 0x1b; buf[k++] = '[';
+    char num[8];
+    int  nn = 0;
+    int  v = n;
+    while (v > 0) { num[nn++] = (char)('0' + v % 10); v /= 10; }
+    while (nn > 0) buf[k++] = num[--nn];
+    buf[k++] = 'A';
+    emit_n(buf, k);
+}
+
+// Index of the last '\n' in line[0..end), or -1 if none.
+static int last_nl_before(const char* line, int end) {
+    int idx = -1;
+    for (int i = 0; i < end; i++) if (line[i] == '\n') idx = i;
+    return idx;
+}
+
+// Full repaint of a (possibly) multi-line input buffer. prev_cur_row is the
+// visual row offset of the cursor from the prompt row *before* this call.
+// On exit the cursor sits at the buffer position `cur`.
+static void redraw_multiline(const char* line, int len, int cur,
+                             int prev_cur_row) {
+    emit("\r");
+    cursor_up(prev_cur_row);
+    emit("\x1b[J");
+    prompt();
+    for (int i = 0; i < len; i++) {
+        if (line[i] == '\n') emit("\r\n");
+        else                 emit_n(&line[i], 1);
+    }
+    // Cursor is now at end-of-buffer. Walk back to `cur`.
+    int tail_nls = 0;
+    for (int i = cur; i < len; i++) if (line[i] == '\n') tail_nls++;
+    if (tail_nls == 0) {
+        int tail = len - cur;
+        if (tail > 0) cursor_left(tail);
+    } else {
+        cursor_up(tail_nls);
+        emit("\r");
+        int last_nl = last_nl_before(line, cur);
+        int target_col = (last_nl < 0) ? (prompt_visible_width + cur)
+                                       : (cur - last_nl - 1);
+        if (target_col > 0) cursor_right(target_col);
+    }
+}
+
 // After an insert/delete: print the bytes from cur..len, erase the old
 // trailing column with \x1b[K, then move cursor back over the tail.
 static void redraw_tail(const char* line, int len, int cur) {
@@ -475,20 +531,12 @@ static void redraw_tail(const char* line, int len, int cur) {
     if (tail > 0) cursor_left(tail);
 }
 
-// Repaint the whole input area: \r, prompt, line, \x1b[K. Cursor lands
-// at end-of-line; caller must adjust if it wants cursor elsewhere.
-static void repaint_line(const char* line, int len) {
-    emit("\r");
-    prompt();
-    if (len > 0) emit_n(line, len);
-    emit("\x1b[K");
-}
-
 // Reads a line with full editing in raw mode. Returns len, or -1 on EOF.
 // The pty is assumed to already be in raw mode on entry.
 static long read_line_edit(char* line, int cap) {
     int len = 0;
     int cur = 0;
+    int cur_row = 0;  // visual row offset of cursor from the prompt row
 
     char saved_live[LINE_MAX_];
     int  saved_live_len = 0;
@@ -517,10 +565,34 @@ static long read_line_edit(char* line, int cap) {
             state = GROUND;
             switch (b) {
                 case 'D':  // left
-                    if (cur > 0) { cur--; emit("\x1b[D"); }
+                    if (cur > 0) {
+                        if (line[cur - 1] == '\n') {
+                            // Cross up into the previous visual row, land at
+                            // its end. Step over the '\n' in the buffer.
+                            cur--;
+                            cur_row--;
+                            int last_nl = last_nl_before(line, cur);
+                            int col = (last_nl < 0) ? (prompt_visible_width + cur)
+                                                    : (cur - last_nl - 1);
+                            cursor_up(1);
+                            emit("\r");
+                            if (col > 0) cursor_right(col);
+                        } else {
+                            cur--; emit("\x1b[D");
+                        }
+                    }
                     break;
                 case 'C':  // right
-                    if (cur < len) { cur++; emit("\x1b[C"); }
+                    if (cur < len) {
+                        if (line[cur] == '\n') {
+                            // Cross down into the next visual row, col 0.
+                            cur++;
+                            cur_row++;
+                            emit("\x1b[E");  // cursor to start of next line
+                        } else {
+                            cur++; emit("\x1b[C");
+                        }
+                    }
                     break;
                 case 'A': {  // up: older
                     const char* h = hist_get(hist_view + 1);
@@ -533,9 +605,11 @@ static long read_line_edit(char* line, int cap) {
                     hist_view++;
                     int i = 0;
                     while (h[i] && i < cap - 1) { line[i] = h[i]; i++; }
+                    int old_row = cur_row;
                     len = i;
                     cur = len;
-                    repaint_line(line, len);
+                    cur_row = 0;
+                    redraw_multiline(line, len, cur, old_row);
                     break;
                 }
                 case 'B': {  // down: newer
@@ -550,8 +624,10 @@ static long read_line_edit(char* line, int cap) {
                         while (h[i] && i < cap - 1) { line[i] = h[i]; i++; }
                         len = i;
                     }
+                    int old_row = cur_row;
                     cur = len;
-                    repaint_line(line, len);
+                    cur_row = 0;
+                    redraw_multiline(line, len, cur, old_row);
                     break;
                 }
                 case 'H':  // Home
@@ -578,6 +654,7 @@ static long read_line_edit(char* line, int cap) {
                 line[cur] = '\n';
                 len++;
                 cur++;
+                cur_row++;
                 emit("\r\n");
             }
             continue;
@@ -589,10 +666,22 @@ static long read_line_edit(char* line, int cap) {
         }
         if (b == 0x7f || b == 0x08) {
             if (cur > 0) {
-                for (int i = cur - 1; i < len - 1; i++) line[i] = line[i + 1];
-                cur--; len--;
-                emit("\b");
-                redraw_tail(line, len, cur);
+                if (line[cur - 1] == '\n') {
+                    // Backspace at the start of a soft newline: merge this
+                    // visual row with the previous one. Drop the '\n' from
+                    // the buffer and full-repaint so any trailing content
+                    // joins the line above.
+                    int old_row = cur_row;
+                    for (int i = cur - 1; i < len - 1; i++) line[i] = line[i + 1];
+                    cur--; len--;
+                    cur_row--;
+                    redraw_multiline(line, len, cur, old_row);
+                } else {
+                    for (int i = cur - 1; i < len - 1; i++) line[i] = line[i + 1];
+                    cur--; len--;
+                    emit("\b");
+                    redraw_tail(line, len, cur);
+                }
             }
             continue;
         }
