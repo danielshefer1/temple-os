@@ -388,6 +388,20 @@ static inline long sys_getpid(void) {
     return ret;
 }
 
+// setpgid(pid, pgid). pid==0 means self; pgid==0 means "use the target's
+// own pid", i.e. start a new pgrp with the target as leader. See
+// SetpgidHandler in interrupts/syscall_handler.c for the kernel side.
+static inline long sys_setpgid(long pid, long pgid) {
+    long ret;
+    register long r10_ asm("r10") = pgid;
+    asm volatile(
+        "syscall"
+        : "=a"(ret)
+        : "a"((long)SETPGID_SYSCALL), "b"(pid), "r"(r10_)
+        : "rcx", "r11", "memory");
+    return ret;
+}
+
 static inline long sys_setsid(void) {
     long ret;
     asm volatile(

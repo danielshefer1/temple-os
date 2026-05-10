@@ -16,9 +16,11 @@
 // ---- Global task list ---------------------------------------------------
 // Doubly-linked list of every live task (including BLOCKED ones parked on
 // driver waiter lists). task_for_pid walks this so kill/waitpid/etc. can
-// find tasks regardless of state.
-static task_t* tasks_head = NULL;
-static spinlock_t tasks_lock = {0};
+// find tasks regardless of state. Exposed (via scheduler.h) so cross-file
+// consumers — notably signal_send_pgrp — can find tasks that are off-rq.
+// Lock order: tasks_lock -> rq->lock. Never the reverse.
+task_t* tasks_head = NULL;
+spinlock_t tasks_lock = {0};
 
 static void tasks_list_add(task_t* t) {
     spin_lock(&tasks_lock);

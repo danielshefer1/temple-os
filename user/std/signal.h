@@ -12,6 +12,11 @@
 #define SIGCHLD           17
 #define SIGWINCH          28
 
+// Sentinels matching interrupts/signal_defs.h. Pass to sys_signal() to mean
+// "use the kernel default" or "ignore this signal".
+#define SIG_DFL ((void*)0)
+#define SIG_IGN ((void*)1)
+
 // Naked: no prologue/epilogue, no GPR clobbers — the kernel restores the
 // pre-signal register state from the saved frame on the user stack.
 __attribute__((naked, used)) static void sig_restorer(void) {

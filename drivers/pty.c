@@ -49,6 +49,20 @@ static ldisc_ring_t s2m_ring(pty_pair_t* p) {
     };
 }
 
+// Waiter-only view for slave writers parked because s2m is full. Only the
+// ldisc_waiter_{enqueue,pop,remove} helpers are used against this; the
+// buf/head/tail/size fields are unused.
+static ldisc_ring_t s2m_writers(pty_pair_t* p) {
+    return (ldisc_ring_t){
+        .buf         = NULL,
+        .size        = 0,
+        .head        = NULL,
+        .tail        = NULL,
+        .waiter      = &p->s_write_waiter,
+        .waiter_tail = &p->s_write_waiter_tail,
+    };
+}
+
 // Echo callback for the line discipline on master input: append to s2m so
 // the userspace term sees the typed-byte echo and renders it.
 static void echo_to_master(void* ctx, char c) {
@@ -117,6 +131,8 @@ static int64_t pty_slave_write(file_t* f, const void* buf, uint64_t size) {
     CliHelper();
     spin_lock(&p->lock);
 
+    ldisc_ring_t ww = s2m_writers(p);
+
     while (total < size) {
         if (!p->master_open) {
             spin_unlock(&p->lock);
@@ -128,10 +144,29 @@ static int64_t pty_slave_write(file_t* f, const void* buf, uint64_t size) {
         }
         uint64_t space = PTY_BUF_SIZE - (p->s2m_head - p->s2m_tail);
         if (space == 0) {
-            // Drop overflow on the floor instead of blocking — keeps the
-            // slave from deadlocking when the userspace term is slow. Real
-            // ptys block; this is acceptable for v1.
-            break;
+            // Block until master_read drains some bytes (it will pop one of
+            // us off s_write_waiter on each successful drain) or the master
+            // closes (close path wakes us all so we re-check master_open).
+            task_t* me = this_cpu()->current;
+            ldisc_waiter_enqueue(&ww, me);
+            me->state = TASK_STATE_BLOCKED;
+            spin_unlock(&p->lock);
+
+            schedule();
+
+            CliHelper();
+            spin_lock(&p->lock);
+            ldisc_waiter_remove(&ww, me);
+
+            // If the wakeup came from a signal (signal_send re-readies any
+            // BLOCKED task with matching pgid), bail out so syscall return
+            // can deliver it. Partial bytes already in the ring count.
+            if (__atomic_load_n(&me->pending_signals, __ATOMIC_RELAXED)) {
+                spin_unlock(&p->lock);
+                if (ie) StiHelper();
+                return (total > 0) ? (int64_t)total : -EINTR;
+            }
+            continue;
         }
         uint64_t want = size - total;
         if (want > space) want = space;
@@ -257,13 +292,50 @@ static int64_t pty_slave_close(file_t* f) {
     return 0;
 }
 
-static file_ops_t pty_slave_ops = {
+file_ops_t pty_slave_ops = {
     .read  = pty_slave_read,
     .write = pty_slave_write,
     .ioctl = pty_slave_ioctl,
     .open  = pty_slave_open,
     .close = pty_slave_close,
 };
+
+// Drop pending output on the s2m ring when a foreground task is killed by
+// a default-terminate signal. Called from signal_deliver_on_return just
+// before task_exit. The pgid check ensures a backgrounded task's death
+// doesn't blow away the foreground program's pty buffer. Wakes any parked
+// s2m writers so they re-check master_open and don't sit stuck on a queue
+// that's now empty.
+void pty_drop_fg_output(file_t* f, uint64_t pgid) {
+    if (!f || f->ops != &pty_slave_ops) return;
+    pty_pair_t* p = (pty_pair_t*)f->private_data;
+    if (!p || !p->in_use) return;
+
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&p->lock);
+    if (pgid != p->pgrp) {
+        spin_unlock(&p->lock);
+        if (ie) StiHelper();
+        return;
+    }
+    p->s2m_head = p->s2m_tail = 0;
+    ldisc_ring_t ww = s2m_writers(p);
+    task_t* writers = NULL;
+    for (task_t* t; (t = ldisc_waiter_pop(&ww)); ) {
+        t->next = writers;
+        writers = t;
+    }
+    spin_unlock(&p->lock);
+    while (writers) {
+        task_t* nxt = writers->next;
+        writers->next = NULL;
+        writers->state = TASK_STATE_READY;
+        rq_enqueue_external(writers);
+        writers = nxt;
+    }
+    if (ie) StiHelper();
+}
 
 // ---- master file_ops ----------------------------------------------------
 
@@ -278,11 +350,21 @@ static int64_t pty_master_read(file_t* f, void* buf, uint64_t size) {
     CliHelper();
     spin_lock(&p->lock);
 
+    ldisc_ring_t ww = s2m_writers(p);
+
     while (1) {
         // Raw drain regardless of flags.
         int64_t n = ldisc_drain(&r, 0, dst, size);
         if (n > 0) {
+            // We just freed `n` bytes of s2m space; wake one parked slave
+            // writer so it can resume. (One per drain — a writer that
+            // refills the ring will park again next iteration.)
+            task_t* w = ldisc_waiter_pop(&ww);
             spin_unlock(&p->lock);
+            if (w) {
+                w->state = TASK_STATE_READY;
+                rq_enqueue_external(w);
+            }
             if (ie) StiHelper();
             return n;
         }
@@ -327,6 +409,7 @@ static int64_t pty_master_write(file_t* f, const void* buf, uint64_t size) {
     const char* src = (const char*)buf;
     ldisc_ring_t mring = m2s_ring(p);
     ldisc_ring_t sring = s2m_ring(p);
+    ldisc_ring_t ww    = s2m_writers(p);
     uint64_t total = 0;
 
     bool ie = check_interrupts();
@@ -334,6 +417,47 @@ static int64_t pty_master_write(file_t* f, const void* buf, uint64_t size) {
     spin_lock(&p->lock);
 
     for (; total < size; total++) {
+        // If echo is on, ensure s2m has space for the echo byte before we
+        // consume the input byte. Otherwise echo silently drops on overflow
+        // (ldisc_push) and the user never sees what they typed during a
+        // flooding fg program. Park on s_write_waiter — the same queue
+        // pty_slave_write parks on; pty_master_read wakes one writer per
+        // drain, indifferent to whether it's a slave-write or echo waiter.
+        //
+        // Skip the pre-check for ISIG-recognised bytes (currently 0x03) —
+        // those are consumed by the line discipline before echo, so they
+        // don't need s2m space. Critically: Ctrl+C must NOT block here when
+        // s2m is full, otherwise term's input pump can't deliver the
+        // SIGINT that frees the ring in the first place.
+        bool is_signal_byte = (p->flags & TTY_FLAG_ISIG) && src[total] == 0x03;
+        while ((p->flags & TTY_FLAG_ECHO) && !is_signal_byte &&
+               (PTY_BUF_SIZE - (p->s2m_head - p->s2m_tail)) == 0) {
+            task_t* me = this_cpu()->current;
+            ldisc_waiter_enqueue(&ww, me);
+            me->state = TASK_STATE_BLOCKED;
+            spin_unlock(&p->lock);
+
+            schedule();
+
+            CliHelper();
+            spin_lock(&p->lock);
+            ldisc_waiter_remove(&ww, me);
+
+            if (__atomic_load_n(&me->pending_signals, __ATOMIC_RELAXED)) {
+                spin_unlock(&p->lock);
+                if (ie) StiHelper();
+                return (total > 0) ? (int64_t)total : -EINTR;
+            }
+            // If the slave goes away while we're blocked, the m2s side is
+            // moot too — bail rather than spin forever waiting for echo
+            // space that nobody will drain.
+            if (!p->slave_open) {
+                spin_unlock(&p->lock);
+                if (ie) StiHelper();
+                return (total > 0) ? (int64_t)total : -EIO;
+            }
+        }
+
         ldisc_result_t res;
         ldisc_input(p->flags, &mring, p->pgrp, src[total],
                     echo_to_master, &sring, &res);
@@ -415,6 +539,14 @@ static int64_t pty_master_close(file_t* f) {
     // Wake any slave reader so it sees EOF on m2s.
     ldisc_ring_t m = m2s_ring(p);
     task_t* w = ldisc_waiter_pop(&m);
+    // Wake every slave writer parked on s2m; they re-check master_open and
+    // fall out with -EPIPE / SIGPIPE on the next iteration.
+    ldisc_ring_t ww = s2m_writers(p);
+    task_t* writers_to_wake = NULL;
+    for (task_t* t; (t = ldisc_waiter_pop(&ww)); ) {
+        t->next = writers_to_wake;
+        writers_to_wake = t;
+    }
     bool free_slot = !p->slave_open && !p->master_open;
     if (free_slot) {
         memset(p, 0, sizeof(*p));
@@ -423,6 +555,13 @@ static int64_t pty_master_close(file_t* f) {
     if (w) {
         w->state = TASK_STATE_READY;
         rq_enqueue_external(w);
+    }
+    while (writers_to_wake) {
+        task_t* nxt = writers_to_wake->next;
+        writers_to_wake->next = NULL;
+        writers_to_wake->state = TASK_STATE_READY;
+        rq_enqueue_external(writers_to_wake);
+        writers_to_wake = nxt;
     }
     if (ie) StiHelper();
     return 0;

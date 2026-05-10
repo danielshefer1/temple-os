@@ -82,3 +82,10 @@ void sleep_queue_wake_expired(struct cpu_local_t* cpu);
 // `current` and run queue. Returns NULL if no such task exists.
 // Snapshot semantics — the returned task may already be exiting.
 task_t* task_for_pid(uint64_t pid);
+
+// Global doubly-linked list of every live (non-freed) task, threaded via
+// task_t::all_next/all_prev. Includes BLOCKED tasks parked on driver waiter
+// lists, which are not reachable through any per-CPU run queue. Consumers
+// must hold tasks_lock while walking. Lock order: tasks_lock -> rq->lock.
+extern task_t* tasks_head;
+extern spinlock_t tasks_lock;

@@ -36,13 +36,17 @@ int main(int argc, char** argv) {
             // Single repeat doesn't fit a 1KB buffer — emit as-is each loop.
             for (;;) {
                 long w = sys_write(1, unit, ulen);
-                if (w <= 0) return 1;
+                if (w < 0) return 1;
             }
         }
     }
 
+    // Loop forever. Short writes (w == 0 or partial) just keep going —
+    // the pty blocks on backpressure but a signal can wake us with
+    // -EINTR or a partial count, which we ignore. Ctrl+C kills us via
+    // signal_deliver_on_return on syscall exit, not via a 0 return.
     for (;;) {
         long w = sys_write(1, buf, pos);
-        if (w <= 0) return 1;
+        if (w < 0) return 1;
     }
 }

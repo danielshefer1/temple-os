@@ -30,6 +30,10 @@ typedef struct pty_pair_t {
     uint64_t   s2m_tail;
     struct task_t* m_read_waiter;
     struct task_t* m_read_waiter_tail;
+    // Slave writers parked because s2m is full. master_read pops one per
+    // drain; master close wakes them all so they fall out with -EPIPE.
+    struct task_t* s_write_waiter;
+    struct task_t* s_write_waiter_tail;
 
     uint32_t   flags;            // ICANON / ECHO / ISIG (same bits as tty_t)
     uint64_t   pgrp;             // slave's foreground process group

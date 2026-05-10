@@ -31,12 +31,40 @@ static inline char* st_strchr(const char* s, int c) {
 static inline void* st_memcpy(void* dst, const void* src, unsigned long n) {
     unsigned char* d = (unsigned char*)dst;
     const unsigned char* s = (const unsigned char*)src;
+
+    // Byte-prefix until both pointers are 8-byte aligned (only possible
+    // when their misalignment matches; otherwise fall back to bytewise).
+    while (n && (((unsigned long)d | (unsigned long)s) & 7)) {
+        if (((unsigned long)d & 7) != ((unsigned long)s & 7)) break;
+        *d++ = *s++; n--;
+    }
+
+    if (n >= 8 && (((unsigned long)d | (unsigned long)s) & 7) == 0) {
+        unsigned long* d64 = (unsigned long*)d;
+        const unsigned long* s64 = (const unsigned long*)s;
+        unsigned long qwords = n >> 3;
+        for (unsigned long i = 0; i < qwords; i++) d64[i] = s64[i];
+        d += qwords * 8;
+        s += qwords * 8;
+        n &= 7;
+    }
+
     while (n--) *d++ = *s++;
     return dst;
 }
 
 static inline void* st_memset(void* dst, int c, unsigned long n) {
     unsigned char* d = (unsigned char*)dst;
-    while (n--) *d++ = (unsigned char)c;
+
+    while (n && ((unsigned long)d & 7)) { *d++ = (unsigned char)c; n--; }
+
+    unsigned long v64 = (unsigned char)c;
+    v64 |= v64 << 8; v64 |= v64 << 16; v64 |= v64 << 32;
+    unsigned long qwords = n >> 3;
+    unsigned long* d64 = (unsigned long*)d;
+    for (unsigned long i = 0; i < qwords; i++) d64[i] = v64;
+    d += qwords * 8;
+
+    for (unsigned long i = 0; i < (n & 7); i++) d[i] = (unsigned char)c;
     return dst;
 }

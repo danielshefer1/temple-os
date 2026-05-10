@@ -1,18 +1,23 @@
 #include "memory.h"
 
 void memset(void* address, uint8_t value, uint64_t size) {
-    uint64_t reminder = size % 4;
-    size -= reminder;
-    size /= 4;
-    uint32_t value_32 = value + (value << 8) + (value << 16) + (value << 24);
+    uint8_t* d = (uint8_t*)address;
 
-    for(uint64_t i = 0; i < size; i++) {
-        ((uint32_t*) address)[i] = value_32;
-    }
+    // Byte-prefix until 8-byte aligned.
+    while (size && ((uintptr_t)d & 7)) { *d++ = value; size--; }
 
-    for(uint64_t i = 0; i < reminder; i++) {
-        ((uint8_t*) address)[size * 4 +i] = value;
-    }
+    // 64-bit body. Replicate the byte to a u64 once, then store in chunks.
+    uint64_t v64 = (uint64_t)value;
+    v64 |= v64 << 8;
+    v64 |= v64 << 16;
+    v64 |= v64 << 32;
+    uint64_t qwords = size >> 3;
+    uint64_t* d64 = (uint64_t*)d;
+    for (uint64_t i = 0; i < qwords; i++) d64[i] = v64;
+
+    // Byte tail (size & 7).
+    d += qwords * 8;
+    for (uint64_t i = 0; i < (size & 7); i++) d[i] = value;
 }
 
 int32_t memcmp(const void* ptr1, const void* ptr2, uint64_t num) {
@@ -44,23 +49,27 @@ int32_t memcmp(const void* ptr1, const void* ptr2, uint64_t num) {
 }
 
 void memcpy(void* dest, const void* src, uint64_t n) {
-    uint8_t* dest1 = (uint8_t*)dest;
-    const uint8_t* src1 = (const uint8_t*)src;
+    uint8_t* d = (uint8_t*)dest;
+    const uint8_t* s = (const uint8_t*)src;
 
-    if (((uintptr_t)dest1 | (uintptr_t)src1 | n) % 4 == 0) {
-        uint32_t* p1_32 = (uint32_t*)dest1;
-        const uint32_t* p2_32 = (const uint32_t*)src1;
-        uint64_t words = n / 4;
-
-        for (uint64_t i = 0; i < words; i++) {
-            p1_32[i] = p2_32[i];
-        }
-        return;
+    // Byte-prefix until either pointer mismatch parity (=> can't use wider
+    // loads/stores at all) or both pointers are 8-byte aligned.
+    while (n && (((uintptr_t)d | (uintptr_t)s) & 7)) {
+        // If d and s aren't congruent mod 8, no alignment we can reach;
+        // fall through to the byte loop after this.
+        if (((uintptr_t)d & 7) != ((uintptr_t)s & 7)) break;
+        *d++ = *s++; n--;
     }
 
-    for (uint64_t i = 0; i < n; i++) {
-        dest1[i] = src1[i];
+    if (n >= 8 && (((uintptr_t)d | (uintptr_t)s) & 7) == 0) {
+        uint64_t* d64 = (uint64_t*)d;
+        const uint64_t* s64 = (const uint64_t*)s;
+        uint64_t qwords = n >> 3;
+        for (uint64_t i = 0; i < qwords; i++) d64[i] = s64[i];
+        d += qwords * 8;
+        s += qwords * 8;
+        n &= 7;
     }
 
-    return; 
+    for (uint64_t i = 0; i < n; i++) d[i] = s[i];
 }

@@ -1,4 +1,5 @@
 #include "signal.h"
+#include "pty.h"
 #include "scheduler.h"
 #include "cpu_local.h"
 #include "string.h"
@@ -30,29 +31,23 @@ void signal_send(task_t* t, int signo) {
     }
 }
 
-// Walk every CPU's current task and run-queue, signalling any task whose
-// pgid matches. We skip the per-CPU sleep queue (sleeping tasks live on a
-// run-queue too once the timer fires; signal_send re-enqueues BLOCKED tasks
-// to READY so they pick up the signal on next dispatch). Zombies are not
-// signalled — they have no userspace to deliver into.
+// Walk the global tasks list, signalling every non-zombie task whose pgid
+// matches. The global list — unlike per-CPU run queues — includes BLOCKED
+// tasks parked on driver waiter lists (e.g. waitpid, pty/pipe writers,
+// sleep). Without this, tty-driven SIGINT was silently dropped whenever the
+// foreground task happened to be off-rq at the moment Ctrl+C arrived.
+// signal_send takes care of OR-ing the pending bit and re-enqueueing
+// BLOCKED tasks back to READY. Zombies are skipped — they have no userspace
+// left to deliver into.
 void signal_send_pgrp(uint64_t pgrp, int signo) {
     if (pgrp == 0 || !signo_valid(signo)) return;
-    uint64_t online = cpus_active ? cpus_active : 1;
-    for (uint64_t i = 0; i < online; i++) {
-        cpu_local_t* cpu = &cpu_locals[i];
-        task_t* cur = cpu->current;
-        if (cur && cur->pgid == pgrp && cur->state != TASK_STATE_ZOMBIE) {
-            signal_send(cur, signo);
+    spin_lock(&tasks_lock);
+    for (task_t* t = tasks_head; t; t = t->all_next) {
+        if (t->pgid == pgrp && t->state != TASK_STATE_ZOMBIE) {
+            signal_send(t, signo);
         }
-        run_queue_t* rq = &cpu->rq;
-        spin_lock(&rq->lock);
-        for (task_t* t = rq->head; t; t = t->next) {
-            if (t->pgid == pgrp && t->state != TASK_STATE_ZOMBIE) {
-                signal_send(t, signo);
-            }
-        }
-        spin_unlock(&rq->lock);
     }
+    spin_unlock(&tasks_lock);
 }
 
 int64_t signal_install(int signo, void* handler, void* restorer) {
@@ -122,7 +117,14 @@ void signal_deliver_on_return(interrupt_frame_t* frame) {
 
     if (handler == SIG_IGN) return;
     if (handler == SIG_DFL) {
-        if (default_terminates(signo)) task_exit(sig_exit_code);
+        if (default_terminates(signo)) {
+            // Drop pending fg-tty output so a SIGINT-killed program doesn't
+            // leave 4KB of kernel-buffered bytes for the userspace term to
+            // render over the next tens of seconds. No-op when ctty isn't
+            // a pty or this task isn't the pty's foreground pgrp.
+            pty_drop_fg_output(t->ctty, t->pgid);
+            task_exit(sig_exit_code);
+        }
         return;
     }
     if (!restorer) {

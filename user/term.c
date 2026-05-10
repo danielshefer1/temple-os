@@ -107,7 +107,26 @@ static const unsigned int cga[16] = {
 static const unsigned char ansi_to_cga[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 
 static void my_memcpy(void* dst, const void* src, unsigned long n) {
-    unsigned char* d = dst; const unsigned char* s = src;
+    unsigned char* d = (unsigned char*)dst;
+    const unsigned char* s = (const unsigned char*)src;
+
+    // Byte-prefix until both pointers are 8-byte aligned (only possible
+    // when their misalignment matches; otherwise fall back to bytewise).
+    while (n && (((unsigned long)d | (unsigned long)s) & 7)) {
+        if (((unsigned long)d & 7) != ((unsigned long)s & 7)) break;
+        *d++ = *s++; n--;
+    }
+
+    if (n >= 8 && (((unsigned long)d | (unsigned long)s) & 7) == 0) {
+        unsigned long* d64 = (unsigned long*)d;
+        const unsigned long* s64 = (const unsigned long*)s;
+        unsigned long qwords = n >> 3;
+        for (unsigned long i = 0; i < qwords; i++) d64[i] = s64[i];
+        d += qwords * 8;
+        s += qwords * 8;
+        n &= 7;
+    }
+
     while (n--) *d++ = *s++;
 }
 
@@ -197,15 +216,19 @@ static void scroll_one(void) {
     for (unsigned long c = 0; c < term_cols; c++) {
         cells[(term_rows - 1) * term_cols + c] = blank;
     }
-    // Pixel-level scroll on the framebuffer.
-    unsigned long row_bytes_px = pitch_px * glyph_h;
-    volatile unsigned int* base = fb_pixels;
+    // Pixel-level scroll on the framebuffer. Cast volatile away for the
+    // memcpy — the framebuffer is a write-combining mmap region; what we
+    // need is "do the writes in some order", not "make every store
+    // observable separately." The previous `dst[x] = src[x]` inner loop
+    // forced one volatile read+write per pixel and dominated render time
+    // (per-pixel CPU overhead, not bus). my_memcpy uses 8-byte chunks.
+    unsigned int* base = (unsigned int*)fb_pixels;
+    unsigned long row_px = (unsigned long)term_cols * glyph_w;
     for (unsigned long y = 0; y < (term_rows - 1) * glyph_h; y++) {
-        volatile unsigned int* dst = base + y * pitch_px;
-        volatile unsigned int* src = base + (y + glyph_h) * pitch_px;
-        for (unsigned long x = 0; x < term_cols * glyph_w; x++) dst[x] = src[x];
+        my_memcpy(base + y * pitch_px,
+                  base + (y + glyph_h) * pitch_px,
+                  row_px * sizeof(unsigned int));
     }
-    (void)row_bytes_px;
     fill_rect(0, (term_rows - 1) * glyph_h,
               term_cols * glyph_w, glyph_h, pack_color(cur_bg));
     cursor_visible = 0;

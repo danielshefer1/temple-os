@@ -161,23 +161,50 @@ static int wait_status_to_rc(unsigned long st) {
     return -1;
 }
 
-// Run a single command via sys_spawn (no pipes, no redirs). Returns the
-// exit code of the child.
+// Cached at startup. The shell runs in its own pgrp (== own pid, set by
+// term's setsid call before exec'ing /bin/sh) and reclaims the foreground
+// pgrp via TIOCSPGRP after each pipeline finishes.
+static long sh_pgid_;
+
+// Set the controlling pty's foreground pgrp. fd 0 is the slave; pty's
+// TIOCSPGRP takes the pgid in the arg slot directly (not via pointer) —
+// see drivers/pty.c:160-162.
+static void give_terminal_to(long pgid) {
+    sys_ioctl(0, TIOCSPGRP_U, (void*)(unsigned long)pgid);
+}
+
+// Run a single command (no pipes, no redirs). Forks, puts the child in its
+// own pgrp, hands the pty foreground to it, waits, then reclaims foreground.
+// Replaces the old sys_spawn fast path so Ctrl+C only signals the child
+// (not the shell, which inherits — and ignores — SIGINT).
 static int run_simple(stage_t* st_) {
     char path[64];
     if (build_path(st_->argv[0], path, sizeof(path)) < 0) {
         st_puts("sh: command name too long\n");
         return 127;
     }
-    long pid = sys_spawn(path, st_->argv, 0);
-    if (pid < 0) {
+    long pid = sys_fork();
+    if (pid == 0) {
+        // Child: own pgrp, restore default SIGINT (sh ignored it), exec.
+        sys_setpgid(0, 0);
+        sys_signal(SIGINT, SIG_DFL, 0);
+        sys_exec(path, st_->argv, 0);
         st_puts("sh: ");
         st_puts(st_->argv[0]);
         st_puts(": not found\n");
+        sys_exit(127);
+    }
+    if (pid < 0) {
+        st_puts("sh: fork failed\n");
         return 127;
     }
+    // Race-safe duplicate of the child's setpgid. POSIX guarantees one of
+    // the two takes effect before exec.
+    sys_setpgid(pid, pid);
+    give_terminal_to(pid);
     unsigned long st = 0;
     sys_waitpid(pid, &st);
+    give_terminal_to(sh_pgid_);
     return wait_status_to_rc(st);
 }
 
@@ -223,10 +250,17 @@ static int run_pipeline(stage_t* stages, int n) {
         }
     }
 
+    // Pipeline pgrp leader: set after the first fork, then every subsequent
+    // child joins it. Children read this from their fork-time copy of
+    // leader_pgid (0 for child #0 -> sys_setpgid(0,0) starts a new pgrp).
+    long leader_pgid = 0;
+
     for (int i = 0; i < n; i++) {
         long pid = sys_fork();
         if (pid == 0) {
-            // child
+            // child: join (or, if first, start) the pipeline pgrp.
+            sys_setpgid(0, leader_pgid);
+            sys_signal(SIGINT, SIG_DFL, 0);
             if (i > 0) {
                 sys_dup2(pipes[i - 1][0], 0);
             }
@@ -267,7 +301,13 @@ static int run_pipeline(stage_t* stages, int n) {
             return 127;
         }
         pids[i] = pid;
+        if (i == 0) leader_pgid = pid;
+        // Race-safe parallel setpgid from the parent side.
+        sys_setpgid(pid, leader_pgid);
     }
+
+    // Hand the pty foreground to the pipeline pgrp before draining waits.
+    give_terminal_to(leader_pgid);
 
     // Parent: close every pipe end.
     for (int j = 0; j < n - 1; j++) {
@@ -282,6 +322,8 @@ static int run_pipeline(stage_t* stages, int n) {
         sys_waitpid(pids[i], &st);
         if (i == n - 1) rc = wait_status_to_rc(st);
     }
+
+    give_terminal_to(sh_pgid_);
     return rc;
 }
 
@@ -318,6 +360,13 @@ int main(int argc, char** argv) {
 
     sys_mkdir("/home", 0755);
     sys_chdir("/home");
+
+    // Job control: shell runs in its own pgrp (term's child did setsid before
+    // exec, so pgid == pid). Ignore SIGINT so a Ctrl+C that lands on us
+    // during the fork/tcsetpgrp race window — or while waiting at the
+    // prompt — doesn't kill the shell. Children reset SIG_DFL before exec.
+    sh_pgid_ = sys_getpid();
+    sys_signal(SIGINT, SIG_IGN, 0);
 
     for (;;) {
         prompt();
