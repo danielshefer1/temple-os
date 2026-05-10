@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xorriso \
         mtools \
         e2fsprogs \
+        e2tools \
         qemu-system-x86 \
         ovmf \
         gdb \

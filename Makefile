@@ -72,62 +72,6 @@ K_OBJS = $(addprefix $(K_OBJ_DIR)/, $(KERNEL_C_SRCS:.c=.o) $(KERNEL_ASM_SRCS:.as
 # ============================================================================
 # Build Rules
 # ============================================================================
-USER_DIR     = $(BUILD_DIR)/user
-USER_HELLO   = $(USER_DIR)/hello.elf
-USER_TERM    = $(USER_DIR)/term.elf
-USER_INIT    = $(USER_DIR)/init.elf
-USER_SH      = $(USER_DIR)/sh.elf
-USER_HELP    = $(USER_DIR)/help.elf
-USER_CLEAR   = $(USER_DIR)/clear.elf
-USER_PWD     = $(USER_DIR)/pwd.elf
-USER_LS      = $(USER_DIR)/ls.elf
-USER_CAT     = $(USER_DIR)/cat.elf
-USER_ECHO    = $(USER_DIR)/echo.elf
-USER_SHUTDOWN = $(USER_DIR)/shutdown.elf
-USER_MKDIR    = $(USER_DIR)/mkdir.elf
-USER_RMDIR    = $(USER_DIR)/rmdir.elf
-USER_RM       = $(USER_DIR)/rm.elf
-USER_MV       = $(USER_DIR)/mv.elf
-USER_CP       = $(USER_DIR)/cp.elf
-USER_TOUCH    = $(USER_DIR)/touch.elf
-USER_LN       = $(USER_DIR)/ln.elf
-USER_READLINK = $(USER_DIR)/readlink.elf
-USER_SLEEP    = $(USER_DIR)/sleep.elf
-USER_KILL     = $(USER_DIR)/kill.elf
-USER_SYNC     = $(USER_DIR)/sync.elf
-USER_STAT     = $(USER_DIR)/stat.elf
-USER_TRUNCATE = $(USER_DIR)/truncate.elf
-USER_TRUE     = $(USER_DIR)/true.elf
-USER_FALSE    = $(USER_DIR)/false.elf
-USER_WC       = $(USER_DIR)/wc.elf
-USER_HEAD     = $(USER_DIR)/head.elf
-USER_TAIL     = $(USER_DIR)/tail.elf
-USER_FIND     = $(USER_DIR)/find.elf
-USER_GREP     = $(USER_DIR)/grep.elf
-USER_XXD      = $(USER_DIR)/xxd.elf
-USER_CMP      = $(USER_DIR)/cmp.elf
-USER_REV      = $(USER_DIR)/rev.elf
-USER_YES      = $(USER_DIR)/yes.elf
-USER_FONT_OBJ = $(USER_DIR)/font.o
-
-# Header dependency for all user programs — every header under user/std/.
-USER_STD_HDRS = $(wildcard user/std/*.h user/std/sys/*.h)
-
-# All "small" user programs that share the same build recipe (no font
-# blob, single .c file under user/, stdtemple-based runtime).
-USER_SMALL = $(USER_HELLO) $(USER_INIT) $(USER_SH) $(USER_HELP) \
-             $(USER_CLEAR) $(USER_PWD) $(USER_LS) $(USER_CAT) $(USER_ECHO) \
-             $(USER_SHUTDOWN) $(USER_MKDIR) $(USER_RMDIR) $(USER_RM) \
-             $(USER_MV) $(USER_CP) $(USER_TOUCH) $(USER_LN) $(USER_READLINK) \
-             $(USER_SLEEP) $(USER_KILL) $(USER_SYNC) $(USER_STAT) \
-             $(USER_TRUNCATE) $(USER_TRUE) $(USER_FALSE) \
-             $(USER_WC) $(USER_HEAD) $(USER_TAIL) $(USER_FIND) $(USER_GREP) \
-             $(USER_XXD) $(USER_CMP) $(USER_REV) $(USER_YES)
-USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
-               -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
-               -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
-USER_LDFLAGS = -m elf_x86_64 -static -pie -nostdlib -T user/hello_linker.ld -z noexecstack --no-warn-rwx-segments
-
 all: $(ISO_IMG) $(DATA_IMG) user-img
 
 $(DATA_IMG):
@@ -137,77 +81,19 @@ $(DATA_IMG):
 	@echo "$(DATA_IMG) is ready."
 
 # --- User Programs ---
-$(USER_DIR):
-	@mkdir -p $@
+# All user-app build/install logic lives in user/Makefile. Apps are
+# auto-discovered from user/*.c there; install uses e2tools (e2cp/
+# e2mkdir) against the persistent data.img.
+USER_MAKE = $(MAKE) -s -C user BUILD_DIR=$(abspath $(BUILD_DIR)) \
+                               DATA_IMG=$(abspath $(DATA_IMG)) \
+                               FONT_PSF=$(abspath $(FONT_PSF))
 
-# Pattern rule for the simple user programs. Each .elf links from a single
-# user/<name>.c that includes user/std/std.h (the stdtemple umbrella, which
-# provides the SysV-aware _start, syscall wrappers, and string/print helpers).
-$(USER_DIR)/%.elf: user/%.c $(USER_STD_HDRS) user/hello_linker.ld | $(USER_DIR)
-	@echo "[USER] Building $@"
-	@$(CC64) $(USER_CFLAGS) -c $< -o $(USER_DIR)/$*.o
-	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/$*.o
+.PHONY: user user-img
+user: | $(BUILD_DIR)
+	@$(USER_MAKE) all
 
-# Embed assets/font.psf as a binary blob into user/term so the userspace
-# rasterizer can use the same glyph table as the kernel fb_console.
-$(USER_FONT_OBJ): $(FONT_PSF) | $(USER_DIR)
-	@echo "[USER] Embedding $<"
-	@cd $(dir $<) && objcopy -I binary -O elf64-x86-64 -B i386:x86-64 \
-	    --rename-section .data=.rodata,alloc,load,readonly,data,contents \
-	    $(notdir $<) $(abspath $@)
-
-# /bin/term has its own rule because it links the embedded font blob.
-$(USER_TERM): user/term.c $(USER_STD_HDRS) user/hello_linker.ld $(USER_FONT_OBJ) | $(USER_DIR)
-	@echo "[USER] Building $@"
-	@$(CC64) $(USER_CFLAGS) -c user/term.c -o $(USER_DIR)/term.o
-	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/term.o $(USER_FONT_OBJ)
-
-# Install built user programs into data.img (idempotent; rm-then-write).
-USER_INSTALL = $(USER_TERM) $(USER_SMALL)
-
-define INSTALL_BIN
-	@echo "[USER] Installing $(1) -> /bin/$(2) on $(DATA_IMG)"
-	@debugfs -w -R "rm /bin/$(2)" $(DATA_IMG) 2>/dev/null || true
-	@debugfs -w -R "write $(1) /bin/$(2)" $(DATA_IMG)
-endef
-
-user-img: $(USER_INSTALL) $(DATA_IMG)
-	@debugfs -w -R "mkdir /bin" $(DATA_IMG) 2>/dev/null || true
-	$(call INSTALL_BIN,$(USER_HELLO),hello)
-	$(call INSTALL_BIN,$(USER_TERM),term)
-	$(call INSTALL_BIN,$(USER_INIT),init)
-	$(call INSTALL_BIN,$(USER_SH),sh)
-	$(call INSTALL_BIN,$(USER_HELP),help)
-	$(call INSTALL_BIN,$(USER_CLEAR),clear)
-	$(call INSTALL_BIN,$(USER_PWD),pwd)
-	$(call INSTALL_BIN,$(USER_LS),ls)
-	$(call INSTALL_BIN,$(USER_CAT),cat)
-	$(call INSTALL_BIN,$(USER_ECHO),echo)
-	$(call INSTALL_BIN,$(USER_SHUTDOWN),shutdown)
-	$(call INSTALL_BIN,$(USER_MKDIR),mkdir)
-	$(call INSTALL_BIN,$(USER_RMDIR),rmdir)
-	$(call INSTALL_BIN,$(USER_RM),rm)
-	$(call INSTALL_BIN,$(USER_MV),mv)
-	$(call INSTALL_BIN,$(USER_CP),cp)
-	$(call INSTALL_BIN,$(USER_TOUCH),touch)
-	$(call INSTALL_BIN,$(USER_LN),ln)
-	$(call INSTALL_BIN,$(USER_READLINK),readlink)
-	$(call INSTALL_BIN,$(USER_SLEEP),sleep)
-	$(call INSTALL_BIN,$(USER_KILL),kill)
-	$(call INSTALL_BIN,$(USER_SYNC),sync)
-	$(call INSTALL_BIN,$(USER_STAT),stat)
-	$(call INSTALL_BIN,$(USER_TRUNCATE),truncate)
-	$(call INSTALL_BIN,$(USER_TRUE),true)
-	$(call INSTALL_BIN,$(USER_FALSE),false)
-	$(call INSTALL_BIN,$(USER_WC),wc)
-	$(call INSTALL_BIN,$(USER_HEAD),head)
-	$(call INSTALL_BIN,$(USER_TAIL),tail)
-	$(call INSTALL_BIN,$(USER_FIND),find)
-	$(call INSTALL_BIN,$(USER_GREP),grep)
-	$(call INSTALL_BIN,$(USER_XXD),xxd)
-	$(call INSTALL_BIN,$(USER_CMP),cmp)
-	$(call INSTALL_BIN,$(USER_REV),rev)
-	$(call INSTALL_BIN,$(USER_YES),yes)
+user-img: user $(DATA_IMG)
+	@$(USER_MAKE) inject
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once
