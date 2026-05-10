@@ -122,6 +122,10 @@ void InitKeyboard() {
     IOAPIC_SetEntry(1, 33);
 }
 
+void InitMouse() {
+    IOAPIC_SetEntry(12, 44);
+}
+
 void SendIpiAllExcludingSelf(uint8_t vector) {
     // Wait for any prior IPI to drain (delivery status bit 12).
     while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();

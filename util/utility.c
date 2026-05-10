@@ -13,6 +13,8 @@
 #include "fb.h"
 #include "fb_dev.h"
 #include "kbd_dev.h"
+#include "mouse_dev.h"
+#include "ps2.h"
 #include "vt.h"
 
 void start() {
@@ -43,6 +45,7 @@ void start() {
     vt_init_all();
     fb_dev_init();
     kbd_dev_init();
+    mouse_dev_init();
 
     InitRsdt();
     InitMadt();
@@ -61,6 +64,8 @@ void start() {
 
     InitTimer(TIMER_TICK_PER_MS);
     InitKeyboard();
+    ps2_init_aux();
+    InitMouse();
 
     PciEnumeration();
     AhciInit();

@@ -196,7 +196,8 @@ static void make_static_dev_nodes(void) {
         ensure_node(path, VFS_TYPE_CHARDEV, MKDEV(PTY_SLAVE_MAJOR, i));
     }
     ensure_node("/dev/fb",  VFS_TYPE_CHARDEV, MKDEV(29, 0));
-    ensure_node("/dev/kbd", VFS_TYPE_CHARDEV, MKDEV(13, 0));
+    ensure_node("/dev/kbd",   VFS_TYPE_CHARDEV, MKDEV(13, 0));
+    ensure_node("/dev/mouse", VFS_TYPE_CHARDEV, MKDEV(13, 1));
     kprintf("[devs] all done\n");
 }
 

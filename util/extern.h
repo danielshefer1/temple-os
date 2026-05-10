@@ -65,6 +65,7 @@ extern void isr_stub_21();
 extern void isr_pic_stub_32();
 extern void isr_apic_stub_32();
 extern void isr_apic_stub_33();
+extern void isr_apic_stub_44();
 extern void isr_apic_stub_64();
 extern void isr_apic_stub_65();
 extern void isr_spurious();

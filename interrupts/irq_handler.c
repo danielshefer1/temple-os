@@ -5,6 +5,7 @@
 #include "tty.h"
 #include "vt.h"
 #include "kbd_dev.h"
+#include "mouse_dev.h"
 
 static const char kbd_us[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8',	
@@ -55,6 +56,7 @@ void irq_handler(interrupt_frame_t* frame) {
     switch (frame->int_no) {
         case 32: TimerHandler();         break;
         case 33: KeyboardHandler();      break;
+        case 44: MouseHandler();         break;
         case 64: AhciHandler();          break;
         case 65: TlbShootdownHandler();  break;
         default:
