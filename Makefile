@@ -99,6 +99,15 @@ USER_STAT     = $(USER_DIR)/stat.elf
 USER_TRUNCATE = $(USER_DIR)/truncate.elf
 USER_TRUE     = $(USER_DIR)/true.elf
 USER_FALSE    = $(USER_DIR)/false.elf
+USER_WC       = $(USER_DIR)/wc.elf
+USER_HEAD     = $(USER_DIR)/head.elf
+USER_TAIL     = $(USER_DIR)/tail.elf
+USER_FIND     = $(USER_DIR)/find.elf
+USER_GREP     = $(USER_DIR)/grep.elf
+USER_XXD      = $(USER_DIR)/xxd.elf
+USER_CMP      = $(USER_DIR)/cmp.elf
+USER_REV      = $(USER_DIR)/rev.elf
+USER_YES      = $(USER_DIR)/yes.elf
 USER_FONT_OBJ = $(USER_DIR)/font.o
 
 # Header dependency for all user programs — every header under user/std/.
@@ -111,7 +120,9 @@ USER_SMALL = $(USER_HELLO) $(USER_INIT) $(USER_SH) $(USER_HELP) \
              $(USER_SHUTDOWN) $(USER_MKDIR) $(USER_RMDIR) $(USER_RM) \
              $(USER_MV) $(USER_CP) $(USER_TOUCH) $(USER_LN) $(USER_READLINK) \
              $(USER_SLEEP) $(USER_KILL) $(USER_SYNC) $(USER_STAT) \
-             $(USER_TRUNCATE) $(USER_TRUE) $(USER_FALSE)
+             $(USER_TRUNCATE) $(USER_TRUE) $(USER_FALSE) \
+             $(USER_WC) $(USER_HEAD) $(USER_TAIL) $(USER_FIND) $(USER_GREP) \
+             $(USER_XXD) $(USER_CMP) $(USER_REV) $(USER_YES)
 USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
@@ -188,6 +199,15 @@ user-img: $(USER_INSTALL) $(DATA_IMG)
 	$(call INSTALL_BIN,$(USER_TRUNCATE),truncate)
 	$(call INSTALL_BIN,$(USER_TRUE),true)
 	$(call INSTALL_BIN,$(USER_FALSE),false)
+	$(call INSTALL_BIN,$(USER_WC),wc)
+	$(call INSTALL_BIN,$(USER_HEAD),head)
+	$(call INSTALL_BIN,$(USER_TAIL),tail)
+	$(call INSTALL_BIN,$(USER_FIND),find)
+	$(call INSTALL_BIN,$(USER_GREP),grep)
+	$(call INSTALL_BIN,$(USER_XXD),xxd)
+	$(call INSTALL_BIN,$(USER_CMP),cmp)
+	$(call INSTALL_BIN,$(USER_REV),rev)
+	$(call INSTALL_BIN,$(USER_YES),yes)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

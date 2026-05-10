@@ -25,6 +25,15 @@ int main(int argc, char** argv) {
     st_puts("  kill [-N] <pid...>         - send signal (default TERM)\n");
     st_puts("  sync                       - flush filesystem buffers\n");
     st_puts("  true / false               - exit 0 / exit 1\n");
+    st_puts("  wc [-lwc] [file...]        - line/word/byte counts\n");
+    st_puts("  head [-n N] [file...]      - first N lines (default 10)\n");
+    st_puts("  tail [-n N] [file...]      - last N lines (default 10)\n");
+    st_puts("  find [path]                - recursive walk of directory tree\n");
+    st_puts("  grep <pat> [file...]       - line-by-line substring match\n");
+    st_puts("  xxd [file...]              - hex+ASCII dump\n");
+    st_puts("  cmp <a> <b>                - byte compare two files\n");
+    st_puts("  rev [file...]              - reverse each line\n");
+    st_puts("  yes [string]               - infinite output (default y)\n");
     st_puts("  hello                      - run the M8/M9 self-test program\n");
     st_puts("  shutdown                   - flush root fs and power off\n");
     st_puts("\nshell features: pipes |, redirection < > >>\n");
