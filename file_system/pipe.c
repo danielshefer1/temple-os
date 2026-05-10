@@ -14,6 +14,15 @@
 static inode_t pipe_stub_inode;
 static bool    pipe_stub_init = false;
 
+// Serialises FIFO inode->pipe transitions. fifo_open's check-and-alloc and
+// pipe_close's NULL-and-free are otherwise racy: two concurrent opens of a
+// fresh FIFO can both observe in->pipe == NULL and allocate distinct pipes,
+// then end up parked on disjoint waiter queues with no peer to wake them
+// (a deadlock, not just a leak as an earlier comment suggested). Lock
+// order: fifo_attach_lock → p->lock; both fifo_open and pipe_close take
+// them in that order.
+static spinlock_t fifo_attach_lock = {0};
+
 static void pipe_free(pipe_t* p) {
     if (!p) return;
     if (p->buf) kfree(p->buf, PIPE_BUF_SIZE);
@@ -195,9 +204,17 @@ static int64_t pipe_close(file_t* f) {
     pipe_end_t* end = (pipe_end_t*)f->private_data;
     if (!end) return 0;
     pipe_t* p = end->pipe;
+    bool is_fifo = (p->inode != NULL);
 
     bool ie = check_interrupts();
     CliHelper();
+    // For FIFOs, take fifo_attach_lock first so the inode->pipe clear and
+    // pipe_free happen atomically w.r.t. a concurrent fifo_open's check.
+    // Without this, fifo_open can read in->pipe after we unlock p->lock
+    // but before we clear the inode pointer and free, then increment
+    // counters on a pipe we're about to kfree. Lock order matches
+    // fifo_open: fifo_attach_lock → p->lock.
+    if (is_fifo) spin_lock(&fifo_attach_lock);
     spin_lock(&p->lock);
 
     if (end->side == PIPE_SIDE_READ) {
@@ -219,10 +236,12 @@ static int64_t pipe_close(file_t* f) {
 
     bool free_pipe = (p->readers == 0 && p->writers == 0);
     inode_t* fifo_inode = free_pipe ? p->inode : NULL;
+    if (fifo_inode) fifo_inode->pipe = NULL;
 
     spin_unlock(&p->lock);
+    if (is_fifo) spin_unlock(&fifo_attach_lock);
 
-    // Push woken tasks onto run queues, outside the pipe lock.
+    // Push woken tasks onto run queues, outside both locks.
     while (wake_chain) {
         task_t* nxt = wake_chain->next;
         wake_chain->next = NULL;
@@ -231,7 +250,6 @@ static int64_t pipe_close(file_t* f) {
     }
 
     if (free_pipe) {
-        if (fifo_inode) fifo_inode->pipe = NULL;
         pipe_free(p);
     }
     kfree(end, sizeof(pipe_end_t));
@@ -319,27 +337,34 @@ fail:
 int64_t fifo_open(inode_t* in, file_t* f, uint32_t flags) {
     if (!in || !f) return -EINVAL;
 
-    // Lazily attach a pipe_t to the inode. Multiple openers race here only
-    // under SMP; for now we accept that two simultaneous opens of a fresh
-    // FIFO might leak one pipe_t (the loser's allocation), and serialise
-    // future calls via the inode->pipe non-NULL check.
-    if (in->pipe == NULL) {
-        pipe_t* p = pipe_alloc(in);
-        if (!p) return -ENOMEM;
-        in->pipe = p;
-    }
-    pipe_t* p = in->pipe;
-
     int side;
     uint32_t acc = flags & O_ACCMODE;
     if (acc == O_WRONLY) side = PIPE_SIDE_WRITE;
     else                 side = PIPE_SIDE_READ;   // RDONLY and RDWR map to read
 
+    // Lazily attach a pipe_t to the inode under fifo_attach_lock so two
+    // concurrent opens of a fresh FIFO can't each allocate their own pipe
+    // and end up parked on disjoint waiter queues. Also covers the close
+    // race: pipe_close NULLs inode->pipe under this lock, and we bump
+    // readers/writers before releasing it, so we can never observe a live
+    // inode->pipe and have it freed out from under us.
     bool ie = check_interrupts();
     CliHelper();
+    spin_lock(&fifo_attach_lock);
+    if (in->pipe == NULL) {
+        pipe_t* new_p = pipe_alloc(in);
+        if (!new_p) {
+            spin_unlock(&fifo_attach_lock);
+            if (ie) StiHelper();
+            return -ENOMEM;
+        }
+        in->pipe = new_p;
+    }
+    pipe_t* p = in->pipe;
     spin_lock(&p->lock);
-    if (side == PIPE_SIDE_READ) p->readers++;
-    else                        p->writers++;
+    if (side == PIPE_SIDE_READ) { p->readers++; p->ever_readers = true; }
+    else                        { p->writers++; p->ever_writers = true; }
+    spin_unlock(&fifo_attach_lock);
 
     // POSIX FIFO open semantics:
     //   - O_RDONLY blocks until a writer is present (so the reader doesn't
@@ -356,8 +381,11 @@ int64_t fifo_open(inode_t* in, file_t* f, uint32_t flags) {
     }
 
     while (1) {
-        bool need_block = (side == PIPE_SIDE_READ) ? (p->writers == 0)
-                                                   : (p->readers == 0);
+        // Use the sticky "ever had a peer" flag, not the live counter.
+        // A peer that opens-and-closes between schedule() and our resume
+        // would otherwise put us back to sleep forever.
+        bool need_block = (side == PIPE_SIDE_READ) ? !p->ever_writers
+                                                   : !p->ever_readers;
         if (!need_block) break;
 
         task_t* me = this_cpu()->current;
@@ -402,14 +430,20 @@ int64_t fifo_open(inode_t* in, file_t* f, uint32_t flags) {
 
     int r = install_end(f, p, side);
     if (r < 0) {
-        // Roll back the readers/writers bump we just did.
+        // Roll back the readers/writers bump we just did. Take
+        // fifo_attach_lock around the inode->pipe clear so a concurrent
+        // fifo_open can't acquire p between our last-ref decrement and
+        // pipe_free.
         ie = check_interrupts(); CliHelper();
+        spin_lock(&fifo_attach_lock);
         spin_lock(&p->lock);
         if (side == PIPE_SIDE_READ) p->readers--;
         else                        p->writers--;
         bool free_pipe = (p->readers == 0 && p->writers == 0);
+        if (free_pipe) in->pipe = NULL;
         spin_unlock(&p->lock);
-        if (free_pipe) { in->pipe = NULL; pipe_free(p); }
+        spin_unlock(&fifo_attach_lock);
+        if (free_pipe) pipe_free(p);
         if (ie) StiHelper();
         return r;
     }

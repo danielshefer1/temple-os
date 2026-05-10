@@ -42,18 +42,23 @@ static void tasks_list_remove(task_t* t) {
 // Tasks that have called task_exit but haven't been claimed by waitpid live
 // here, keyed by their parent pointer. Orphan tasks (parent == NULL) are
 // freed immediately by drain_pending_reap and never enter this list.
+//
+// zombie_list_lock serialises both list updates and the wait/wake handshake
+// in waitpid: task_exit holds it while adding the zombie *and* checking the
+// parent's state, and do_waitpid holds it while re-checking the list *and*
+// transitioning to TASK_STATE_BLOCKED. Without that overlap, a child can
+// finish between the parent's last list scan and its BLOCKED transition,
+// see state != BLOCKED, skip the wake, and leave the parent parked
+// forever.
 static task_t* zombie_list_head = NULL;
-static spinlock_t zombie_list_lock = {0};
+spinlock_t zombie_list_lock = {0};
 
-static void zombie_list_add(task_t* t) {
-    spin_lock(&zombie_list_lock);
+static void zombie_list_add_locked(task_t* t) {
     t->zombie_next = zombie_list_head;
     zombie_list_head = t;
-    spin_unlock(&zombie_list_lock);
 }
 
-task_t* zombie_list_take(task_t* parent, uint64_t target_pid) {
-    spin_lock(&zombie_list_lock);
+task_t* zombie_list_take_locked(task_t* parent, uint64_t target_pid) {
     task_t** link = &zombie_list_head;
     task_t* t = zombie_list_head;
     while (t) {
@@ -62,14 +67,22 @@ task_t* zombie_list_take(task_t* parent, uint64_t target_pid) {
         if (parent_ok && pid_ok) {
             *link = t->zombie_next;
             t->zombie_next = NULL;
-            spin_unlock(&zombie_list_lock);
             return t;
         }
         link = &t->zombie_next;
         t = t->zombie_next;
     }
-    spin_unlock(&zombie_list_lock);
     return NULL;
+}
+
+task_t* zombie_list_take(task_t* parent, uint64_t target_pid) {
+    bool ie = check_interrupts();
+    CliHelper();
+    spin_lock(&zombie_list_lock);
+    task_t* t = zombie_list_take_locked(parent, target_pid);
+    spin_unlock(&zombie_list_lock);
+    if (ie) StiHelper();
+    return t;
 }
 
 #define DEFAULT_TIME_SLICE 20   // ticks (1 ms each) — 20 ms quantum
@@ -410,42 +423,34 @@ void task_exit(uint64_t exit_code) {
     task_t* cur = cpu->current;
     cur->exit_code = exit_code;
 
-    // Detach any of our children: their parent is about to be freed (or at
-    // least become a zombie), so null their parent pointer to avoid
-    // use-after-free in waitpid lookups. We walk every CPU's run queue,
-    // current task, plus the zombie list. Tasks we orphan this way will
-    // be auto-reaped by drain_pending_reap (parent==NULL → orphan path).
-    uint64_t online = cpus_active ? cpus_active : 1;
-    for (uint64_t i = 0; i < online; i++) {
-        cpu_local_t* c = &cpu_locals[i];
-        task_t* run = c->current;
-        if (run && run->parent == cur) run->parent = NULL;
-        run_queue_t* rq = &c->rq;
-        spin_lock(&rq->lock);
-        for (task_t* t = rq->head; t; t = t->next) {
-            if (t->parent == cur) t->parent = NULL;
-        }
-        spin_unlock(&rq->lock);
-    }
-    spin_lock(&zombie_list_lock);
-    for (task_t* t = zombie_list_head; t; t = t->zombie_next) {
+    // Detach any of our children: their parent is about to be freed (or
+    // at least become a zombie), so null their parent pointer to avoid
+    // use-after-free in waitpid lookups. Walk the global task list so
+    // BLOCKED children parked on driver waiter lists are also caught.
+    spin_lock(&tasks_lock);
+    for (task_t* t = tasks_head; t; t = t->all_next) {
         if (t->parent == cur) t->parent = NULL;
     }
-    spin_unlock(&zombie_list_lock);
+    spin_unlock(&tasks_lock);
 
     cur->state = TASK_STATE_ZOMBIE;
 
     // If we have a parent, hand ourselves to it via the zombie list and
-    // wake it if it's blocked on a matching waitpid. Orphans don't need
-    // the list — drain_pending_reap will free them outright.
+    // wake it if it's blocked on a matching waitpid. Done atomically under
+    // zombie_list_lock so a parent racing with us between its last list
+    // scan and TASK_STATE_BLOCKED transition either sees us in the list
+    // (and skips parking) or has us see its BLOCKED state (and wake it).
+    // Orphans don't need the list — drain_pending_reap frees them outright.
     if (cur->parent != NULL && cur->parent->state != TASK_STATE_ZOMBIE) {
-        zombie_list_add(cur);
+        spin_lock(&zombie_list_lock);
+        zombie_list_add_locked(cur);
         task_t* p = cur->parent;
         if (p->state == TASK_STATE_BLOCKED &&
             (p->wait_target == 0 || p->wait_target == cur->pid)) {
             p->state = TASK_STATE_READY;
             rq_enqueue_external(p);
         }
+        spin_unlock(&zombie_list_lock);
     }
 
     schedule();
@@ -455,34 +460,15 @@ void task_exit(uint64_t exit_code) {
 }
 
 int task_has_children(task_t* parent, uint64_t target_pid) {
-    uint64_t online = cpus_active ? cpus_active : 1;
-    for (uint64_t i = 0; i < online; i++) {
-        cpu_local_t* c = &cpu_locals[i];
-        task_t* run = c->current;
-        if (run && run->parent == parent &&
-            (target_pid == 0 || run->pid == target_pid)) {
-            return 1;
-        }
-        run_queue_t* rq = &c->rq;
-        spin_lock(&rq->lock);
-        for (task_t* t = rq->head; t; t = t->next) {
-            if (t->parent == parent &&
-                (target_pid == 0 || t->pid == target_pid)) {
-                spin_unlock(&rq->lock);
-                return 1;
-            }
-        }
-        spin_unlock(&rq->lock);
-    }
-    spin_lock(&zombie_list_lock);
-    for (task_t* t = zombie_list_head; t; t = t->zombie_next) {
+    spin_lock(&tasks_lock);
+    for (task_t* t = tasks_head; t; t = t->all_next) {
         if (t->parent == parent &&
             (target_pid == 0 || t->pid == target_pid)) {
-            spin_unlock(&zombie_list_lock);
+            spin_unlock(&tasks_lock);
             return 1;
         }
     }
-    spin_unlock(&zombie_list_lock);
+    spin_unlock(&tasks_lock);
     return 0;
 }
 

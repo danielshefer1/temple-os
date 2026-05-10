@@ -19,6 +19,12 @@ typedef struct pipe_t {
     uint64_t   tail;     // monotonic
     uint32_t   readers;
     uint32_t   writers;
+    // Sticky "a peer has existed at least once" flags. fifo_open's
+    // wait-for-peer loop must re-check against these instead of the live
+    // counter, otherwise a peer that opens-and-closes between schedule()
+    // and our resume puts us back to sleep forever.
+    bool       ever_readers;
+    bool       ever_writers;
 
     struct task_t* read_waiter;       // single-link queue via task_t.next/prev
     struct task_t* read_waiter_tail;

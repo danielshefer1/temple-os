@@ -46,9 +46,17 @@ int main(int argc, char** argv) {
     char line[LINE_MAX_];
     char* av[ARGV_MAX_];
 
+    int auto_done = 0;
     for (;;) {
         prompt();
-        long n = sys_read(0, line, sizeof(line) - 1);
+        long n;
+        if (!auto_done) {
+            const char* c = "hello\n";
+            for (int i=0; i<6; i++) line[i]=c[i];
+            n = 6; auto_done = 1;
+        } else {
+            n = sys_read(0, line, sizeof(line) - 1);
+        }
         if (n <= 0) {
             // EOF on stdin (controlling tty went away). Exit so init
             // can decide whether to respawn term.

@@ -324,7 +324,7 @@ int64_t EXT2DeleteInodeFromBG(inode_t* inode) {
     uint32_t inode_idx_inside_bitmap = (data->inode_number - 1) - vol->inodes_per_group * data->block_group;
     uint64_t u64_idx = inode_idx_inside_bitmap / 64, bit_idx = inode_idx_inside_bitmap % 64;
 
-    bitmap[u64_idx] &= ~(1 << bit_idx);
+    bitmap[u64_idx] &= ~(1ULL << bit_idx);
     bwrite(inode->sb, bg->inode_bitmap);
     brelse(inode->sb, bg->inode_bitmap);
 
@@ -466,8 +466,7 @@ int64_t EXT2Rmdir(inode_t* dir, dentry_t* dentry) {
     inode_t* del = dentry->inode;
     del_data->ref_count--;
 
-    if (del_data->ref_count == 1) {
-        del_data->ref_count == 0;
+    if (del_data->ref_count == 0) {
         EXT2DeleteInodeFromBG(del);
         EXT2DeleteDataBlocksFromBG(del);
         SetDeleteTime(del);
@@ -503,6 +502,7 @@ int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* dentry) {
     ext2_inode_data_t* data = (ext2_inode_data_t*)dentry->inode->fs_specific;
     data->ref_count++;
     dentry->inode->sb->ops->write_inode(dentry->inode);
+    return 0;
 }
 
 int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target) {
@@ -536,6 +536,7 @@ int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target) {
     dentry->inode->size = name_len;
     data->i_blocks = dentry->inode->sb->block_size / dentry->inode->sb->bdev->sector_size;
     dentry->inode->sb->ops->write_inode(dentry->inode);
+    return 0;
 }
 
 int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size) {

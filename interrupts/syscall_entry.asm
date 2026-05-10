@@ -88,6 +88,26 @@ syscall_entry:
     mov rdi, rsp
     call syscall_handler
 
+; Return-from-sigreturn path. SIGRETURN must restore *all* user GP regs —
+; including RCX — but the SYSRET tail below clobbers RCX with the saved
+; RIP (SYSRET requires RCX=target). For a sigreturn that resumes ring-3
+; code which had been interrupted via the IRQ path, that user code
+; assumes RCX is preserved (it is for any non-syscall execution); losing
+; it produces wild scratch-register state and an eventual fault.
+;
+; signal_sigreturn (C) jumps here via signal_iretq_return(frame) — rdi
+; points at the gs slot at the bottom of the kernel frame, and the
+; full saved interrupt_frame_t lies above it. POPAQ + IRETQ pops every
+; GP reg unmolested and pops rip/cs/rflags/userrsp/ss from the trapframe.
+global signal_iretq_return
+signal_iretq_return:
+    mov rsp, rdi
+    add rsp, 16                             ; skip saved gs, fs slots
+    POPAQ
+    add rsp, 16                             ; drop int_no + err_code
+    swapgs
+    iretq
+
 ; A forked child is woken here by context_switch, with a synthesized frame
 ; placed on its kstack by do_fork. From this label down, the path is the
 ; same as a normal syscall return — POPAQ + SYSRET — so the child resumes

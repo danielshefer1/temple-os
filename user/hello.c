@@ -53,22 +53,24 @@ void _start(void) {
 
     sys_write(STDOUT_FILENO, loop_done, my_strlen(loop_done));
 
-    // /dev/tty exercise: open the chardev by path, write through it. Goes
-    // entirely through the new devfs path: namei -> ext2 inode (CHARDEV) ->
-    // vfs_open dispatches to devfs_lookup(4, 0) -> tty_fops with
-    // private_data = &console_tty.
-    static const char devtty_path[] = "/dev/tty";
-    static const char devtty_msg[]  = "hello via /dev/tty\n";
-    static const char devtty_fail[] = "open /dev/tty failed\n";
-    long fd = sys_open(devtty_path, O_RDWR, 0);
+    // /dev/tty exercise: confirm the chardev open-by-path round-trip
+    // works (devfs namei -> ext2 inode CHARDEV -> vfs_open dispatch via
+    // devfs_lookup(4, 0) -> tty_fops). We don't *write* through the
+    // returned fd, because that fd is hardwired to the kernel console
+    // tty and would land on the kernel framebuffer instead of the pty
+    // slave we inherited from the shell. The user-visible result still
+    // goes through fd 1 (= pty slave when /bin/hello is spawned by sh).
+    static const char devtty_ok[]   = "/dev/tty open ok\n";
+    static const char devtty_fail[] = "/dev/tty open FAIL errno=";
+    long fd = sys_open("/dev/tty", O_RDWR, 0);
     if (fd < 0) {
         sys_write(STDOUT_FILENO, devtty_fail, my_strlen(devtty_fail));
         char ebuf[32];
         unsigned long en = itoa10((unsigned long)(-fd), ebuf);
         sys_write(STDOUT_FILENO, ebuf, en);
     } else {
-        sys_write(fd, devtty_msg, my_strlen(devtty_msg));
         sys_close(fd);
+        sys_write(STDOUT_FILENO, devtty_ok, my_strlen(devtty_ok));
     }
 
     // /dev/null: writes succeed, reads return 0 (EOF).
@@ -470,5 +472,9 @@ void _start(void) {
                   my_strlen(good ? ok : fail));
     }
 
+    {
+        long t = sys_open("/dev/tty", O_WRONLY, 0);
+        if (t >= 0) { sys_write(t, "[hello_done]\n", 13); sys_close(t); }
+    }
     sys_exit(0);
 }

@@ -37,6 +37,16 @@ void task_exit(uint64_t exit_code) __attribute__((noreturn));
 // must match exactly. Returns NULL if no match.
 struct task_t* zombie_list_take(struct task_t* parent, uint64_t target_pid);
 
+// Same as zombie_list_take, but assumes the caller already holds
+// zombie_list_lock and IRQs are disabled. Used by do_waitpid's
+// recheck-and-park sequence so the list scan and the BLOCKED transition
+// happen under the same lock the waker (task_exit) acquires.
+struct task_t* zombie_list_take_locked(struct task_t* parent, uint64_t target_pid);
+
+// Lock that serialises the zombie list and the wait/wake handshake
+// between task_exit and do_waitpid.
+extern spinlock_t zombie_list_lock;
+
 // Returns 1 if `parent` has any task somewhere with t->parent == parent
 // (running, ready, blocked, or zombie). Used by waitpid to short-circuit
 // to -ECHILD when there's nothing to wait on.

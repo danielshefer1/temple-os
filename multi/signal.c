@@ -6,6 +6,7 @@
 #include "memory.h"
 #include "global.h"
 #include "extern.h"
+#include "pml4_clone.h"
 
 // ---------------------------------------------------------------------------
 // State helpers
@@ -137,6 +138,21 @@ void signal_deliver_on_return(interrupt_frame_t* frame) {
 
     user_rsp -= sizeof(interrupt_frame_t);
     user_rsp &= ~0xFULL;                       // 16-byte alignment
+
+    // The frame + restorer slot must lie in mapped user pages, otherwise
+    // the memcpy below would fault in ring 0 and panic the kernel. Probe
+    // the task's PML4 and treat unmapped stack as a fatal user error
+    // (effectively SIGSEGV-on-stack-overflow) rather than killing the box.
+    uint64_t probe_lo = user_rsp & ~0xFFFULL;
+    uint64_t probe_hi = (user_rsp + sizeof(*frame) + 8 + 0xFFF) & ~0xFFFULL;
+    for (uint64_t va = probe_lo; va < probe_hi; va += 0x1000) {
+        uint64_t phys;
+        if (lookup_user_in_pml4(t->cr3, va, &phys) < 0) {
+            task_exit(sig_exit_code);
+            return;
+        }
+    }
+
     memcpy((void*)user_rsp, frame, sizeof(*frame));
 
     user_rsp -= 8;
@@ -153,6 +169,11 @@ void signal_deliver_on_return(interrupt_frame_t* frame) {
 // SIGRETURN: restore from the saved frame
 // ---------------------------------------------------------------------------
 
+// Defined in interrupts/syscall_entry.asm. POPAQ + IRETQ tail that does
+// not clobber RCX (unlike the SYSRET tail used by every other syscall).
+// rdi = address of the gs slot at the bottom of the saved frame.
+extern void signal_iretq_return(void* frame_kstack_pos) __attribute__((noreturn));
+
 int64_t signal_sigreturn(interrupt_frame_t* frame) {
     // After the handler RETs, the restorer's `syscall` lands here with
     // user rsp pointing at the saved interrupt_frame_t.
@@ -167,8 +188,13 @@ int64_t signal_sigreturn(interrupt_frame_t* frame) {
 
     memcpy(frame, &saved, sizeof(*frame));
 
-    // syscall_handler will do `frame->rax = ret` after we return; returning
-    // saved.rax means the post-handler rax is the value rax had at the
-    // time of the original interruption (e.g. the syscall result).
-    return (int64_t)saved.rax;
+    // Critical: bypass syscall_handler's normal POPAQ+SYSRET return. SYSRET
+    // requires RCX = target RIP, which would clobber the user's pre-signal
+    // RCX (POPAQ would have just restored it from frame->rcx, then the
+    // sysret tail's `pop rcx` overwrites it with the saved RIP). Compiled
+    // user code (e.g. /bin/term's framebuffer scroll loop) freely uses RCX
+    // as a scratch register across non-syscall execution and assumes the
+    // signal-handling round trip leaves it intact. IRETQ pops RIP from the
+    // trapframe and never touches RCX, so user state survives untouched.
+    signal_iretq_return(frame);
 }

@@ -549,6 +549,6 @@ void _start(void) {
     }
 
     sys_kill(input_pid, SIGTERM);
-    sys_kill(blink_pid, SIGTERM);
+    if (blink_pid > 0) sys_kill(blink_pid, SIGTERM);
     sys_exit(0);
 }
