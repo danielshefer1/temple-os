@@ -131,3 +131,12 @@ void SendIpiAllExcludingSelf(uint8_t vector) {
     lapic[0x300 / 4] = (3u << 18) | vector;
     while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();
 }
+
+void SendNmiAllExcludingSelf(void) {
+    while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();
+    lapic[0x310 / 4] = 0;
+    // Destination shorthand 11b = "all excluding self",
+    // delivery mode 100b (NMI). Vector field is ignored for NMI.
+    lapic[0x300 / 4] = (3u << 18) | (4u << 8);
+    while (lapic[0x300 / 4] & (1 << 12)) PauseHelper();
+}

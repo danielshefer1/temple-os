@@ -1,6 +1,7 @@
 #include "isr_handler.h"
 #include "cpu_local.h"
 #include "scheduler.h"
+#include "global.h"
 
 
 
@@ -134,6 +135,14 @@ void DebugHandler(interrupt_frame_t* frame) {
 }
 
 void NMIHandler(interrupt_frame_t* frame) {
+    // Shutdown handshake: if the BSP has signaled shutdown, ack and halt
+    // forever so the BSP can safely tear down the rootfs without an AP
+    // touching it mid-unmount.
+    if (shutdown_req) {
+        __atomic_add_fetch(&halted_cpus_for_shutdown, 1, __ATOMIC_SEQ_CST);
+        CliHelper();
+        while (true) HltHelper();
+    }
     kerror("Exception 2: Non-Maskable Interrupt at rip: %x\n", frame->rip);
 }
 

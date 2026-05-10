@@ -13,7 +13,11 @@
 #include "paging.h"
 #include "fd_table.h"
 #include "vfs_file.h"
+#include "vfs_mount.h"
 #include "pipe.h"
+#include "acpi.h"
+#include "apic.h"
+#include "global.h"
 
 void syscall_handler(interrupt_frame_t* frame) {
     uint64_t cs = frame->cs;
@@ -63,6 +67,7 @@ void syscall_handler(interrupt_frame_t* frame) {
         case GETDENTS_SYSCALL:     ret = SysGetdents(frame);      break;
         case MMAP_FILE_SYSCALL:    ret = MmapFileHandler(frame);  break;
         case SETSID_SYSCALL:       ret = SetsidHandler(frame);    break;
+        case SHUTDOWN_SYSCALL:     ret = ShutdownHandler(frame);  break;
 
         default:                   ret = UnknownSysCall();
     }
@@ -176,6 +181,36 @@ int64_t SetsidHandler(interrupt_frame_t* frame) {
     me->pgid = me->pid;
     me->ctty = NULL;
     return (int64_t)me->sid;
+}
+
+// Stop-the-world shutdown: NMI all APs so they cannot touch the rootfs
+// while the BSP unmounts it, then sync+unmount, then ACPI S5.
+//
+// Risk: an AP NMI'd mid-spinlock leaks the lock and would deadlock the BSP
+// on unmount. Acceptable for a hobby OS where shutdown is user-initiated
+// and the system is quiescing; a proper fix would have APs poll
+// shutdown_req at safe points instead.
+int64_t ShutdownHandler(interrupt_frame_t* frame) {
+    (void)frame;
+
+    shutdown_req = true;
+    __sync_synchronize();
+    SendNmiAllExcludingSelf();
+
+    // Spin until APs ack via NMIHandler. Cap the wait so a missed NMI
+    // can't hang the box — power gets cut moments later regardless.
+    uint64_t expected = (cpu_count > 0) ? cpu_count - 1 : 0;
+    for (uint64_t i = 0;
+         i < 100000000 && halted_cpus_for_shutdown < expected;
+         i++) {
+        PauseHelper();
+    }
+
+    CliHelper();
+    vfs_unmount_root();
+    Shutdown();
+    while (true) HltHelper();
+    return 0;
 }
 
 int64_t MunmapHandler(interrupt_frame_t* frame) {

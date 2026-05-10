@@ -19,5 +19,6 @@ extern volatile hba_mem_t* hba;
 extern block_device_node_t* devices_head;
 extern partition_device_node_t* parts_head;
 extern volatile bool shutdown_req;
+extern volatile uint64_t halted_cpus_for_shutdown;
 
 extern fb_info_t fb_info;

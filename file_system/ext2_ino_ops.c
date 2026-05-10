@@ -566,6 +566,33 @@ int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size) {
     return cpy_size;
 }
 
+int64_t EXT2GetAttr(inode_t* inode, fs_inode_stat_t* out) {
+    if (inode == NULL || out == NULL) return -EINVAL;
+
+    ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
+
+    out->type      = inode->type;
+    out->mode      = inode->permissions & 0x0FFF;
+    out->size      = inode->size;
+    out->uid       = inode->owner_id;
+    out->gid       = inode->group_id;
+    out->dev_id    = inode->dev_id;
+    out->reserved_ = 0;
+
+    if (data != NULL) {
+        out->nlinks = data->ref_count;          // EXT2 mirrors i_links_count here
+        out->atime  = data->accessed_at;
+        out->mtime  = data->modified_at;
+        out->ctime  = data->changed_at;
+    } else {
+        out->nlinks = 0;
+        out->atime  = 0;
+        out->mtime  = 0;
+        out->ctime  = 0;
+    }
+    return 0;
+}
+
 inode_ops_t ext2_inode_ops = {
     .lookup   = EXT2Lookup,
     .create   = EXT2Create,
@@ -577,6 +604,6 @@ inode_ops_t ext2_inode_ops = {
     .mknod    = EXT2Mknod,
     .symlink  = EXT2SymLink,
     .readlink = EXT2ReadLink,
-    .getattr  = NULL,
+    .getattr  = EXT2GetAttr,
     .setattr  = NULL,
 };

@@ -16,6 +16,7 @@ int64_t MmapHandler(interrupt_frame_t* frame);
 int64_t MmapFileHandler(interrupt_frame_t* frame);
 int64_t MunmapHandler(interrupt_frame_t* frame);
 int64_t SetsidHandler(interrupt_frame_t* frame);
+int64_t ShutdownHandler(interrupt_frame_t* frame);
 int64_t UnknownSysCall();
 int64_t ExitHandler(interrupt_frame_t* frame);
 int64_t WaitpidHandler(interrupt_frame_t* frame);

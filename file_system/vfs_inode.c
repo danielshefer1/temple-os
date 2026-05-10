@@ -88,14 +88,14 @@ int64_t vfs_readlink(inode_t* in, char* buf, uint64_t size) {
     return VFS_CALL(in->ops, readlink, in, buf, size);
 }
 
-int64_t vfs_getattr(inode_t* in, fs_stat_t* out) {
+int64_t vfs_getattr(inode_t* in, fs_inode_stat_t* out) {
     int64_t r = vfs_check_inode(in);
     if (r < 0) return r;
     if (out == NULL) return -EINVAL;
     return VFS_CALL(in->ops, getattr, in, out);
 }
 
-int64_t vfs_setattr(inode_t* in, fs_stat_t* in_stat) {
+int64_t vfs_setattr(inode_t* in, fs_inode_stat_t* in_stat) {
     int64_t r = vfs_check_inode(in);
     if (r < 0) return r;
     if (in_stat == NULL) return -EINVAL;

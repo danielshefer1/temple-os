@@ -40,6 +40,7 @@
 #define GETDENTS_SYSCALL   39   // getdents(fd, buf, size); linux_dirent64 ABI
 #define MMAP_FILE_SYSCALL  40   // mmap_file(fd, size) -> user VA; uses f->ops->mmap_phys
 #define SETSID_SYSCALL     41   // setsid(); make caller a new session leader
+#define SHUTDOWN_SYSCALL   42   // shutdown(); flush rootfs and ACPI S5 (no return)
 
 #define FD_MAX             64
 #define EXEC_PATH_MAX      256

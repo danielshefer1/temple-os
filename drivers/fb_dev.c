@@ -5,6 +5,8 @@
 #include "global.h"
 #include "paging_defs.h"
 #include "string.h"
+#include "vt.h"
+#include "cpu_local.h"
 
 static int64_t fb_dev_ioctl(file_t* f, uint64_t cmd, void* arg) {
     (void)f;
@@ -28,10 +30,19 @@ static int64_t fb_dev_mmap_phys(file_t* f, uint64_t offset, uint64_t* phys_out) 
     if (fb_info.fb_phys == 0 || fb_info.size == 0) return -ENODEV;
     if (offset >= fb_info.size) return -EINVAL;
     *phys_out = fb_info.fb_phys + offset;
+    // First mmap call records the calling task as the FB owner; vt_switch_to
+    // wakes it with SIGWINCH on a switch back to vts[0] so it can repaint
+    // instead of having vts[0]'s stale boot-log backbuffer blitted over its
+    // output. Idempotent on re-mmap.
+    vt_set_fb_owner(this_cpu()->current);
     return 0;
 }
 
-static int64_t fb_dev_close(file_t* f) { (void)f; return 0; }
+static int64_t fb_dev_close(file_t* f) {
+    (void)f;
+    vt_set_fb_owner(NULL);
+    return 0;
+}
 
 static file_ops_t fb_dev_fops = {
     .ioctl     = fb_dev_ioctl,

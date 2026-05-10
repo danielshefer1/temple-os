@@ -102,6 +102,11 @@ void start() {
     DisableIdentityMapping();
 
     kprintf("Kernel Initialized Successfully\n");
+
+    // Last visible kernel line. From here on, kprintf/kerror go to the klog
+    // VT — they remain capturable by switching to it, but won't clobber the
+    // framebuffer once /bin/term takes over.
+    vt_klog_redirect(KLOG_VT_IDX);
 }
 
 

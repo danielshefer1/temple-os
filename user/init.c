@@ -1,4 +1,5 @@
-#include "syscall_inline.h"
+#define ST_NO_START
+#include "std/std.h"
 
 // PID 1. Forks a periodic filesystem syncer, then supervises /bin/term,
 // respawning it whenever it exits. Reaps any other children opportunistically

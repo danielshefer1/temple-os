@@ -75,6 +75,23 @@ typedef struct {
     uint64_t last_alloc_block;
 } fs_stat_t;
 
+// Per-inode metadata returned by inode_ops_t.getattr / vfs_stat_path /
+// SYSCALL STAT_SYSCALL. Layout is shared byte-for-byte with the userspace
+// stat_t in user/std/sys/stat.h.
+typedef struct fs_inode_stat_t {
+    uint64_t type;        // VFS_TYPE_*
+    uint64_t mode;        // permission bits (low 12)
+    uint64_t size;        // bytes
+    uint64_t nlinks;
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t dev_id;      // for char/block dev
+    uint32_t reserved_;
+    uint64_t atime;       // seconds since epoch
+    uint64_t mtime;
+    uint64_t ctime;
+} fs_inode_stat_t;
+
 typedef struct file_t {
     inode_t* inode;
     struct file_ops_t* ops;
@@ -132,8 +149,8 @@ typedef struct inode_ops_t {
     int64_t  (*readlink)    (inode_t* inode, char* buf, uint64_t size);
 
     // inode info
-    int64_t  (*getattr)     (inode_t* inode, fs_stat_t* stat);
-    int64_t  (*setattr)     (inode_t* inode, fs_stat_t* stat);
+    int64_t  (*getattr)     (inode_t* inode, fs_inode_stat_t* stat);
+    int64_t  (*setattr)     (inode_t* inode, fs_inode_stat_t* stat);
 } inode_ops_t;
 
 

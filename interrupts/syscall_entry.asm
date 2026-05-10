@@ -87,6 +87,11 @@ syscall_entry:
     cld                                     ; SysV ABI: DF clear (FMASK already did it)
     mov rdi, rsp
     call syscall_handler
+    ; Normal syscall return falls through here. RSP is already at the kernel
+    ; frame (call/ret balanced). Do NOT trust RDI: SysV is caller-saved, and
+    ; syscall_handler / its callees clobber it freely. Jump past the rdi→rsp
+    ; setup that the C-call entry-point needs.
+    jmp _iretq_tail
 
 ; Return-from-sigreturn path. SIGRETURN must restore *all* user GP regs —
 ; including RCX — but the SYSRET tail below clobbers RCX with the saved
@@ -102,6 +107,7 @@ syscall_entry:
 global signal_iretq_return
 signal_iretq_return:
     mov rsp, rdi
+_iretq_tail:
     add rsp, 16                             ; skip saved gs, fs slots
     POPAQ
     add rsp, 16                             ; drop int_no + err_code

@@ -123,7 +123,7 @@ int64_t vfs_readlink_path(const char* path, char* buf, uint64_t size) {
     return vfs_readlink(d->inode, buf, size);
 }
 
-int64_t vfs_stat_path(const char* path, fs_stat_t* out) {
+int64_t vfs_stat_path(const char* path, fs_inode_stat_t* out) {
     dentry_t* d = NULL;
     int64_t r = vfs_namei(path, &d);
     if (r < 0) return r;

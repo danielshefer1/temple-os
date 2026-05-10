@@ -13,7 +13,8 @@
 //
 // PSF2 font is embedded by the Makefile via objcopy as a binary blob.
 
-#include "syscall_inline.h"
+#define ST_NO_START
+#include "std/std.h"
 
 extern const unsigned char _binary_font_psf_start[];
 extern const unsigned char _binary_font_psf_end[];
@@ -69,10 +70,21 @@ static unsigned long cursor_row, cursor_col;
 // erases the cursor depending on the current phase.
 static volatile int  blink_on = 1;
 
+// Set by SIGWINCH; the render loop consumes it to repaint cells[] over the
+// framebuffer. Sent by the kernel on Alt+F1 back to vts[0] (the FB-owner
+// VT) so we can stomp out whatever the previous VT painted.
+static volatile int  redraw_needed = 0;
+
 __attribute__((used))
 static void blink_handler(int signo) {
     (void)signo;
     blink_on = !blink_on;
+}
+
+__attribute__((used))
+static void winch_handler(int signo) {
+    (void)signo;
+    redraw_needed = 1;
 }
 
 #define VT_GROUND 0
@@ -142,6 +154,19 @@ static void clear_screen(void) {
     fill_rect(0, 0, fbv.width, fbv.height, bg);
     vt_cell_t blank = { ' ', cur_fg, cur_bg };
     for (unsigned long i = 0; i < term_rows * term_cols; i++) cells[i] = blank;
+    cursor_visible = 0;
+}
+
+// Repaint the whole framebuffer from cells[]. Called from the render loop
+// when SIGWINCH fires — vts[0] becoming active again means the kernel may
+// have just blitted klog or boot-log content over us.
+static void redraw_all(void) {
+    fill_rect(0, 0, fbv.width, fbv.height, pack_color(cur_bg));
+    for (unsigned long row = 0; row < term_rows; row++) {
+        for (unsigned long col = 0; col < term_cols; col++) {
+            blit_cell(row, col, cells[row * term_cols + col]);
+        }
+    }
     cursor_visible = 0;
 }
 
@@ -515,7 +540,8 @@ void _start(void) {
     // fixed interval. We capture the parent's pid before forking so the
     // child doesn't need a getppid syscall.
     long parent_pid = sys_getpid();
-    sys_signal(SIGALRM, (void*)blink_handler, (void*)sig_restorer);
+    sys_signal(SIGALRM,  (void*)blink_handler, (void*)sig_restorer);
+    sys_signal(SIGWINCH, (void*)winch_handler, (void*)sig_restorer);
 
     long blink_pid = sys_fork();
     if (blink_pid == 0) {
@@ -532,9 +558,16 @@ void _start(void) {
     while (1) {
         long r = sys_read(ptmx, rbuf, sizeof(rbuf));
         if (r == -EINTR) {
-            // Blink tick. Flip cursor state without touching cell content.
-            if (blink_on) cursor_draw();
-            else          cursor_erase();
+            if (redraw_needed) {
+                redraw_needed = 0;
+                redraw_all();
+                blink_on = 1;
+                cursor_draw();
+            } else if (blink_on) {
+                cursor_draw();
+            } else {
+                cursor_erase();
+            }
             continue;
         }
         if (r <= 0) break;

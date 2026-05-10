@@ -23,6 +23,11 @@ int64_t vfs_write(file_t* f, const void* buf, uint64_t size) {
     if (r < 0) return r;
     r = vfs_check_writable(f->inode);
     if (r < 0) return r;
+    // O_APPEND: each write seeks to end-of-file first. Lets `>>` redirection
+    // accumulate output without racing with concurrent writers (POSIX semantics).
+    if (f->flags & O_APPEND) {
+        (void) VFS_CALL(f->ops, seek, f, 0, SEEK_END);
+    }
     return VFS_CALL(f->ops, write, f, buf, size);
 }
 

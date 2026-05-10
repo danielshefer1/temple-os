@@ -83,12 +83,35 @@ USER_PWD     = $(USER_DIR)/pwd.elf
 USER_LS      = $(USER_DIR)/ls.elf
 USER_CAT     = $(USER_DIR)/cat.elf
 USER_ECHO    = $(USER_DIR)/echo.elf
+USER_SHUTDOWN = $(USER_DIR)/shutdown.elf
+USER_MKDIR    = $(USER_DIR)/mkdir.elf
+USER_RMDIR    = $(USER_DIR)/rmdir.elf
+USER_RM       = $(USER_DIR)/rm.elf
+USER_MV       = $(USER_DIR)/mv.elf
+USER_CP       = $(USER_DIR)/cp.elf
+USER_TOUCH    = $(USER_DIR)/touch.elf
+USER_LN       = $(USER_DIR)/ln.elf
+USER_READLINK = $(USER_DIR)/readlink.elf
+USER_SLEEP    = $(USER_DIR)/sleep.elf
+USER_KILL     = $(USER_DIR)/kill.elf
+USER_SYNC     = $(USER_DIR)/sync.elf
+USER_STAT     = $(USER_DIR)/stat.elf
+USER_TRUNCATE = $(USER_DIR)/truncate.elf
+USER_TRUE     = $(USER_DIR)/true.elf
+USER_FALSE    = $(USER_DIR)/false.elf
 USER_FONT_OBJ = $(USER_DIR)/font.o
 
+# Header dependency for all user programs — every header under user/std/.
+USER_STD_HDRS = $(wildcard user/std/*.h user/std/sys/*.h)
+
 # All "small" user programs that share the same build recipe (no font
-# blob, single .c file under user/, libu.h-based runtime).
+# blob, single .c file under user/, stdtemple-based runtime).
 USER_SMALL = $(USER_HELLO) $(USER_INIT) $(USER_SH) $(USER_HELP) \
-             $(USER_CLEAR) $(USER_PWD) $(USER_LS) $(USER_CAT) $(USER_ECHO)
+             $(USER_CLEAR) $(USER_PWD) $(USER_LS) $(USER_CAT) $(USER_ECHO) \
+             $(USER_SHUTDOWN) $(USER_MKDIR) $(USER_RMDIR) $(USER_RM) \
+             $(USER_MV) $(USER_CP) $(USER_TOUCH) $(USER_LN) $(USER_READLINK) \
+             $(USER_SLEEP) $(USER_KILL) $(USER_SYNC) $(USER_STAT) \
+             $(USER_TRUNCATE) $(USER_TRUE) $(USER_FALSE)
 USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
@@ -107,9 +130,9 @@ $(USER_DIR):
 	@mkdir -p $@
 
 # Pattern rule for the simple user programs. Each .elf links from a single
-# user/<name>.c that includes user/libu.h (which provides the SysV-aware
-# _start that pulls argc/argv off the stack and tail-calls main).
-$(USER_DIR)/%.elf: user/%.c user/syscall_inline.h user/libu.h user/sys/wait.h user/sys/dirent.h user/hello_linker.ld | $(USER_DIR)
+# user/<name>.c that includes user/std/std.h (the stdtemple umbrella, which
+# provides the SysV-aware _start, syscall wrappers, and string/print helpers).
+$(USER_DIR)/%.elf: user/%.c $(USER_STD_HDRS) user/hello_linker.ld | $(USER_DIR)
 	@echo "[USER] Building $@"
 	@$(CC64) $(USER_CFLAGS) -c $< -o $(USER_DIR)/$*.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/$*.o
@@ -123,7 +146,7 @@ $(USER_FONT_OBJ): $(FONT_PSF) | $(USER_DIR)
 	    $(notdir $<) $(abspath $@)
 
 # /bin/term has its own rule because it links the embedded font blob.
-$(USER_TERM): user/term.c user/syscall_inline.h user/hello_linker.ld $(USER_FONT_OBJ) | $(USER_DIR)
+$(USER_TERM): user/term.c $(USER_STD_HDRS) user/hello_linker.ld $(USER_FONT_OBJ) | $(USER_DIR)
 	@echo "[USER] Building $@"
 	@$(CC64) $(USER_CFLAGS) -c user/term.c -o $(USER_DIR)/term.o
 	@$(LD64) $(USER_LDFLAGS) -o $@ $(USER_DIR)/term.o $(USER_FONT_OBJ)
@@ -149,6 +172,22 @@ user-img: $(USER_INSTALL) $(DATA_IMG)
 	$(call INSTALL_BIN,$(USER_LS),ls)
 	$(call INSTALL_BIN,$(USER_CAT),cat)
 	$(call INSTALL_BIN,$(USER_ECHO),echo)
+	$(call INSTALL_BIN,$(USER_SHUTDOWN),shutdown)
+	$(call INSTALL_BIN,$(USER_MKDIR),mkdir)
+	$(call INSTALL_BIN,$(USER_RMDIR),rmdir)
+	$(call INSTALL_BIN,$(USER_RM),rm)
+	$(call INSTALL_BIN,$(USER_MV),mv)
+	$(call INSTALL_BIN,$(USER_CP),cp)
+	$(call INSTALL_BIN,$(USER_TOUCH),touch)
+	$(call INSTALL_BIN,$(USER_LN),ln)
+	$(call INSTALL_BIN,$(USER_READLINK),readlink)
+	$(call INSTALL_BIN,$(USER_SLEEP),sleep)
+	$(call INSTALL_BIN,$(USER_KILL),kill)
+	$(call INSTALL_BIN,$(USER_SYNC),sync)
+	$(call INSTALL_BIN,$(USER_STAT),stat)
+	$(call INSTALL_BIN,$(USER_TRUNCATE),truncate)
+	$(call INSTALL_BIN,$(USER_TRUE),true)
+	$(call INSTALL_BIN,$(USER_FALSE),false)
 
 # /dev is populated at runtime by drivers/disk_devs.c: it mkdirs /dev
 # and mknods each char/block node (tty, null, zero, ram0, sda, sda*) once

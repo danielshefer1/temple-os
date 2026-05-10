@@ -61,7 +61,7 @@ void internal_putchar(char c, uint8_t color) {
     // wipe out a CSI we just consumed. Callers that want a non-default color
     // wrap their output in SGR escapes (kerror does \x1b[31m...\x1b[0m).
     (void)color;
-    vt_write_active_(c);
+    vt_write_klog_(c);
 
     switch (c) {
         case '\t':
@@ -123,13 +123,13 @@ void clear_screen() {
     serial_puts("\x1b[2J\x1b[H");
     // The VT layer handles ESC[2J via vt_write_byte; emit it as bytes here
     // so both serial and the active VT clear consistently.
-    vt_write_active_(0x1B);
-    vt_write_active_('[');
-    vt_write_active_('2');
-    vt_write_active_('J');
-    vt_write_active_(0x1B);
-    vt_write_active_('[');
-    vt_write_active_('H');
+    vt_write_klog_(0x1B);
+    vt_write_klog_('[');
+    vt_write_klog_('2');
+    vt_write_klog_('J');
+    vt_write_klog_(0x1B);
+    vt_write_klog_('[');
+    vt_write_klog_('H');
     vga_unlock(ie);
 }
 
@@ -227,7 +227,7 @@ void kerror(const char* format, ...) {
     }
     // Bracket the message in SGR red on the screen path; the parser will
     // ignore these on the serial side too (we just send the raw escape).
-    vt_write_active_(0x1B); vt_write_active_('['); vt_write_active_('3'); vt_write_active_('1'); vt_write_active_('m');
+    vt_write_klog_(0x1B); vt_write_klog_('['); vt_write_klog_('3'); vt_write_klog_('1'); vt_write_klog_('m');
     while (*format != '\0') {
         if (*format == '%') {
             format++;
@@ -272,7 +272,7 @@ void kerror(const char* format, ...) {
         format++;
     }
 
-    vt_write_active_(0x1B); vt_write_active_('['); vt_write_active_('0'); vt_write_active_('m');
+    vt_write_klog_(0x1B); vt_write_klog_('['); vt_write_klog_('0'); vt_write_klog_('m');
     va_end(args);
     spin_unlock(&vga_spinlock);
 }

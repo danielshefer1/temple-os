@@ -14,9 +14,9 @@
 #define DT_SOCK    12
 
 struct linux_dirent64 {
-    unsigned long  d_ino;     // inode number (best-effort; 0 if unknown)
-    long           d_off;     // offset of next dirent (we just bump by reclen)
-    unsigned short d_reclen;  // total bytes including name + padding
-    unsigned char  d_type;    // DT_*
-    char           d_name[];  // null-terminated, padded to 8-byte alignment
+    unsigned long  d_ino;
+    long           d_off;
+    unsigned short d_reclen;
+    unsigned char  d_type;
+    char           d_name[];
 };

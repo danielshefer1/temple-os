@@ -14,5 +14,5 @@ int64_t vfs_mknod     (inode_t* dir, dentry_t* d, uint64_t type,
                        uint64_t perm, uint32_t dev_id);
 int64_t vfs_symlink   (inode_t* dir, dentry_t* d, const char* target);
 int64_t vfs_readlink  (inode_t* in, char* buf, uint64_t size);
-int64_t vfs_getattr   (inode_t* in, fs_stat_t* out);
-int64_t vfs_setattr   (inode_t* in, fs_stat_t* in_stat);
+int64_t vfs_getattr   (inode_t* in, fs_inode_stat_t* out);
+int64_t vfs_setattr   (inode_t* in, fs_inode_stat_t* in_stat);

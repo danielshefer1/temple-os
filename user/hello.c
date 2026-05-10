@@ -1,6 +1,5 @@
-#include "syscall_inline.h"
-#include "sys/wait.h"
-#include "sys/dirent.h"
+#define ST_NO_START
+#include "std/std.h"
 
 static const char start_m[]  = "starting\n";
 static const char child_m[]  = "child running\n";
@@ -80,7 +79,7 @@ void _start(void) {
         long nfd = sys_open("/dev/null", O_RDWR, 0);
         char tmp[8];
         long w = (nfd < 0) ? -1 : sys_write(nfd, "abcd", 4);
-        long r = (nfd < 0) ? -1 : sys_read_for_test_(nfd, tmp, sizeof(tmp));
+        long r = (nfd < 0) ? -1 : sys_read(nfd, tmp, sizeof(tmp));
         if (nfd >= 0) sys_close(nfd);
         sys_write(STDOUT_FILENO, (nfd >= 0 && w == 4 && r == 0) ? ok : fail,
                   my_strlen(nfd >= 0 && w == 4 && r == 0 ? ok : fail));
@@ -93,7 +92,7 @@ void _start(void) {
         long zfd = sys_open("/dev/zero", O_RDWR, 0);
         char tmp[16];
         for (unsigned long i = 0; i < sizeof(tmp); i++) tmp[i] = (char)0xAB;
-        long r = (zfd < 0) ? -1 : sys_read_for_test_(zfd, tmp, sizeof(tmp));
+        long r = (zfd < 0) ? -1 : sys_read(zfd, tmp, sizeof(tmp));
         int allzero = 1;
         for (unsigned long i = 0; i < sizeof(tmp); i++) if (tmp[i] != 0) { allzero = 0; break; }
         if (zfd >= 0) sys_close(zfd);
@@ -112,8 +111,8 @@ void _start(void) {
         int good = 0;
         if (rfd >= 0) {
             w = sys_write(rfd, pattern, sizeof(pattern));
-            s = sys_lseek_for_test_(rfd, 0, 0 /*SEEK_SET*/);
-            r = sys_read_for_test_(rfd, tmp, sizeof(tmp));
+            s = sys_lseek(rfd, 0, 0 /*SEEK_SET*/);
+            r = sys_read(rfd, tmp, sizeof(tmp));
             good = (w == (long)sizeof(pattern) && r == (long)sizeof(tmp));
             for (unsigned long i = 0; good && i < sizeof(pattern); i++) {
                 if (tmp[i] != pattern[i]) { good = 0; break; }
@@ -142,12 +141,12 @@ void _start(void) {
         static const char ok[]   = "mknod /dev/foo ok\n";
         static const char fail[] = "mknod /dev/foo FAIL\n";
         // Best-effort cleanup if a previous boot left the node behind.
-        sys_unlink_for_test_("/dev/foo");
+        sys_unlink("/dev/foo");
         long mr = sys_mknod("/dev/foo", S_IFCHR_T, 0666, UMKDEV(4, 0));
         long mfd = (mr < 0) ? -1 : sys_open("/dev/foo", O_RDWR, 0);
         long w = (mfd < 0) ? -1 : sys_write(mfd, "via foo\n", 8);
         if (mfd >= 0) sys_close(mfd);
-        sys_unlink_for_test_("/dev/foo");
+        sys_unlink("/dev/foo");
         sys_write(STDOUT_FILENO, (mr >= 0 && mfd >= 0 && w == 8) ? ok : fail,
                   my_strlen(mr >= 0 && mfd >= 0 && w == 8 ? ok : fail));
     }
@@ -243,7 +242,7 @@ void _start(void) {
             }
             sys_close(fds[1]);
             char b[8] = {0};
-            long r = sys_read_for_test_(fds[0], b, sizeof(b));
+            long r = sys_read(fds[0], b, sizeof(b));
             sys_close(fds[0]);
             unsigned long st = 0;
             sys_waitpid(pid, &st);
@@ -272,7 +271,7 @@ void _start(void) {
             }
             sys_close(fds[1]);
             char b[16] = {0};
-            long r = sys_read_for_test_(fds[0], b, sizeof(b));
+            long r = sys_read(fds[0], b, sizeof(b));
             sys_close(fds[0]);
             unsigned long st = 0;
             sys_waitpid(pid, &st);
@@ -289,7 +288,7 @@ void _start(void) {
     {
         static const char ok[]   = "fifo ok\n";
         static const char fail[] = "fifo FAIL\n";
-        sys_unlink_for_test_("/myfifo");
+        sys_unlink("/myfifo");
         long mr = sys_mknod("/myfifo", S_IFIFO_T, 0666, 0);
         int good = (mr == 0);
         unsigned long ws = 0, rs = 0;
@@ -305,7 +304,7 @@ void _start(void) {
             if (rpid == 0) {
                 long fd = sys_open("/myfifo", O_RDONLY, 0);
                 char b[8] = {0};
-                long n = (fd >= 0) ? sys_read_for_test_(fd, b, 5) : -1;
+                long n = (fd >= 0) ? sys_read(fd, b, 5) : -1;
                 if (fd >= 0) sys_close(fd);
                 int rc = (n == 5 && b[0] == 'h' && b[4] == 'o') ? 0 : 99;
                 sys_exit(rc);
@@ -315,7 +314,7 @@ void _start(void) {
             if (!(WIFEXITED(ws) && WEXITSTATUS(ws) == 0 &&
                   WIFEXITED(rs) && WEXITSTATUS(rs) == 0)) good = 0;
         }
-        sys_unlink_for_test_("/myfifo");
+        sys_unlink("/myfifo");
         sys_write(STDOUT_FILENO, good ? ok : fail,
                   my_strlen(good ? ok : fail));
         (void)mr; (void)ws; (void)rs;

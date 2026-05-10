@@ -116,8 +116,8 @@ int64_t SysReadlink(interrupt_frame_t* f) {
 }
 
 int64_t SysStat(interrupt_frame_t* f) {
-    const char* path = (const char*) f->rbx;
-    fs_stat_t*  out  = (fs_stat_t*)  f->rcx;
+    const char*       path = (const char*)       f->rbx;
+    fs_inode_stat_t*  out  = (fs_inode_stat_t*)  f->rcx;
     if (path == NULL || out == NULL) return -EINVAL;
     return vfs_stat_path(path, out);
 }

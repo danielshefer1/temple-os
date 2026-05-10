@@ -20,3 +20,7 @@ void InitKeyboard();
 // until the LAPIC reports the send is complete. Caller is responsible for
 // providing any handshake/ack protocol on top of this.
 void SendIpiAllExcludingSelf(uint8_t vector);
+
+// Same, but delivers an NMI. Survives a CLI on the target — used by
+// shutdown to halt APs that may be running with interrupts disabled.
+void SendNmiAllExcludingSelf(void);

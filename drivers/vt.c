@@ -6,12 +6,21 @@
 #include "paging_defs.h"
 #include "string.h"
 #include "extern.h"
+#include "signal.h"
+#include "signal_defs.h"
 
 #define DEFAULT_FG 0x07
 #define DEFAULT_BG 0x00
 
-vt_t  vts[NUM_VTS];
-vt_t* active_vt = NULL;
+vt_t   vts[NUM_VTS];
+vt_t*  active_vt = NULL;
+vt_t*  klog_vt   = NULL;
+
+// Userspace task that owns /dev/fb (term, today). When the active VT lands on
+// vts[0] — the boot/term VT — and an owner is set, vt_switch_to wakes it with
+// SIGWINCH so it can repaint cells[] over whatever the previous VT painted,
+// instead of having the stale boot-log backbuffer blitted over its output.
+task_t* fb_owner = NULL;
 
 // ANSI/VT SGR color codes use RGB ordering (31=red, 34=blue), CGA uses BGR
 // (1=blue, 4=red). Same translation as the old vt_parser.
@@ -234,10 +243,23 @@ void vt_switch_to(uint64_t idx) {
     // outgoing VT, so we don't need to lock it.
     spin_lock(&target->lock);
     active_vt = target;
-    fb_clear_all(target->cur_bg);
-    fb_redraw_cells(target->cells, target->rows, target->cols);
-    spin_unlock(&target->lock);
+    if (target == &vts[0] && fb_owner != NULL) {
+        // /dev/fb is mmap'd by a userspace renderer (term). Don't paint
+        // vts[0]'s stale boot-log backbuffer over it — wake the owner with
+        // SIGWINCH and let it repaint its own cell buffer. Drop the target
+        // lock first; signal_send takes the run-queue lock.
+        spin_unlock(&target->lock);
+        signal_send(fb_owner, SIGWINCH);
+    } else {
+        fb_clear_all(target->cur_bg);
+        fb_redraw_cells(target->cells, target->rows, target->cols);
+        spin_unlock(&target->lock);
+    }
     if (ie) StiHelper();
+}
+
+void vt_set_fb_owner(task_t* t) {
+    fb_owner = t;
 }
 
 // ---- init -----------------------------------------------------------------
@@ -280,5 +302,12 @@ void vt_init_all(void) {
     }
 
     active_vt = &vts[0];
+    klog_vt   = &vts[0];
     fb_clear_all(active_vt->cur_bg);
+}
+
+void vt_klog_redirect(uint64_t idx) {
+    if (idx >= NUM_VTS) return;
+    if (vts[idx].cells == NULL) return;
+    klog_vt = &vts[idx];
 }

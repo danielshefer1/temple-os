@@ -21,5 +21,6 @@ int64_t EXT2Mknod(inode_t* dir, dentry_t* dentry, uint64_t type,
                   uint64_t permissions, uint32_t dev_id);
 int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target);
 int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size);
+int64_t EXT2GetAttr(inode_t* inode, fs_inode_stat_t* out);
 
 extern inode_ops_t ext2_inode_ops;

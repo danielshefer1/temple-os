@@ -21,5 +21,6 @@ block_device_node_t* devices_head;
 partition_device_node_t* parts_head;
 
 volatile bool shutdown_req = false;
+volatile uint64_t halted_cpus_for_shutdown = 0;
 
 fb_info_t fb_info = {0};

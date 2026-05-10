@@ -127,18 +127,12 @@ static const char* const fkey_seq[12] = {
 void KeyboardHandler() {
     uint8_t scancode = inb(0x60);
 
-    // /dev/kbd hijack: when the userspace terminal has the device open, hand
-    // it raw scancodes (including 0xE0 prefix bytes — the userspace term
-    // does its own modifier tracking and key translation). The console TTY
-    // path is dormant until /dev/kbd closes.
-    if (kbd_dev_active()) {
-        kbd_dev_input(scancode);
-        return;
-    }
-
-    // Extended-scancode prefix: latch and wait for the second byte.
+    // Extended-prefix: track at the kernel level always so we can spot the
+    // (rare) extended F-keys; forward verbatim to /dev/kbd if userspace owns
+    // the device — userspace term does its own pending_extended tracking.
     if (scancode == KBD_EXTENDED) {
         extended = true;
+        if (kbd_dev_active()) kbd_dev_input(scancode);
         return;
     }
 
@@ -147,11 +141,34 @@ void KeyboardHandler() {
     bool    was_extended = extended;
     extended = false;
 
-    // ---- modifiers (no echo, no tty input) -------------------------------
-    if (presscode == LEFT_ALT_SCANCODE) {        // covers Right Alt too: same presscode under E0
+    // Alt: track at the kernel level always so Alt+F1..F6 works regardless of
+    // who owns /dev/kbd. Forward to userspace too so term's own modifier
+    // tracking stays in sync.
+    if (presscode == LEFT_ALT_SCANCODE) {        // covers Right Alt under E0
         alt_pressed = !is_release;
+        if (kbd_dev_active()) {
+            kbd_dev_input(scancode);
+            return;
+        }
         return;
     }
+
+    // Alt+F1..F6 → VT switch. System-level hotkey — eaten before /dev/kbd
+    // sees the F-key, so userspace term doesn't get a stray escape.
+    if (alt_pressed && !is_release && !was_extended &&
+        presscode >= F1_SCANCODE && presscode < F1_SCANCODE + NUM_VTS) {
+        vt_switch_to((uint64_t)(presscode - F1_SCANCODE));
+        return;
+    }
+
+    // Default: hand off to /dev/kbd if open. The console TTY path below is
+    // dormant until /dev/kbd closes.
+    if (kbd_dev_active()) {
+        kbd_dev_input(scancode);
+        return;
+    }
+
+    // ---- modifiers (no echo, no tty input) -------------------------------
     if (presscode == LEFT_CTRL_SCANCODE) {       // covers Right Ctrl under E0
         ctrl_pressed = !is_release;
         return;
@@ -162,13 +179,6 @@ void KeyboardHandler() {
     }
 
     if (is_release) return;
-
-    // ---- Alt+F1..F6 → VT switch (must come before regular F-key emit) ----
-    if (alt_pressed &&
-        presscode >= F1_SCANCODE && presscode < F1_SCANCODE + NUM_VTS) {
-        vt_switch_to((uint64_t)(presscode - F1_SCANCODE));
-        return;
-    }
 
     // ---- Extended (arrow / nav) keys -------------------------------------
     if (was_extended) {
