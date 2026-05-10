@@ -1,15 +1,22 @@
 // /bin/term — userspace terminal emulator.
 //
 // Owns the framebuffer (via mmap of /dev/fb), the keyboard (via /dev/kbd),
-// and a fresh pty pair (/dev/ptmx + /dev/pts/N). Forks a shell into the
-// slave's stdio; reads keystrokes from /dev/kbd and writes them through the
-// master; reads program output from the master and renders it via an
-// in-process xterm-ish parser to pixel cells on the framebuffer.
+// the mouse (via /dev/mouse), and a fresh pty pair (/dev/ptmx + /dev/pts/N).
+// Forks a shell into the slave's stdio.
 //
-// Three processes when running:
-//   parent   — render loop (reads master, parses VT, blits cells)
-//   child A  — input pump (reads kbd, translates, writes master)
-//   child B  — the program itself (currently /bin/hello)
+// All input sources funnel into one event pipe consumed by the parent's
+// render loop, so selection / clipboard / cursor state all live in a single
+// process (fork deep-copies anonymous pages in this OS so child-side state
+// wouldn't be visible to the parent anyway).
+//
+//   kbd_child    --[EV_KBD]----.
+//   mouse_child  --[EV_MOUSE]--+
+//   pty_child    --[EV_PTY]----+--[event pipe]--> parent render loop
+//   blink_child  --[EV_BLINK]--'
+//   shell_child   (talks PTY slave; no direct pipe write)
+//
+// Frames are fixed size (sizeof(term_event_t)) so the parent can read_exact
+// regardless of how the kernel chops up pipe writes.
 //
 // PSF2 font is embedded by the Makefile via objcopy as a binary blob.
 
@@ -76,16 +83,64 @@ static volatile int  blink_on = 1;
 static volatile int  redraw_needed = 0;
 
 __attribute__((used))
-static void blink_handler(int signo) {
-    (void)signo;
-    blink_on = !blink_on;
-}
-
-__attribute__((used))
 static void winch_handler(int signo) {
     (void)signo;
     redraw_needed = 1;
 }
+
+// ---- mouse pointer + selection + clipboard -----------------------------
+
+// Must match drivers/mouse_dev_types.h (mouse_event_t).
+typedef struct {
+    short         dx;
+    short         dy;
+    unsigned char buttons;
+    unsigned char _pad[3];
+} m_event_t;
+
+static long          mx_px, my_px;          // accumulated pointer pixel pos
+static unsigned long mp_row, mp_col;        // logical pointer cell
+static unsigned char prev_btns;             // for press/release edge detect
+
+static int           have_selection;        // anchor/head describe a range
+static unsigned long sel_anchor;            // cell index = row*term_cols+col
+static unsigned long sel_head;
+
+// "Painted" state is what's on the framebuffer right now. Logical state
+// (above) is what the next paint pass aims to put there. Tracking them
+// separately lets reconcile_* compute a diff and avoid full repaints on
+// every mouse event when a screen-sized selection is active.
+static int           pp_visible;
+static unsigned long pp_row, pp_col;
+static int           sp_visible;
+static unsigned long sp_lo, sp_hi;
+
+#define CLIP_CAP 4096
+static char          clipboard[CLIP_CAP];
+static unsigned long clip_len;
+
+// ---- inter-process event pipe ------------------------------------------
+
+#define EV_KBD   1
+#define EV_MOUSE 2
+#define EV_PTY   3
+#define EV_BLINK 4
+
+// Fixed 64-byte frame. Reader uses read_exact so partial pipe reads can't
+// desync the stream. Payload is union-typed; `len` is set for EV_PTY only.
+typedef struct {
+    unsigned char kind;
+    unsigned char len;
+    unsigned char _pad[6];
+    union {
+        unsigned char scancode;
+        m_event_t     mouse;
+        char          bytes[56];
+    } p;
+} term_event_t;
+
+static int evt_w = -1;                      // write end (children)
+static int evt_r = -1;                      // read end (parent)
 
 #define VT_GROUND 0
 #define VT_ESC    1
@@ -174,6 +229,8 @@ static void clear_screen(void) {
     vt_cell_t blank = { ' ', cur_fg, cur_bg };
     for (unsigned long i = 0; i < term_rows * term_cols; i++) cells[i] = blank;
     cursor_visible = 0;
+    sp_visible = 0;
+    pp_visible = 0;
 }
 
 // Repaint the whole framebuffer from cells[]. Called from the render loop
@@ -187,25 +244,148 @@ static void redraw_all(void) {
         }
     }
     cursor_visible = 0;
+    sp_visible = 0;
+    pp_visible = 0;
 }
 
-static void cursor_erase(void) {
-    if (!cursor_visible) return;
-    if (cursor_row < term_rows && cursor_col < term_cols) {
-        blit_cell(cursor_row, cursor_col,
-                  cells[cursor_row * term_cols + cursor_col]);
-    }
-    cursor_visible = 0;
+// ---- overlay paint (selection + pointer + text caret) ------------------
+//
+// Painted state (pp_*, sp_*, cursor_*) is what's currently on the
+// framebuffer. Logical state (mp_*, have_selection/sel_*, cur_*/blink_on)
+// is what reconcile_* wants the framebuffer to look like. Every reconcile
+// is a diff: only cells whose painted state differs from the target get
+// written. That's what makes mouse drag cheap even when a screen-sized
+// selection is in play — one cell is added and the rest stay put.
+
+static void blit_inverted(unsigned long row, unsigned long col) {
+    vt_cell_t c = cells[row * term_cols + col];
+    vt_cell_t inv = { c.ch, c.bg, c.fg };
+    blit_cell(row, col, inv);
 }
 
-static void cursor_draw(void) {
-    if (cursor_visible) return;
+static int sel_logical(unsigned long* out_lo, unsigned long* out_hi) {
+    if (!have_selection) return 0;
+    unsigned long lo = sel_anchor < sel_head ? sel_anchor : sel_head;
+    unsigned long hi = sel_anchor < sel_head ? sel_head   : sel_anchor;
+    *out_lo = lo; *out_hi = hi;
+    return 1;
+}
+
+// Caret-only repaint. Restores the cell using painted state of the other
+// overlays so the caret-off frame doesn't desync from the selection.
+static void caret_redraw(void) {
     if (cur_row >= term_rows || cur_col >= term_cols) return;
-    fill_rect(cur_col * glyph_w, cur_row * glyph_h,
-              glyph_w, glyph_h, pack_color(cur_fg));
-    cursor_row = cur_row;
-    cursor_col = cur_col;
-    cursor_visible = 1;
+    if (blink_on) {
+        if (cursor_visible &&
+            cursor_row == cur_row && cursor_col == cur_col) return;
+        // Caret moved (write-position changed); erase the old solid block
+        // first.
+        if (cursor_visible) {
+            unsigned long oidx = cursor_row * term_cols + cursor_col;
+            int o_sel = sp_visible && oidx >= sp_lo && oidx <= sp_hi;
+            int o_ptr = pp_visible && cursor_row == pp_row && cursor_col == pp_col;
+            int o_inv = (o_ptr && o_sel) ? 0 : (o_ptr || o_sel) ? 1 : 0;
+            if (o_inv) blit_inverted(cursor_row, cursor_col);
+            else       blit_cell(cursor_row, cursor_col, cells[oidx]);
+        }
+        fill_rect(cur_col * glyph_w, cur_row * glyph_h,
+                  glyph_w, glyph_h, pack_color(cur_fg));
+        cursor_row = cur_row;
+        cursor_col = cur_col;
+        cursor_visible = 1;
+    } else if (cursor_visible) {
+        unsigned long idx = cursor_row * term_cols + cursor_col;
+        int sel = sp_visible && idx >= sp_lo && idx <= sp_hi;
+        int ptr = pp_visible && cursor_row == pp_row && cursor_col == pp_col;
+        int inverted = (ptr && sel) ? 0 : (ptr || sel) ? 1 : 0;
+        if (inverted) blit_inverted(cursor_row, cursor_col);
+        else          blit_cell(cursor_row, cursor_col, cells[idx]);
+        cursor_visible = 0;
+    }
+}
+
+// Diff selection paint against logical. Touches only cells that
+// transitioned (in→out or out→in), so an incremental mouse drag only
+// blits the one cell that just entered or left the range.
+static void reconcile_selection(void) {
+    unsigned long n_lo = 0, n_hi = 0;
+    int now = sel_logical(&n_lo, &n_hi);
+
+    if (sp_visible) {
+        // erase cells leaving the selection
+        for (unsigned long idx = sp_lo; idx <= sp_hi; idx++) {
+            int still = now && idx >= n_lo && idx <= n_hi;
+            if (!still) {
+                blit_cell(idx / term_cols, idx % term_cols, cells[idx]);
+            }
+        }
+    }
+    if (now) {
+        // paint cells entering the selection
+        for (unsigned long idx = n_lo; idx <= n_hi; idx++) {
+            int was = sp_visible && idx >= sp_lo && idx <= sp_hi;
+            if (!was) {
+                blit_inverted(idx / term_cols, idx % term_cols);
+            }
+        }
+        sp_visible = 1;
+        sp_lo = n_lo;
+        sp_hi = n_hi;
+    } else {
+        sp_visible = 0;
+    }
+}
+
+// Restore old pointer cell (deferring to selection / caret beneath), then
+// paint pointer at the logical position. Cheap: at most two cells written.
+static void reconcile_pointer(void) {
+    // Erase old.
+    if (pp_visible) {
+        if (pp_row < term_rows && pp_col < term_cols) {
+            unsigned long idx = pp_row * term_cols + pp_col;
+            int sel = sp_visible && idx >= sp_lo && idx <= sp_hi;
+            int caret = cursor_visible && pp_row == cursor_row && pp_col == cursor_col;
+            if (caret) {
+                // caret block will repaint on top — nothing to do here
+            } else if (sel) {
+                blit_inverted(pp_row, pp_col);
+            } else {
+                blit_cell(pp_row, pp_col, cells[idx]);
+            }
+        }
+        pp_visible = 0;
+    }
+    // Paint new.
+    if (mp_row < term_rows && mp_col < term_cols) {
+        unsigned long idx = mp_row * term_cols + mp_col;
+        int sel = sp_visible && idx >= sp_lo && idx <= sp_hi;
+        int caret = cursor_visible && mp_row == cursor_row && mp_col == cursor_col;
+        if (caret) {
+            // leave the caret block visible; pointer is suppressed for
+            // this frame, will paint when caret blinks off.
+        } else if (sel) {
+            // pointer-in-selection: leave the cell uninverted so it
+            // contrasts with the highlighted neighbours.
+            blit_cell(mp_row, mp_col, cells[idx]);
+        } else {
+            blit_inverted(mp_row, mp_col);
+        }
+        pp_row = mp_row;
+        pp_col = mp_col;
+        pp_visible = 1;
+    }
+}
+
+// Full from-scratch repaint of all overlays. Used after EV_PTY because
+// the VT parser blit_cells over cells in normal style, destroying any
+// inversion that previously covered them.
+static void overlays_full_repaint(void) {
+    sp_visible = 0;
+    pp_visible = 0;
+    cursor_visible = 0;
+    reconcile_selection();
+    reconcile_pointer();
+    caret_redraw();
 }
 
 static void scroll_one(void) {
@@ -232,6 +412,12 @@ static void scroll_one(void) {
     fill_rect(0, (term_rows - 1) * glyph_h,
               term_cols * glyph_w, glyph_h, pack_color(cur_bg));
     cursor_visible = 0;
+    sp_visible = 0;
+    pp_visible = 0;
+    // A scroll moves all selected cells to different positions in the
+    // framebuffer. Easiest correct thing is to drop the selection — the
+    // user is no longer pointing at what they highlighted.
+    have_selection = 0;
 }
 
 static void newline(void) {
@@ -425,6 +611,10 @@ static const char kbd_us_shift[128] = {
 static unsigned char mods;
 static int           pending_extended;
 
+// Set by translate_one when Ctrl+Shift+C / Ctrl+Shift+V is pressed.
+// 1 = copy, 2 = paste. Parent consumes it after each call and clears.
+static int           kbd_shortcut;
+
 // Translate one scancode byte. Returns # bytes written into out (0..6).
 static int translate_one(unsigned char sc, char* out) {
     if (sc == 0xE0) { pending_extended = 1; return 0; }
@@ -439,6 +629,13 @@ static int translate_one(unsigned char sc, char* out) {
     if (code == 0x1D) { if (release) mods &= ~MOD_CTRL;  else mods |= MOD_CTRL;  return 0; }
     if (code == 0x38) { if (release) mods &= ~MOD_ALT;   else mods |= MOD_ALT;   return 0; }
     if (release) return 0;
+
+    // Ctrl+Shift+C / Ctrl+Shift+V are clipboard shortcuts and never reach
+    // the pty. Plain Ctrl+C (no shift) still folds to ^C below.
+    if ((mods & (MOD_SHIFT | MOD_CTRL)) == (MOD_SHIFT | MOD_CTRL) && !extended) {
+        if (code == 0x2E) { kbd_shortcut = 1; return 0; }
+        if (code == 0x2F) { kbd_shortcut = 2; return 0; }
+    }
 
     if (extended) {
         // Arrow keys, etc.
@@ -477,6 +674,128 @@ static int u_to_str(unsigned int v, char* out) {
     return n;
 }
 
+// ---- clipboard ---------------------------------------------------------
+
+// Copy the current selection to the in-process clipboard. Walks the
+// selection row-by-row in reading order; trims trailing spaces of each
+// row's selected sub-range; separates rows with '\n'. Silently truncates
+// at CLIP_CAP bytes.
+static void clipboard_copy_selection(void) {
+    if (!have_selection) { clip_len = 0; return; }
+    unsigned long lo = sel_anchor < sel_head ? sel_anchor : sel_head;
+    unsigned long hi = sel_anchor < sel_head ? sel_head   : sel_anchor;
+    unsigned long lo_row = lo / term_cols;
+    unsigned long hi_row = hi / term_cols;
+    unsigned long out = 0;
+    for (unsigned long row = lo_row; row <= hi_row && out < CLIP_CAP; row++) {
+        unsigned long c0 = (row == lo_row) ? (lo % term_cols) : 0;
+        unsigned long c1 = (row == hi_row) ? (hi % term_cols) : (term_cols - 1);
+        // Find last non-space column in [c0, c1].
+        unsigned long last = c0;
+        int any = 0;
+        for (unsigned long c = c0; c <= c1; c++) {
+            if (cells[row * term_cols + c].ch != ' ') { last = c; any = 1; }
+        }
+        unsigned long end = any ? (last + 1) : c0;
+        for (unsigned long c = c0; c < end && out < CLIP_CAP; c++) {
+            clipboard[out++] = (char)cells[row * term_cols + c].ch;
+        }
+        if (row != hi_row && out < CLIP_CAP) clipboard[out++] = '\n';
+    }
+    clip_len = out;
+}
+
+static void clipboard_paste(long ptmx) {
+    if (clip_len == 0) return;
+    unsigned long sent = 0;
+    while (sent < clip_len) {
+        long w = sys_write(ptmx, clipboard + sent, clip_len - sent);
+        if (w <= 0) break;
+        sent += (unsigned long)w;
+    }
+}
+
+// ---- event-pipe framing -----------------------------------------------
+
+static long read_exact(int fd, void* buf, unsigned long n) {
+    unsigned char* p = (unsigned char*)buf;
+    unsigned long got = 0;
+    while (got < n) {
+        long r = sys_read(fd, p + got, n - got);
+        if (r == -EINTR) {
+            // Only surface EINTR at a frame boundary; otherwise the caller
+            // would lose `got` bytes of a half-read frame on retry.
+            if (got == 0) return -EINTR;
+            continue;
+        }
+        if (r <= 0) return r;
+        got += (unsigned long)r;
+    }
+    return (long)got;
+}
+
+static void send_event(const term_event_t* ev) {
+    // One whole frame per write — small enough (64 B) that the kernel pipe
+    // ring (4 KiB) fits it atomically under uncontended conditions. If the
+    // ring is congested writes may interleave at byte granularity; the
+    // parent's read_exact reframes, but two writers blocked simultaneously
+    // could still desync. In practice the parent drains promptly.
+    const unsigned char* p = (const unsigned char*)ev;
+    unsigned long left = sizeof(*ev);
+    while (left) {
+        long w = sys_write(evt_w, p, left);
+        if (w == -EINTR) continue;
+        if (w <= 0) return;
+        p += w; left -= (unsigned long)w;
+    }
+}
+
+// ---- mouse handling (parent side) -------------------------------------
+
+// Returns 1 iff this event produced a visible state change (pointer cell
+// moved, selection range changed, or button transitioned) — i.e. the
+// render loop needs to repaint overlays. Sub-cell motion returns 0.
+static int handle_mouse(const m_event_t* m) {
+    unsigned long old_row = mp_row, old_col = mp_col;
+    unsigned long old_anchor = sel_anchor, old_head = sel_head;
+    int old_have = have_selection;
+
+    mx_px += m->dx;
+    my_px += m->dy;
+    if (mx_px < 0) mx_px = 0;
+    if (my_px < 0) my_px = 0;
+    long max_x = (long)fbv.width - 1;
+    long max_y = (long)fbv.height - 1;
+    if (mx_px > max_x) mx_px = max_x;
+    if (my_px > max_y) my_px = max_y;
+
+    mp_row = (unsigned long)my_px / glyph_h;
+    mp_col = (unsigned long)mx_px / glyph_w;
+    if (mp_row >= term_rows) mp_row = term_rows - 1;
+    if (mp_col >= term_cols) mp_col = term_cols - 1;
+    unsigned long here = mp_row * term_cols + mp_col;
+
+    unsigned char btns = m->buttons;
+    unsigned char changed = btns ^ prev_btns;
+
+    if ((changed & 1) && (btns & 1)) {
+        have_selection = 1;
+        sel_anchor = here;
+        sel_head   = here;
+    } else if (btns & 1) {
+        sel_head = here;
+        have_selection = 1;
+    } else if ((changed & 1) && !(btns & 1)) {
+        if (sel_anchor == sel_head) have_selection = 0;
+    }
+    prev_btns = btns;
+
+    return (mp_row != old_row) || (mp_col != old_col) ||
+           (have_selection != old_have) ||
+           (have_selection &&
+            (sel_anchor != old_anchor || sel_head != old_head));
+}
+
 // ---- main --------------------------------------------------------------
 
 void _start(void) {
@@ -505,7 +824,14 @@ void _start(void) {
     cells = (vt_cell_t*)sys_mmap(term_rows * term_cols * sizeof(vt_cell_t));
     if ((long)cells <= 0) sys_exit(6);
     clear_screen();
-    cursor_draw();
+
+    // Start the mouse pointer at the screen centre so it's discoverable.
+    mx_px = fbv.width / 2;
+    my_px = fbv.height / 2;
+    mp_row = my_px / glyph_h;
+    mp_col = mx_px / glyph_w;
+
+    overlays_full_repaint();
 
     long ptmx = sys_open("/dev/ptmx", O_RDWR, 0);
     if (ptmx < 0) sys_exit(7);
@@ -543,69 +869,157 @@ void _start(void) {
         sys_exit(127);
     }
 
-    // Fork the input pump.
-    long input_pid = sys_fork();
-    if (input_pid == 0) {
+    // One pipe carries every input source to the parent's render loop.
+    int evt_fds[2];
+    if (sys_pipe(evt_fds) < 0) sys_exit(31);
+    evt_r = evt_fds[0];
+    evt_w = evt_fds[1];
+
+    sys_signal(SIGWINCH, (void*)winch_handler, (void*)sig_restorer);
+
+    // kbd_child: scancodes -> EV_KBD frames.
+    long kbd_pid = sys_fork();
+    if (kbd_pid == 0) {
         sys_close(fb_fd);
+        sys_close(ptmx);
+        sys_close(evt_r);
         long kbd_fd = sys_open("/dev/kbd", O_RDONLY, 0);
         if (kbd_fd < 0) sys_exit(30);
+        term_event_t ev;
         unsigned char sc;
-        char out[8];
         while (1) {
             long r = sys_read(kbd_fd, &sc, 1);
             if (r <= 0) break;
-            int len = translate_one(sc, out);
-            if (len > 0) sys_write(ptmx, out, len);
+            ev.kind = EV_KBD; ev.len = 1; ev.p.scancode = sc;
+            send_event(&ev);
         }
         sys_exit(0);
     }
 
-    // Cursor-blink driver: a child that pings the parent with SIGALRM on a
-    // fixed interval. We capture the parent's pid before forking so the
-    // child doesn't need a getppid syscall.
-    long parent_pid = sys_getpid();
-    sys_signal(SIGALRM,  (void*)blink_handler, (void*)sig_restorer);
-    sys_signal(SIGWINCH, (void*)winch_handler, (void*)sig_restorer);
+    // mouse_child: relative deltas -> EV_MOUSE frames.
+    long mouse_pid = sys_fork();
+    if (mouse_pid == 0) {
+        sys_close(fb_fd);
+        sys_close(ptmx);
+        sys_close(evt_r);
+        long mfd = sys_open("/dev/mouse", O_RDONLY, 0);
+        if (mfd < 0) sys_exit(32);
+        term_event_t ev;
+        m_event_t in;
+        while (1) {
+            long r = sys_read(mfd, &in, sizeof(in));
+            if (r <= 0) break;
+            if (r != (long)sizeof(in)) continue;  // short read: drop
+            ev.kind = EV_MOUSE; ev.len = sizeof(in); ev.p.mouse = in;
+            send_event(&ev);
+        }
+        sys_exit(0);
+    }
 
+    // pty_child: shell output -> EV_PTY frames.
+    long pty_pid = sys_fork();
+    if (pty_pid == 0) {
+        sys_close(fb_fd);
+        sys_close(evt_r);
+        term_event_t ev;
+        while (1) {
+            long r = sys_read(ptmx, ev.p.bytes, sizeof(ev.p.bytes));
+            if (r == -EINTR) continue;
+            if (r <= 0) break;
+            ev.kind = EV_PTY;
+            ev.len = (unsigned char)r;
+            send_event(&ev);
+        }
+        sys_exit(0);
+    }
+
+    // blink_child: periodic EV_BLINK frames (replaces SIGALRM).
     long blink_pid = sys_fork();
     if (blink_pid == 0) {
         sys_close(fb_fd);
         sys_close(ptmx);
+        sys_close(evt_r);
+        term_event_t ev;
+        ev.kind = EV_BLINK; ev.len = 0;
         for (;;) {
             sys_sleep(500);
-            sys_kill(parent_pid, SIGALRM);
+            send_event(&ev);
         }
     }
 
+    // Parent owns ptmx (for writes) and the event-pipe read end.
+    sys_close(evt_w);
+    evt_w = -1;
+
     // Render loop.
-    char rbuf[256];
+    term_event_t ev;
     while (1) {
-        long r = sys_read(ptmx, rbuf, sizeof(rbuf));
+        long r = read_exact(evt_r, &ev, sizeof(ev));
         if (r == -EINTR) {
             if (redraw_needed) {
                 redraw_needed = 0;
                 redraw_all();
                 blink_on = 1;
-                cursor_draw();
-            } else if (blink_on) {
-                cursor_draw();
-            } else {
-                cursor_erase();
+                overlays_full_repaint();
             }
             continue;
         }
         if (r <= 0) break;
-        cursor_erase();
-        for (long i = 0; i < r; i++) vt_input_byte(rbuf[i]);
-        // Reset the blink to ON after activity so the cursor always
-        // reappears at the new write position immediately, instead of
-        // staying erased until the next 500ms tick happens to land on the
-        // ON phase.
-        blink_on = 1;
-        cursor_draw();
+
+        switch (ev.kind) {
+            case EV_PTY: {
+                // VT parser will blit_cell underneath the overlay paint;
+                // do a full overlay repaint afterwards to re-invert any
+                // selected cells that got rewritten.
+                for (unsigned int i = 0; i < ev.len; i++) {
+                    vt_input_byte(ev.p.bytes[i]);
+                }
+                // Reset the blink to ON after activity so the caret
+                // always reappears at the new write position immediately.
+                blink_on = 1;
+                overlays_full_repaint();
+                break;
+            }
+            case EV_KBD: {
+                // Keyboard work never changes the framebuffer directly;
+                // shell echo comes back as EV_PTY and triggers a repaint
+                // there. Skipping the overlay flip keeps Ctrl auto-repeat
+                // (which can fire at >30 Hz) from thrashing big selections.
+                char out[8];
+                kbd_shortcut = 0;
+                int len = translate_one(ev.p.scancode, out);
+                if (kbd_shortcut == 1) {
+                    clipboard_copy_selection();
+                } else if (kbd_shortcut == 2) {
+                    clipboard_paste(ptmx);
+                } else if (len > 0) {
+                    sys_write(ptmx, out, len);
+                }
+                break;
+            }
+            case EV_MOUSE: {
+                if (handle_mouse(&ev.p.mouse)) {
+                    // Diff-update: at most O(|added| + |removed|) cells
+                    // for selection plus 2 for pointer. Mouse drag across
+                    // a screen-sized selection stays cheap because the
+                    // diff per event is one cell.
+                    reconcile_selection();
+                    reconcile_pointer();
+                }
+                break;
+            }
+            case EV_BLINK: {
+                blink_on = !blink_on;
+                caret_redraw();
+                break;
+            }
+            default: break;
+        }
     }
 
-    sys_kill(input_pid, SIGTERM);
-    if (blink_pid > 0) sys_kill(blink_pid, SIGTERM);
+    sys_kill(kbd_pid,   SIGTERM);
+    sys_kill(mouse_pid, SIGTERM);
+    sys_kill(pty_pid,   SIGTERM);
+    sys_kill(blink_pid, SIGTERM);
     sys_exit(0);
 }
