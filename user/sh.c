@@ -19,6 +19,8 @@
 #define TOKENS_MAX     64
 #define ARGV_MAX_      16
 #define STAGES_MAX      8
+#define HIST_MAX       64
+#define HIST_FILE     "/home/.sh_history"
 
 typedef enum {
     TOK_WORD,
@@ -349,6 +351,240 @@ static void prompt(void) {
     st_puts("\x1b[93m$ \x1b[0m");
 }
 
+// ---- history ring -------------------------------------------------------
+
+// Most-recent entry is at hist[(head - 1) mod HIST_MAX]. count saturates
+// at HIST_MAX once the ring wraps.
+static char hist[HIST_MAX][LINE_MAX_];
+static int  hist_count;
+static int  hist_head;
+
+static void hist_add(const char* s) {
+    if (s[0] == 0) return;
+    if (hist_count > 0) {
+        int prev = (hist_head - 1 + HIST_MAX) % HIST_MAX;
+        if (st_strcmp(hist[prev], s) == 0) return;
+    }
+    unsigned long i = 0;
+    while (s[i] && i < LINE_MAX_ - 1) { hist[hist_head][i] = s[i]; i++; }
+    hist[hist_head][i] = 0;
+    hist_head = (hist_head + 1) % HIST_MAX;
+    if (hist_count < HIST_MAX) hist_count++;
+}
+
+// back=1 -> most recent, back=2 -> previous, ... NULL once past oldest.
+static const char* hist_get(int back) {
+    if (back <= 0 || back > hist_count) return 0;
+    int idx = (hist_head - back + HIST_MAX * 2) % HIST_MAX;
+    return hist[idx];
+}
+
+static void hist_load(void) {
+    long fd = sys_open(HIST_FILE, O_RDONLY, 0);
+    if (fd < 0) return;
+    char buf[1024];
+    char cur[LINE_MAX_];
+    int  cl = 0;
+    for (;;) {
+        long n = sys_read(fd, buf, sizeof(buf));
+        if (n <= 0) break;
+        for (long i = 0; i < n; i++) {
+            char c = buf[i];
+            if (c == '\n') {
+                cur[cl] = 0;
+                hist_add(cur);
+                cl = 0;
+            } else if (cl < (int)sizeof(cur) - 1) {
+                cur[cl++] = c;
+            }
+        }
+    }
+    if (cl > 0) { cur[cl] = 0; hist_add(cur); }
+    sys_close(fd);
+}
+
+static void hist_persist_append(const char* s) {
+    long fd = sys_open(HIST_FILE, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0) return;
+    sys_write(fd, s, st_strlen(s));
+    sys_write(fd, "\n", 1);
+    sys_close(fd);
+}
+
+// ---- line editor --------------------------------------------------------
+
+static void emit(const char* s) { sys_write(1, s, st_strlen(s)); }
+static void emit_n(const char* s, int n) { sys_write(1, s, (unsigned long)n); }
+
+// Move cursor left by n columns using CSI D. n must be > 0.
+static void cursor_left(int n) {
+    if (n <= 0) return;
+    char buf[16];
+    int  k = 0;
+    buf[k++] = 0x1b; buf[k++] = '[';
+    char num[8];
+    int  nn = 0;
+    int  v = n;
+    while (v > 0) { num[nn++] = (char)('0' + v % 10); v /= 10; }
+    while (nn > 0) buf[k++] = num[--nn];
+    buf[k++] = 'D';
+    emit_n(buf, k);
+}
+
+static void cursor_right(int n) {
+    if (n <= 0) return;
+    char buf[16];
+    int  k = 0;
+    buf[k++] = 0x1b; buf[k++] = '[';
+    char num[8];
+    int  nn = 0;
+    int  v = n;
+    while (v > 0) { num[nn++] = (char)('0' + v % 10); v /= 10; }
+    while (nn > 0) buf[k++] = num[--nn];
+    buf[k++] = 'C';
+    emit_n(buf, k);
+}
+
+// After an insert/delete: print the bytes from cur..len, erase the old
+// trailing column with \x1b[K, then move cursor back over the tail.
+static void redraw_tail(const char* line, int len, int cur) {
+    int tail = len - cur;
+    if (tail > 0) emit_n(line + cur, tail);
+    emit("\x1b[K");
+    if (tail > 0) cursor_left(tail);
+}
+
+// Repaint the whole input area: \r, prompt, line, \x1b[K. Cursor lands
+// at end-of-line; caller must adjust if it wants cursor elsewhere.
+static void repaint_line(const char* line, int len) {
+    emit("\r");
+    prompt();
+    if (len > 0) emit_n(line, len);
+    emit("\x1b[K");
+}
+
+// Reads a line with full editing in raw mode. Returns len, or -1 on EOF.
+// The pty is assumed to already be in raw mode on entry.
+static long read_line_edit(char* line, int cap) {
+    int len = 0;
+    int cur = 0;
+
+    char saved_live[LINE_MAX_];
+    int  saved_live_len = 0;
+    int  hist_view      = 0;  // 0 = live edit; 1 = most recent; ...
+
+    enum { GROUND, ESC1, CSI } state = GROUND;
+
+    for (;;) {
+        char b;
+        long n = sys_read(0, &b, 1);
+        if (n == 0) return -1;
+        if (n < 0) {
+            // Interrupted by SIGINT delivered to a non-ignoring sibling? sh
+            // ignores SIGINT, so this shouldn't happen — but be safe.
+            continue;
+        }
+
+        if (state == ESC1) {
+            if (b == '[') { state = CSI; continue; }
+            state = GROUND;
+            continue;
+        }
+        if (state == CSI) {
+            // Skip parameter bytes (digits and ';'). Stop at a final byte.
+            if ((b >= '0' && b <= '9') || b == ';') continue;
+            state = GROUND;
+            switch (b) {
+                case 'D':  // left
+                    if (cur > 0) { cur--; emit("\x1b[D"); }
+                    break;
+                case 'C':  // right
+                    if (cur < len) { cur++; emit("\x1b[C"); }
+                    break;
+                case 'A': {  // up: older
+                    const char* h = hist_get(hist_view + 1);
+                    if (!h) break;
+                    if (hist_view == 0) {
+                        // snapshot live edit before first nav
+                        for (int i = 0; i < len; i++) saved_live[i] = line[i];
+                        saved_live_len = len;
+                    }
+                    hist_view++;
+                    int i = 0;
+                    while (h[i] && i < cap - 1) { line[i] = h[i]; i++; }
+                    len = i;
+                    cur = len;
+                    repaint_line(line, len);
+                    break;
+                }
+                case 'B': {  // down: newer
+                    if (hist_view == 0) break;
+                    hist_view--;
+                    if (hist_view == 0) {
+                        for (int i = 0; i < saved_live_len; i++) line[i] = saved_live[i];
+                        len = saved_live_len;
+                    } else {
+                        const char* h = hist_get(hist_view);
+                        int i = 0;
+                        while (h[i] && i < cap - 1) { line[i] = h[i]; i++; }
+                        len = i;
+                    }
+                    cur = len;
+                    repaint_line(line, len);
+                    break;
+                }
+                case 'H':  // Home
+                    if (cur > 0) { cursor_left(cur); cur = 0; }
+                    break;
+                case 'F':  // End
+                    if (cur < len) { cursor_right(len - cur); cur = len; }
+                    break;
+                default: break;
+            }
+            continue;
+        }
+
+        // GROUND
+        if (b == 0x1b) { state = ESC1; continue; }
+        if (b == '\r' || b == '\n') {
+            emit("\n");
+            line[len] = 0;
+            return len;
+        }
+        if (b == 0x7f || b == 0x08) {
+            if (cur > 0) {
+                for (int i = cur - 1; i < len - 1; i++) line[i] = line[i + 1];
+                cur--; len--;
+                emit("\b");
+                redraw_tail(line, len, cur);
+            }
+            continue;
+        }
+        if (b == 0x01) {  // Ctrl+A
+            if (cur > 0) { cursor_left(cur); cur = 0; }
+            continue;
+        }
+        if (b == 0x05) {  // Ctrl+E
+            if (cur < len) { cursor_right(len - cur); cur = len; }
+            continue;
+        }
+        if ((unsigned char)b >= 0x20 && (unsigned char)b < 0x7f) {
+            if (len >= cap - 1) continue;
+            for (int i = len; i > cur; i--) line[i] = line[i - 1];
+            line[cur] = b;
+            len++;
+            emit_n(&b, 1);
+            cur++;
+            redraw_tail(line, len, cur);
+            continue;
+        }
+        // any other control byte: ignore
+    }
+}
+
+static void set_raw(void)    { sys_ioctl(0, TTY_IOCTL_SET_RAW,    0); }
+static void set_cooked(void) { sys_ioctl(0, TTY_IOCTL_SET_COOKED, 0); }
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
@@ -368,17 +604,28 @@ int main(int argc, char** argv) {
     sh_pgid_ = sys_getpid();
     sys_signal(SIGINT, SIG_IGN, 0);
 
+    hist_load();
+
     for (;;) {
         prompt();
-        long n = sys_read(0, line, sizeof(line) - 1);
-        if (n <= 0) {
+        set_raw();
+        long n = read_line_edit(line, sizeof(line));
+        set_cooked();
+        if (n < 0) {
             // EOF on stdin (controlling tty went away). Exit so init
             // can decide whether to respawn term.
             return 0;
         }
-        if (n >= (long)sizeof(line)) n = sizeof(line) - 1;
         line[n] = 0;
-        if (n > 0 && line[n - 1] == '\n') line[n - 1] = 0;
+
+        if (n > 0) {
+            int prev_head  = hist_head;
+            int prev_count = hist_count;
+            hist_add(line);
+            if (hist_head != prev_head || hist_count != prev_count) {
+                hist_persist_append(line);
+            }
+        }
 
         int ntoks = tokenize(line, tokbuf, words, kinds);
         if (ntoks <= 0) {
