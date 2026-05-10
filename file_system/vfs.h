@@ -18,6 +18,12 @@ int64_t vfs_check_file     (file_t* f);
 int64_t vfs_check_dentry   (dentry_t* d);
 int64_t vfs_check_writable (inode_t* in);
 
+// Drain-on-umount gating. Every FS op that may touch the on-disk state
+// brackets itself with fs_io_begin / fs_io_end so that umount can wait for
+// in-flight operations to finish and reject new ones.
+int64_t fs_io_begin(superblock_t* sb);   // -EBUSY if unmounting, else 0
+void    fs_io_end  (superblock_t* sb);
+
 // VFS_CALL dispatch macro lives in vfs_defs.h.
 
 // duplicate a NUL-terminated string into a kmalloc'd buffer

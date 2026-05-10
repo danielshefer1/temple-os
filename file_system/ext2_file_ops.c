@@ -1,5 +1,8 @@
 #include "ext2_file_ops.h"
 
+static int64_t EXT2TruncateInner(file_t* file, uint64_t new_size);
+static int64_t EXT2ReadDirInner(file_t* file, dentry_t* out);
+
 int64_t EXT2Read(file_t* file, void* buf, uint64_t size) {
     if (file == NULL || buf == NULL) return -EINVAL;
     if (file->inode == NULL) return -EINVAL;
@@ -7,6 +10,8 @@ int64_t EXT2Read(file_t* file, void* buf, uint64_t size) {
 
 
     superblock_t* sb = file->inode->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
     uint64_t end_offset = file->position + size;
     uint64_t clamped    = end_offset < file->inode->size ? end_offset : file->inode->size;
     uint64_t to_read    = clamped - file->position;
@@ -27,7 +32,7 @@ int64_t EXT2Read(file_t* file, void* buf, uint64_t size) {
             memset((void*)((uint64_t)buf + buf_offset), 0, append);
         } else {
             temp_buf = bread(sb, curr_block);
-            if (temp_buf == NULL) return -EIO;
+            if (temp_buf == NULL) { fs_io_end(sb); return -EIO; }
 
             memcpy((void*)((uint64_t)buf + buf_offset), (void*)((uint64_t)temp_buf + (file->position % block_size)), append);
             brelse(sb, curr_block);
@@ -37,6 +42,7 @@ int64_t EXT2Read(file_t* file, void* buf, uint64_t size) {
         buf_offset += append;
         remain -= append;
     }
+    fs_io_end(sb);
     return to_read;
 }
 
@@ -65,7 +71,7 @@ int64_t CheckSizeForWrite(file_t* file, uint64_t size) {
     uint64_t end_offset = file->position + size;
 
     if (end_offset > file->inode->size) {
-        int64_t truncate_ret = EXT2Truncate(file, end_offset);
+        int64_t truncate_ret = EXT2TruncateInner(file, end_offset);
         if (truncate_ret < 0) return truncate_ret;
     }
     return 0;
@@ -76,10 +82,13 @@ int64_t EXT2Write(file_t* file, const void* buf, uint64_t size) {
     if (file->inode == NULL) return -EINVAL;
     if (UINT64_MAX - size < file->position) return -EINVAL;
 
-    int64_t blockscheck_ret = CheckSizeForWrite(file, size);
-    if (blockscheck_ret < 0) return blockscheck_ret;
-
     superblock_t* sb = file->inode->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+
+    int64_t blockscheck_ret = CheckSizeForWrite(file, size);
+    if (blockscheck_ret < 0) { fs_io_end(sb); return blockscheck_ret; }
+
     uint64_t block_size = sb->block_size;
 
     uint64_t start_block = file->position / block_size;
@@ -111,7 +120,7 @@ int64_t EXT2Write(file_t* file, const void* buf, uint64_t size) {
         }
 
         temp_buf = bread(sb, curr_block);
-        if (temp_buf == NULL) return -EIO;
+        if (temp_buf == NULL) { fs_io_end(sb); return -EIO; }
 
         memcpy((void*)((uint64_t)temp_buf + (file->position % block_size)), (void*)((uint64_t)buf + buf_offset), append);
         bwrite(sb, curr_block);
@@ -120,6 +129,7 @@ int64_t EXT2Write(file_t* file, const void* buf, uint64_t size) {
         buf_offset += append;
         remain -= append;
     }
+    fs_io_end(sb);
     return (int64_t)(size - remain);
 }
 
@@ -225,7 +235,7 @@ int64_t EXT2ShrinkFile(inode_t* inode, uint64_t sub) {
     return 0;
 }
 
-int64_t EXT2Truncate(file_t* file, uint64_t new_size) {
+static int64_t EXT2TruncateInner(file_t* file, uint64_t new_size) {
     if (file == NULL || file->inode == NULL || file->inode->fs_specific == NULL) return -EINVAL;
 
     inode_t* inode = file->inode;
@@ -252,7 +262,17 @@ int64_t EXT2Truncate(file_t* file, uint64_t new_size) {
     return EXT2ExpandFile(inode, new_size - inode->size);
 }
 
-int64_t EXT2ReadDir(file_t* file, dentry_t* out) {
+int64_t EXT2Truncate(file_t* file, uint64_t new_size) {
+    if (file == NULL || file->inode == NULL) return -EINVAL;
+    superblock_t* sb = file->inode->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2TruncateInner(file, new_size);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2ReadDirInner(file_t* file, dentry_t* out) {
     if (file == NULL || out == NULL) return -EINVAL;
     superblock_t* sb = file->inode->sb;
     ext2_private_file_t* dir_pos = (ext2_private_file_t*) file->private_data;
@@ -267,13 +287,13 @@ int64_t EXT2ReadDir(file_t* file, dentry_t* out) {
 
         if (dir_pos->dir_bytes_offset < sb->block_size) {
             brelse(sb, block_to_read);
-            return EXT2ReadDir(file, out);
+            return EXT2ReadDirInner(file, out);
         }
 
         dir_pos->dir_bytes_offset = 0;
         dir_pos->dir_blocks_offset++;
         brelse(sb, block_to_read);
-        return EXT2ReadDir(file, out); 
+        return EXT2ReadDirInner(file, out); 
     }
 
     out->name = (char*) kmalloc(entry->name_len + 1);
@@ -301,6 +321,16 @@ int64_t EXT2ReadDir(file_t* file, dentry_t* out) {
     uint32_t ret = entry->name_len;
     brelse(sb, block_to_read);
     return ret;
+}
+
+int64_t EXT2ReadDir(file_t* file, dentry_t* out) {
+    if (file == NULL || file->inode == NULL) return -EINVAL;
+    superblock_t* sb = file->inode->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2ReadDirInner(file, out);
+    fs_io_end(sb);
+    return r;
 }
 
 int64_t EXT2Open(inode_t* inode, file_t* file) {

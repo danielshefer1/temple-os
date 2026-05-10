@@ -1,8 +1,18 @@
 #include "ext2_ino_ops.h"
 
-
+static int64_t EXT2LookupInner(inode_t* dir, dentry_t* dentry);
 
 int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2LookupInner(dir, dentry);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2LookupInner(inode_t* dir, dentry_t* dentry) {
     if (dir == NULL || dentry == NULL) return -1;
     if (dir->fs_specific == NULL || dentry->name == NULL) return -1;
 
@@ -239,7 +249,7 @@ int64_t EXT2PopulateInodeEntry(inode_t* dir, inode_t** out, uint64_t type, uint6
     return 0;
 }
 int64_t EXT2CreateGeneric(inode_t* dir, dentry_t* dentry, uint64_t permissions, uint64_t type) {
-    if (EXT2Lookup(dir, dentry) == 0) return -EEXIST;
+    if (EXT2LookupInner(dir, dentry) == 0) return -EEXIST;
 
     int64_t inode_entry_res = EXT2PopulateInodeEntry(dir, &dentry->inode, type, permissions);
     if (inode_entry_res < 0) return inode_entry_res;
@@ -251,11 +261,31 @@ int64_t EXT2CreateGeneric(inode_t* dir, dentry_t* dentry, uint64_t permissions, 
 }
 
 int64_t EXT2Create(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
-    return EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_FILE);
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_FILE);
+    fs_io_end(sb);
+    return r;
 }
+
+static int64_t EXT2MknodInner(inode_t* dir, dentry_t* dentry, uint64_t type,
+                              uint64_t permissions, uint32_t dev_id);
 
 int64_t EXT2Mknod(inode_t* dir, dentry_t* dentry, uint64_t type,
                   uint64_t permissions, uint32_t dev_id) {
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2MknodInner(dir, dentry, type, permissions, dev_id);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2MknodInner(inode_t* dir, dentry_t* dentry, uint64_t type,
+                              uint64_t permissions, uint32_t dev_id) {
     if (type != VFS_TYPE_CHARDEV && type != VFS_TYPE_BLOCKDEV &&
         type != VFS_TYPE_FIFO    && type != VFS_TYPE_SOCKET) {
         return -EINVAL;
@@ -274,7 +304,19 @@ int64_t EXT2Mknod(inode_t* dir, dentry_t* dentry, uint64_t type,
     return 0;
 }
 
+static int64_t EXT2MkdirInner(inode_t* dir, dentry_t* dentry, uint64_t permissions);
+
 int64_t EXT2Mkdir(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2MkdirInner(dir, dentry, permissions);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2MkdirInner(inode_t* dir, dentry_t* dentry, uint64_t permissions) {
     int64_t res = EXT2CreateGeneric(dir, dentry, permissions, VFS_TYPE_DIR);
     if (res < 0) return res;
 
@@ -416,8 +458,20 @@ int64_t EXT2RemoveFromDir(inode_t* dir, dentry_t* dentry) {
     return -ENOENT;
 }
 
+static int64_t EXT2UnlinkInner(inode_t* dir, dentry_t* dentry);
+
 int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
-    int64_t lookup_ret = EXT2Lookup(dir, dentry);
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2UnlinkInner(dir, dentry);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2UnlinkInner(inode_t* dir, dentry_t* dentry) {
+    int64_t lookup_ret = EXT2LookupInner(dir, dentry);
     if (lookup_ret < 0) return lookup_ret;
     if (dentry->inode->type == VFS_TYPE_DIR) return -EISDIR;
 
@@ -438,8 +492,20 @@ int64_t EXT2Unlink(inode_t* dir, dentry_t* dentry) {
     return 0;
 }
 
+static int64_t EXT2RmdirInner(inode_t* dir, dentry_t* dentry);
+
 int64_t EXT2Rmdir(inode_t* dir, dentry_t* dentry) {
-    int64_t lookup_ret = EXT2Lookup(dir, dentry);
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2RmdirInner(dir, dentry);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2RmdirInner(inode_t* dir, dentry_t* dentry) {
+    int64_t lookup_ret = EXT2LookupInner(dir, dentry);
     if (lookup_ret < 0) return lookup_ret;
 
     if (dentry->inode->type != VFS_TYPE_DIR) return -ENOTDIR;
@@ -476,7 +542,19 @@ int64_t EXT2Rmdir(inode_t* dir, dentry_t* dentry) {
     return 0;
 }
 
+static int64_t EXT2RenameInner(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, dentry_t* new_dentry);
+
 int64_t EXT2Rename(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, dentry_t* new_dentry) {
+    if (old_dir == NULL || old_dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = old_dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2RenameInner(old_dir, old_dentry, new_dir, new_dentry);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2RenameInner(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, dentry_t* new_dentry) {
     if (old_dir == NULL || old_dentry == NULL || new_dir == NULL || new_dentry == NULL) return -EINVAL;
     if (old_dentry->inode == NULL) return -EINVAL;
 
@@ -489,7 +567,19 @@ int64_t EXT2Rename(inode_t* old_dir, dentry_t* old_dentry, inode_t* new_dir, den
     return 0;
 }
 
+static int64_t EXT2HardLinkInner(inode_t* dir, inode_t* existing_inode, dentry_t* dentry);
+
 int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* dentry) {
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2HardLinkInner(dir, existing_inode, dentry);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2HardLinkInner(inode_t* dir, inode_t* existing_inode, dentry_t* dentry) {
     if (dir == NULL || existing_inode == NULL || dentry == NULL) return -EINVAL;
     
     dentry->inode = existing_inode;
@@ -501,7 +591,19 @@ int64_t EXT2HardLink(inode_t* dir, inode_t* existing_inode, dentry_t* dentry) {
     return 0;
 }
 
+static int64_t EXT2SymLinkInner(inode_t* dir, dentry_t* dentry, const char* target);
+
 int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target) {
+    if (dir == NULL || dir->sb == NULL) return -EINVAL;
+    superblock_t* sb = dir->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2SymLinkInner(dir, dentry, target);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2SymLinkInner(inode_t* dir, dentry_t* dentry, const char* target) {
     if (dir == NULL || dentry == NULL || target == NULL) return -EINVAL;
 
     uint64_t name_len = strlen(target);
@@ -535,7 +637,19 @@ int64_t EXT2SymLink(inode_t* dir, dentry_t* dentry, const char* target) {
     return 0;
 }
 
+static int64_t EXT2ReadLinkInner(inode_t* inode, char* buf, uint64_t size);
+
 int64_t EXT2ReadLink(inode_t* inode, char* buf, uint64_t size) {
+    if (inode == NULL || inode->sb == NULL) return -EINVAL;
+    superblock_t* sb = inode->sb;
+    int64_t io_ret = fs_io_begin(sb);
+    if (io_ret < 0) return io_ret;
+    int64_t r = EXT2ReadLinkInner(inode, buf, size);
+    fs_io_end(sb);
+    return r;
+}
+
+static int64_t EXT2ReadLinkInner(inode_t* inode, char* buf, uint64_t size) {
     if (inode == NULL || buf == NULL || size == 0) return -EINVAL;
     uint64_t cpy_size = (inode->size > size) ? size : inode->size;
     ext2_inode_data_t* data = inode->fs_specific;

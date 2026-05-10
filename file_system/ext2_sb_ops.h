@@ -9,6 +9,8 @@
 #include "rtc.h"
 #include "blocks_buffer.h"
 #include "ext2_helpers.h"
+#include "vfs.h"
+#include "scheduler.h"
 
 int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf);
 

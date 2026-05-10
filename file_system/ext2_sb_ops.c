@@ -190,6 +190,10 @@ int64_t EXT2Mount(superblock_t* sb) {
 
     sb->fs_info = kmalloc(sizeof(ext2_info_t));
     mutex_init(&((ext2_info_t*)sb->fs_info)->inode_alloc_lock);
+
+    mutex_init(&sb->io_lock);
+    sb->io_inflight = 0;
+    sb->unmounting = 0;
     int64_t ret = CopySbExtToInternal(sbext, sb);
 
     total_time_t total_time;
@@ -235,6 +239,16 @@ int64_t EXT2Sync(superblock_t* sb) {
 int64_t EXT2Umount(superblock_t* sb) {
     if (sb == NULL) return 1;
     if (sb->bdev == NULL) return 1;
+
+    // Block new FS ops and drain in-flight ones before tearing down state.
+    mutex_lock(&sb->io_lock);
+    sb->unmounting = 1;
+    while (sb->io_inflight > 0) {
+        mutex_unlock(&sb->io_lock);
+        schedule();
+        mutex_lock(&sb->io_lock);
+    }
+    mutex_unlock(&sb->io_lock);
 
     ext2_info_t* vol = (ext2_info_t*)sb->fs_info;
     vol->state = EXT2_VALID_FS;

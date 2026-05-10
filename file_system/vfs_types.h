@@ -17,6 +17,9 @@ typedef struct superblock_t {
 
     struct inode_t* root_inode;
 
+    mutex_t  io_lock;       // guards io_inflight + unmounting
+    uint64_t io_inflight;   // in-flight FS ops; umount drains to 0
+    uint8_t  unmounting;    // 1 once umount has begun; rejects new ops
 } superblock_t;
 
 typedef struct inode_t {

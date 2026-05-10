@@ -32,6 +32,25 @@ int64_t vfs_check_writable(inode_t* in) {
     return 0;
 }
 
+int64_t fs_io_begin(superblock_t* sb) {
+    if (sb == NULL) return -EINVAL;
+    mutex_lock(&sb->io_lock);
+    if (sb->unmounting) {
+        mutex_unlock(&sb->io_lock);
+        return -EBUSY;
+    }
+    sb->io_inflight++;
+    mutex_unlock(&sb->io_lock);
+    return 0;
+}
+
+void fs_io_end(superblock_t* sb) {
+    if (sb == NULL) return;
+    mutex_lock(&sb->io_lock);
+    if (sb->io_inflight > 0) sb->io_inflight--;
+    mutex_unlock(&sb->io_lock);
+}
+
 char* vfs_strdup(const char* s) {
     if (s == NULL) return NULL;
     uint64_t len = strlen(s);
