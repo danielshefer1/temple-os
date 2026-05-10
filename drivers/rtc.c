@@ -63,7 +63,7 @@ int64_t GetTime(time_t* out) {
     uint8_t rawHour  = ReadRtcRegister(RTC_HOUR_REG);
 
     if (!is24Hour) {
-        rawHour = (rawHour & (1 << 7) == 1) ? rawHour += 12 : rawHour;
+        if (rawHour & 0x80) rawHour = (rawHour & 0x7F) + 12;
     }
 
     if (isBcd) {

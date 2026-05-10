@@ -4,7 +4,6 @@
 static const char start_m[]  = "starting\n";
 static const char child_m[]  = "child running\n";
 static const char wait_m[]   = "parent reaped child, status=";
-static const char nl_m[]     = "\n";
 static const char loop_done[] = "loop done, all children reaped\n";
 
 __attribute__((used)) const char* volatile msg_ptr = start_m;

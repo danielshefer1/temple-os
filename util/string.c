@@ -88,7 +88,7 @@ void cpystr(char* source, char* dst) {
     dst[idx] = '\0';
 }
 
-int32_t strcmp(char* str1, char* str2) {
+int32_t strcmp(const char* str1, const char* str2) {
     uint64_t idx = 0;
     while (str1[idx] != '\0' && str2[idx] != '\0') {
         if (str1[idx] > str2[idx]) return 1;

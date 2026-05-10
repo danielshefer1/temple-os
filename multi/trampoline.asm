@@ -57,6 +57,8 @@ ap_kernel_entry:
     retf
 
 [BITS 64]
+default abs
+
 long_mode_entry:
     mov rax, 0x30
     mov ds, rax

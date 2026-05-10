@@ -24,18 +24,19 @@ void ParseMbr(uint8_t* buffer, block_device_t* dev) {
 
 
     for (int i = 0; i < 4; i++) {
-        mbr_partition_t* part = &mbr->partitions[i];
+        mbr_partition_t part;
+        memcpy(&part, &mbr->partitions[i], sizeof part);
 
-        if (part->sector_count == 0) continue;
-        if (part->attributes != 0x80) continue;
+        if (part.sector_count == 0) continue;
+        if (part.attributes != 0x80) continue;
 
         new_part = (partition_device_t*) kmalloc(sizeof(partition_device_t));
         new_node = (partition_device_node_t*) kmalloc(sizeof(partition_device_node_t));
 
 
-        new_part->partition_type = part->partition_type;
-        new_part->sector_count = part->sector_count;
-        new_part->start_lba = part->lba_start;
+        new_part->partition_type = part.partition_type;
+        new_part->sector_count = part.sector_count;
+        new_part->start_lba = part.lba_start;
         new_part->physical_device = dev;
 
         new_node->value = new_part;

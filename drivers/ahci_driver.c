@@ -8,7 +8,7 @@ static ahci_port_state_t port_states[32];
 // Reserve an unused slot on `port_no` and mark it in-flight. Returns -1 on
 // no free slot. Caller must hold port_states[port_no].lock and have IF=0.
 static int64_t ahci_reserve_slot_locked(uint8_t port_no) {
-    hba_port_t* port = &hba->ports[port_no];
+    hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[port_no];
     ahci_port_state_t* st = &port_states[port_no];
     uint32_t in_use = port->sact | port->ci | st->issued_mask;
     for (uint64_t i = 0; i < cmd_list_size; i++) {
@@ -29,7 +29,7 @@ static int64_t ahci_reserve_slot_locked(uint8_t port_no) {
 static int64_t ahci_wait_completion(uint8_t port_no, int64_t slot) {
     ahci_port_state_t* st = &port_states[port_no];
     ahci_completion_t* c = &st->completions[slot];
-    hba_port_t* port = &hba->ports[port_no];
+    hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[port_no];
 
     cpu_local_t* cpu = this_cpu();
     bool can_block = cpu && cpu->current && check_interrupts();
@@ -122,7 +122,7 @@ uint8_t AhciActivatePorts() {
     uint8_t ports_count = 0;
     for (int i = 0; i < 32; i++) {
         if (hba->pi & (1 << i)) {
-            hba_port_t* port = &hba->ports[i];
+            hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[i];
             InitPort(port);
 
             ports_count++;
@@ -134,7 +134,7 @@ uint8_t AhciActivatePorts() {
 void PrintPortsSig() {
     for (int i = 0; i < 32; i++) {
         if (hba->pi & (1 << i)) {
-            hba_port_t* port = &hba->ports[i];
+            hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[i];
 
             uint8_t det = port->ssts & 0x0F;
 
@@ -229,7 +229,7 @@ int64_t FindFreeSlotInCmdList(hba_port_t* port) {
 }
 
 void AhciSendIdentify(uint8_t port_no, uint16_t* buffer_phys, bool sata) {
-    hba_port_t* port = &hba->ports[port_no];
+    hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[port_no];
     ahci_port_state_t* st = &port_states[port_no];
 
     while (port->tfd & ((1 << 7) | (1 << 3))) PauseHelper();
@@ -492,7 +492,7 @@ void GetAhciDriveInfo() {
             dev = (block_device_t*) kmalloc(sizeof(block_device_t));
             dev_node = (block_device_node_t*) kmalloc(sizeof(block_device_node_t));
 
-            dev->device_specific_ptr = &hba->ports[i];
+            dev->device_specific_ptr = (void*)(uintptr_t)&hba->ports[i];
             dev->sector_size = logical_sector_size;
             dev->total_sectors = total_sectors;
             cpystr(device_name, dev->name);
@@ -533,7 +533,7 @@ void AhciHandler() {
 
     for (int i = 0; i < 32; i++) {
         if (!(interrupt_status & (1 << i))) continue;
-        hba_port_t* port = &hba->ports[i];
+        hba_port_t* port = (hba_port_t*)(uintptr_t)&hba->ports[i];
         ahci_port_state_t* st = &port_states[i];
 
         uint32_t port_is = port->is;

@@ -74,8 +74,6 @@ int64_t EXT2ReadBGDT(superblock_t* sb) {
 
     uint32_t bgdt_block = (sb->block_size == 1024) ? 2 : 1;
 
-    uint32_t raw_size = vol->block_group_count * sizeof(ext2_block_group_desc_disk_t);
-    uint32_t raw_size_pages = (raw_size + PAGE_SIZE - 1) / PAGE_SIZE;
     ext2_block_group_desc_disk_t* buf = bread(sb, bgdt_block);
 
     vol->bgdt = (ext2_block_group_t*) kmalloc(vol->block_group_count * sizeof(ext2_block_group_t));
@@ -102,8 +100,6 @@ int64_t EXT2WriteBGDT(superblock_t* sb) {
 
     uint32_t bgdt_block = (sb->block_size == 1024) ? 2 : 1;
 
-    uint32_t raw_size = vol->block_group_count * sizeof(ext2_block_group_desc_disk_t);
-    uint32_t raw_size_pages = (raw_size + PAGE_SIZE - 1) / PAGE_SIZE;
     ext2_block_group_desc_disk_t* buf = bread(sb, bgdt_block);
 
     for (uint32_t i = 0; i < vol->block_group_count; i++) {

@@ -212,7 +212,7 @@ slab_t* DeleteSlab(slab_t* head, slab_t* target) {
 void kfree(void* ptr, uint64_t size) {
     
     uint64_t slot_index, bitmap_index, bit_pos, idx;
-    slab_t* bup_slab, *p;
+    slab_t* bup_slab = NULL, *p;
 
     if (size == 0) {
         idx = SLAB_WOS_CODE;

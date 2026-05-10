@@ -466,7 +466,6 @@ uint64_t AddKernelPagesPrimitive(uint64_t num_pages) {
 
 uint64_t AddKernelPages(uint64_t num_pages) {
     uint64_t start_addr = ((uint64_t)RequestBuddy(num_pages * PAGE_SIZE, false)) + KERNEL_VIRTUAL, curr_addr = start_addr;
-    uint64_t pages_in_big = 2*MB/PAGE_SIZE;
 
     while (num_pages >= 2*MB/PAGE_SIZE) {
         map_page_to_virt(curr_addr, KERNEL_VIRT_TO_PHYS(curr_addr), RW_KERNEL, true);

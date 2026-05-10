@@ -39,7 +39,7 @@ typedef struct cpu_local_t {
     run_queue_t rq;             // this CPU's runnable tasks
     struct task_t* sleep_head;  // sorted ascending by sleep_deadline
     spinlock_t sleep_lock;
-} __attribute__((packed)) cpu_local_t;
+} cpu_local_t;
 
 // ---- Multi-tasking ----
 // Offsets used by multi/switch.asm. If you reorder task_t, update these.

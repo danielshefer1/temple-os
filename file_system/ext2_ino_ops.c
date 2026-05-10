@@ -6,8 +6,6 @@ int64_t EXT2Lookup(inode_t* dir, dentry_t* dentry) {
     if (dir == NULL || dentry == NULL) return -1;
     if (dir->fs_specific == NULL || dentry->name == NULL) return -1;
 
-    ext2_inode_data_t* data = (ext2_inode_data_t*)dir->fs_specific;
-    
     uint32_t dir_blocks = dir->size / dir->sb->block_size;
 
     uint64_t dentry_namelen = strlen(dentry->name);
@@ -381,8 +379,6 @@ int64_t EXT2RemoveFromDir(inode_t* dir, dentry_t* dentry) {
     if (dir == NULL || dentry == NULL) return -EINVAL;
     if (dir->fs_specific == NULL || dentry->name == NULL) return -EINVAL;
 
-    ext2_inode_data_t* data = (ext2_inode_data_t*)dir->fs_specific;
-    
     uint32_t dir_blocks = dir->size / dir->sb->block_size;
 
     for (uint32_t i = 0; i < dir_blocks; i++) {

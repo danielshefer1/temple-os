@@ -23,7 +23,6 @@ uint64_t EXT2BlockToLba(superblock_t* sb, uint32_t block_idx) {
 int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
     if (sb == NULL || buf == NULL || count == 0) return 1;
 
-    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
     sb->bdev->read(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
     return 0;
 
@@ -32,7 +31,6 @@ int64_t EXT2ReadBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, voi
 int64_t EXT2WriteBlocks(superblock_t* sb, uint32_t block_idx, uint32_t count, void* buf) {
     if (sb == NULL || buf == NULL || count == 0) return 1;
 
-    uint64_t sectors_count = count * EXT2SectorsInBlock(sb);
     sb->bdev->write(sb->bdev, EXT2BlockToLba(sb, block_idx), count * EXT2SectorsInBlock(sb), (void*)KERNEL_VIRT_TO_PHYS(buf));
     return 0;
 

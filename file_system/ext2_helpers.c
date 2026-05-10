@@ -284,7 +284,6 @@ uint32_t EXT2AddBlockToInode(inode_t* inode, uint32_t block_number) {
     if (inode->fs_specific == NULL) return 0;
 
     ext2_inode_data_t* data = (ext2_inode_data_t*) inode->fs_specific;
-    ext2_info_t* vol = (ext2_info_t*) inode->sb->fs_info;
 
     uint32_t block_idx = (data->i_blocks * inode->sb->bdev->sector_size) / inode->sb->block_size;
 

@@ -170,6 +170,7 @@ int64_t vfs_iterate(file_t* f, vfs_dir_cb cb, void* ctx) {
 }
 
 int64_t vfs_print_entry_name_with_tab(dentry_t* dentry, void* ctx) {
+    (void)ctx;
     if (dentry == NULL || dentry->name == NULL) return -EINVAL;
     kprintf("%s\t", dentry->name);
     return 0;

@@ -24,7 +24,7 @@ void PciEnumeration() {
                 // 5. Look for your Advanced Disk (AHCI)
                 if (config->class_code == AHCI_CLASS && config->subclass == AHCI_SUBCLASS) {
                     kprintf("Found AHCI device!\n");
-                    InitPcieAhci(config);
+                    InitPcieAhci((pci_config_t*)(uintptr_t)config);
                 }
 
                 // 6. Look for your xHCI (USB 3.0)

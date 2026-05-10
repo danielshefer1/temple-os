@@ -29,7 +29,7 @@ INCDIRS = -I ./allocaters -I ./boot -I ./boot/limine -I ./drivers -I ./file_syst
           -I ./util -I ./wrappers
 
 K_CFLAGS  = $(COMMON_CFLAGS) -m64 -mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-sse2 $(INCDIRS)
-K_LDFLAGS = -m elf_x86_64 -T linker64.ld
+K_LDFLAGS = -m elf_x86_64 -T linker64.ld -z noexecstack --no-warn-rwx-segments
 
 ASFLAGS_ELF64 = -f elf64
 ASFLAGS_BIN   = -f bin
@@ -126,7 +126,7 @@ USER_SMALL = $(USER_HELLO) $(USER_INIT) $(USER_SH) $(USER_HELP) \
 USER_CFLAGS  = -m64 -static -fPIE -ffreestanding -nostdlib -nostartfiles \
                -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -mno-sse2 \
                -fno-asynchronous-unwind-tables -Wall -Wextra -O2 -I ./user
-USER_LDFLAGS = -m elf_x86_64 -static -pie -nostdlib -T user/hello_linker.ld
+USER_LDFLAGS = -m elf_x86_64 -static -pie -nostdlib -T user/hello_linker.ld -z noexecstack --no-warn-rwx-segments
 
 all: $(ISO_IMG) $(DATA_IMG) user-img
 

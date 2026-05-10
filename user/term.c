@@ -292,7 +292,8 @@ static void dispatch_csi(char final) {
         case 'f': {
             unsigned int row = param_or(0, 1);
             unsigned int col = param_or(1, 1);
-            if (row == 0) row = 1; if (col == 0) col = 1;
+            if (row == 0) row = 1;
+            if (col == 0) col = 1;
             if (row > term_rows) row = term_rows;
             if (col > term_cols) col = term_cols;
             cur_row = row - 1;
