@@ -382,7 +382,6 @@ static void reconcile_pointer(void) {
 static void overlays_full_repaint(void) {
     sp_visible = 0;
     pp_visible = 0;
-    cursor_visible = 0;
     reconcile_selection();
     reconcile_pointer();
     caret_redraw();
