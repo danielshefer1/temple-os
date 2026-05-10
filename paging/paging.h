@@ -9,6 +9,11 @@
 
 uint64_t PageDirAddrV();
 void InitPaging();
+
+// Reprogram this CPU's IA32_PAT so PA1 = WC. Must be called once per CPU
+// (BSP and each AP) before any framebuffer access; without it, RW_FB pages
+// fall back to whatever the reset-default PAT slot 1 type is (WT).
+void pat_init(void);
 void DisableIdentityMapping();
 uint64_t AddKernelPages(uint64_t num_pages);
 void RemoveKernelPages(uint64_t start, uint64_t num_pages);

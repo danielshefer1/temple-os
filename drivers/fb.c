@@ -10,12 +10,16 @@ void fb_map(void) {
         return;
     }
 
-    // FB physical base may not be 2MB aligned; map at 4KB granularity.
+    // FB physical base may not be 2MB aligned; map at 4KB granularity. Use
+    // RW_FB (PAT slot 1 = WC) instead of RW_MMIO (UC) so pixel stores coalesce
+    // into 64-byte burst transactions; this is what makes vt scroll/blit not
+    // stall on the cache-line write path. pat_init must have run on this CPU
+    // before any access through these mappings.
     uint64_t pages = fb_info.size / PAGE_SIZE;
     for (uint64_t i = 0; i < pages; i++) {
         map_page_to_virt(FB_VIRTUAL + i * PAGE_SIZE,
                          fb_info.fb_phys + i * PAGE_SIZE,
-                         RW_MMIO, false);
+                         RW_FB, false);
     }
     fb_info.fb_virt = FB_VIRTUAL;
 }

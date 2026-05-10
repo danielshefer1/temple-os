@@ -76,3 +76,9 @@
 
 #define RW_MMIO (PRESENT_PAGE | RW_PAGE | WRITE_THROUGH_PAGE | CACHE_DIS_PAGE | GLOBAL_PAGE | NX_PAGE)
 #define R_MMIO (PRESENT_PAGE | WRITE_THROUGH_PAGE | CACHE_DIS_PAGE | GLOBAL_PAGE)
+
+// Framebuffer mapping. PWT alone (without PCD) selects PAT slot 1, which
+// pat_init reprograms to WC (Write-Combining). Pixel stores then coalesce
+// into 64-byte burst transactions instead of the per-4-byte serialized
+// accesses you get with PA3=UC. Used only by fb_map; MMIO regs stay UC.
+#define RW_FB (PRESENT_PAGE | RW_PAGE | WRITE_THROUGH_PAGE | GLOBAL_PAGE | NX_PAGE)

@@ -18,6 +18,7 @@
 void start() {
     SetGDT();
     InitPaging();
+    pat_init();
     DisablePic();
     InitIDT();
     InitVGA();

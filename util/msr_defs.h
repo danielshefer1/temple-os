@@ -6,6 +6,15 @@
 #define IA32_FMASK            0xC0000084
 #define IA32_GS_BASE          0xC0000101
 #define IA32_KERNEL_GS_BASE   0xC0000102
+#define IA32_PAT              0x00000277
+
+// PAT memory-type encodings (SDM Vol 3, Table 11-10).
+#define PAT_TYPE_UC           0x00
+#define PAT_TYPE_WC           0x01
+#define PAT_TYPE_WT           0x04
+#define PAT_TYPE_WP           0x05
+#define PAT_TYPE_WB           0x06
+#define PAT_TYPE_UC_MINUS     0x07
 
 #define EFER_SCE              (1ull << 0)
 

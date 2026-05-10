@@ -92,13 +92,17 @@ void fb_clear_all(uint8_t bg) {
     fill_rect(0, 0, fb_info.width, fb_info.height, pack_palette(bg));
 }
 
-void fb_scroll_up(uint64_t cell_rows, uint64_t cell_cols, uint8_t bg) {
+void fb_scroll_up(const vt_cell_t* cells, uint64_t cell_rows, uint64_t cell_cols, uint8_t bg) {
     if (!g_ready) return;
-    uint64_t row_bytes    = fb_info.pitch * g_glyph_h;
-    uint64_t scroll_bytes = fb_info.pitch * (cell_rows - 1) * g_glyph_h;
-    uint8_t* fb_base = (uint8_t*)fb_info.fb_virt;
-    // Forward copy is safe (dst < src) for upward scroll.
-    memcpy(fb_base, fb_base + row_bytes, scroll_bytes);
+    // Writes-only scroll: re-blit the (already-shifted-in-RAM) cell rows
+    // onto rows 0..rows-2, then fill the new bottom row. Skipping the old
+    // FB->FB memcpy drops the read leg entirely; WC reads were as expensive
+    // as UC reads (no cache, single transaction per access).
+    for (uint64_t r = 0; r + 1 < cell_rows; r++) {
+        for (uint64_t c = 0; c < cell_cols; c++) {
+            fb_blit_cell(r, c, cells[r * cell_cols + c]);
+        }
+    }
     fill_rect(0, (cell_rows - 1) * g_glyph_h,
               cell_cols * g_glyph_w, g_glyph_h, pack_palette(bg));
 }

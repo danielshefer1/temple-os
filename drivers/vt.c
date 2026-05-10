@@ -48,7 +48,7 @@ static void scroll_one(vt_t* vt) {
         vt->cells[(vt->rows - 1) * vt->cols + c] = blank;
     }
     if (vt == active_vt) {
-        fb_scroll_up(vt->rows, vt->cols, vt->cur_bg);
+        fb_scroll_up(vt->cells, vt->rows, vt->cols, vt->cur_bg);
     }
 }
 

@@ -20,7 +20,13 @@ void fb_console_geometry(uint64_t* cols, uint64_t* rows);
 // (the per-VT lock in vt_t serves this role today).
 void fb_blit_cell  (uint64_t row, uint64_t col, vt_cell_t cell);
 void fb_clear_all  (uint8_t bg);
-void fb_scroll_up  (uint64_t cell_rows, uint64_t cell_cols, uint8_t bg);
+
+// Scroll the FB up by one cell row. `cells` must already be the post-shift
+// cell buffer (rows 0..rows-2 contain what should be shown after the scroll).
+// Writes-only: paints the upper rows from `cells` and fills the bottom row
+// with bg. Replaces an FB->FB memcpy whose read leg was the bottleneck — even
+// with WC mapping, reads don't coalesce.
+void fb_scroll_up  (const vt_cell_t* cells, uint64_t cell_rows, uint64_t cell_cols, uint8_t bg);
 
 // Re-blit the entire backbuffer of `cells[rows*cols]` onto the FB. Used
 // when switching active VTs.

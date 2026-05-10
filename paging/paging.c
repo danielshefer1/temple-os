@@ -2,6 +2,7 @@
 #include "global.h"
 #include "cpu_local.h"
 #include "apic.h"
+#include "msr.h"
 
 #define TLB_SHOOTDOWN_VECTOR 65
 
@@ -571,5 +572,55 @@ out:
     // service our shootdown IPI until it makes forward progress. Doing the
     // local+remote invalidation here keeps the lock-hold window short.
     if (need_shootdown) tlb_flush_remote(addr);
+    if (ie) StiHelper();
+}
+
+// IA32_PAT layout. Defaults after reset are WB, WT, UC-, UC, WB, WT, UC-, UC.
+// We reprogram PA1 from WT to WC; everything else stays at the reset defaults
+// so existing PCD/PWT-based flags keep their meaning. Selected by the PT/PD
+// caching bits as (PAT<<2 | PCD<<1 | PWT); page_entry_t has no PAT field, so
+// only PA0..PA3 are reachable, and PA1 (PWT-only) is the one previously-dead
+// slot we can repurpose without breaking RW_MMIO/R_MMIO (both pin PA3=UC).
+#define PAT_VALUE                                            \
+    ( ((uint64_t)PAT_TYPE_WB)        <<  0                   \
+    | ((uint64_t)PAT_TYPE_WC)        <<  8                   \
+    | ((uint64_t)PAT_TYPE_UC_MINUS)  << 16                   \
+    | ((uint64_t)PAT_TYPE_UC)        << 24                   \
+    | ((uint64_t)PAT_TYPE_WB)        << 32                   \
+    | ((uint64_t)PAT_TYPE_WT)        << 40                   \
+    | ((uint64_t)PAT_TYPE_UC_MINUS)  << 48                   \
+    | ((uint64_t)PAT_TYPE_UC)        << 56 )
+
+void pat_init(void) {
+    // SDM Vol 3, 11.11.8 "Updating Memory Types Stored in PAT". Hold this
+    // CPU's caches and TLB in a known state across the MSR write so older
+    // mappings can't bleed their old caching policy into post-update accesses.
+    bool ie = check_interrupts();
+    CliHelper();
+
+    uint64_t cr0, cr4, cr3;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+
+    // CR0.CD=1, CR0.NW=0 -> caches disabled, then WBINVD writes back and
+    // invalidates everything.
+    uint64_t cr0_nocache = (cr0 | (1ULL << 30)) & ~(1ULL << 29);
+    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0_nocache) : "memory");
+    __asm__ volatile("wbinvd" ::: "memory");
+
+    // Drop CR4.PGE so the global TLB entries get invalidated by the CR3
+    // reload (otherwise global PTEs survive a plain mov-to-cr3).
+    __asm__ volatile("mov %0, %%cr4" :: "r"(cr4 & ~(1ULL << 7)) : "memory");
+    __asm__ volatile("mov %0, %%cr3" :: "r"(cr3) : "memory");
+
+    wrmsr(IA32_PAT, PAT_VALUE);
+
+    __asm__ volatile("wbinvd" ::: "memory");
+    __asm__ volatile("mov %0, %%cr3" :: "r"(cr3) : "memory");
+    // Restore CR4 (re-enable PGE) and CR0 (re-enable caches).
+    __asm__ volatile("mov %0, %%cr4" :: "r"(cr4) : "memory");
+    __asm__ volatile("mov %0, %%cr0" :: "r"(cr0) : "memory");
+
     if (ie) StiHelper();
 }
