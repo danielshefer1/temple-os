@@ -546,6 +546,21 @@ static long read_line_edit(char* line, int cap) {
 
         // GROUND
         if (b == 0x1b) { state = ESC1; continue; }
+        if (b == 0x1e) {
+            // Soft newline: Shift+Enter from the terminal, or a '\n' in a
+            // pasted clipboard. Insert a literal '\n' into the buffer at
+            // the cursor and visually break to the next row, but do *not*
+            // submit. The multi-line buffer is run as separate commands
+            // when the user finally hits plain Enter (see main loop).
+            if (len < cap - 1) {
+                for (int i = len; i > cur; i--) line[i] = line[i - 1];
+                line[cur] = '\n';
+                len++;
+                cur++;
+                emit("\r\n");
+            }
+            continue;
+        }
         if (b == '\r' || b == '\n') {
             emit("\n");
             line[len] = 0;
@@ -585,6 +600,33 @@ static long read_line_edit(char* line, int cap) {
 static void set_raw(void)    { sys_ioctl(0, TTY_IOCTL_SET_RAW,    0); }
 static void set_cooked(void) { sys_ioctl(0, TTY_IOCTL_SET_COOKED, 0); }
 
+// Run one command line (must be null-terminated, no embedded '\n').
+// Lives here so the main loop can call it once per '\n'-separated segment
+// from a multi-line buffer (Shift+Enter / pasted newlines).
+static void exec_one(char* cmd,
+                     char* tokbuf, char** words, tok_kind_t* kinds,
+                     stage_t* stages) {
+    int ntoks = tokenize(cmd, tokbuf, words, kinds);
+    if (ntoks <= 0) {
+        if (ntoks < 0) st_puts("sh: line too long\n");
+        return;
+    }
+    const char* err_msg = 0;
+    int n_stages = parse_pipeline(ntoks, words, kinds, stages, &err_msg);
+    if (n_stages < 0) {
+        st_puts("sh: ");
+        st_puts(err_msg);
+        sys_write(1, "\n", 1);
+        return;
+    }
+    int is_simple = (n_stages == 1
+                     && stages[0].in_file == 0
+                     && stages[0].out_file == 0);
+    if (is_simple && try_builtin(&stages[0])) return;
+    if (is_simple) (void) run_simple(&stages[0]);
+    else           (void) run_pipeline(stages, n_stages);
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
@@ -618,42 +660,31 @@ int main(int argc, char** argv) {
         }
         line[n] = 0;
 
-        if (n > 0) {
-            int prev_head  = hist_head;
-            int prev_count = hist_count;
-            hist_add(line);
-            if (hist_head != prev_head || hist_count != prev_count) {
-                hist_persist_append(line);
+        // The buffer may contain '\n' bytes (Shift+Enter or pasted
+        // newlines). Walk it and run each segment as its own command. Each
+        // non-empty segment is recorded as a separate history entry, the
+        // same way bash does with bracketed paste.
+        int start = 0;
+        for (int i = 0; i <= (int)n; i++) {
+            if (i == (int)n || line[i] == '\n') {
+                int seg_len = i - start;
+                if (seg_len > 0) {
+                    char saved = line[i];
+                    line[i] = 0;
+                    char* seg = line + start;
+
+                    int prev_head  = hist_head;
+                    int prev_count = hist_count;
+                    hist_add(seg);
+                    if (hist_head != prev_head || hist_count != prev_count) {
+                        hist_persist_append(seg);
+                    }
+                    exec_one(seg, tokbuf, words, kinds, stages);
+
+                    line[i] = saved;
+                }
+                start = i + 1;
             }
-        }
-
-        int ntoks = tokenize(line, tokbuf, words, kinds);
-        if (ntoks <= 0) {
-            if (ntoks < 0) st_puts("sh: line too long\n");
-            continue;
-        }
-
-        const char* err_msg = 0;
-        int n_stages = parse_pipeline(ntoks, words, kinds, stages, &err_msg);
-        if (n_stages < 0) {
-            st_puts("sh: ");
-            st_puts(err_msg);
-            sys_write(1, "\n", 1);
-            continue;
-        }
-
-        // Builtins must run in-process. Only honor them when the shape is
-        // a single stage with no redirs — otherwise the caller's pipe/redir
-        // would be invisible to the builtin and surprising.
-        int is_simple = (n_stages == 1
-                         && stages[0].in_file == 0
-                         && stages[0].out_file == 0);
-        if (is_simple && try_builtin(&stages[0])) continue;
-
-        if (is_simple) {
-            (void) run_simple(&stages[0]);
-        } else {
-            (void) run_pipeline(stages, n_stages);
         }
     }
 }

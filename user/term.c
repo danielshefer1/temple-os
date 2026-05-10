@@ -637,6 +637,17 @@ static int translate_one(unsigned char sc, char* out) {
         if (code == 0x2F) { kbd_shortcut = 2; return 0; }
     }
 
+    // Shift+Enter: send 0x1E ("soft newline"). Shell turns this back into
+    // a literal in-buffer '\n' instead of submitting the line. Same byte
+    // is used when pasting clipboard content containing newlines, so a
+    // multi-line paste accumulates in the editor until the user hits
+    // plain Enter.
+    if (!extended && code == 0x1C &&
+        (mods & MOD_SHIFT) && !(mods & MOD_CTRL)) {
+        out[0] = 0x1E;
+        return 1;
+    }
+
     if (extended) {
         // Arrow keys, etc.
         const char* seq = 0;
@@ -707,9 +718,19 @@ static void clipboard_copy_selection(void) {
 
 static void clipboard_paste(long ptmx) {
     if (clip_len == 0) return;
+    // Bracketed-paste-ish: every '\n' in the clipboard becomes 0x1E so the
+    // shell inserts a literal in-buffer newline rather than submitting on
+    // each line. The user has to hit plain Enter to actually run anything.
+    char buf[64];
     unsigned long sent = 0;
     while (sent < clip_len) {
-        long w = sys_write(ptmx, clipboard + sent, clip_len - sent);
+        unsigned long chunk = clip_len - sent;
+        if (chunk > sizeof(buf)) chunk = sizeof(buf);
+        for (unsigned long i = 0; i < chunk; i++) {
+            char c = clipboard[sent + i];
+            buf[i] = (c == '\n') ? (char)0x1E : c;
+        }
+        long w = sys_write(ptmx, buf, chunk);
         if (w <= 0) break;
         sent += (unsigned long)w;
     }
