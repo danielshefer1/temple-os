@@ -348,7 +348,28 @@ static int try_builtin(stage_t* st_) {
 }
 
 static void prompt(void) {
-    st_puts("\x1b[93m$ \x1b[0m");
+    char cwd[256];
+    long r = sys_getcwd(cwd, sizeof(cwd));
+    const char* path = (r > 0) ? cwd : "?";
+
+    // Collapse a leading "/home" or "/home/..." to "~" (...).
+    char collapsed[256];
+    if (path[0] == '/' && path[1] == 'h' && path[2] == 'o' && path[3] == 'm' &&
+        path[4] == 'e' && (path[5] == 0 || path[5] == '/')) {
+        collapsed[0] = '~';
+        int k = 1;
+        int i = 5;
+        while (path[i] && k < (int)sizeof(collapsed) - 1) {
+            collapsed[k++] = path[i++];
+        }
+        collapsed[k] = 0;
+        path = collapsed;
+    }
+
+    st_puts("\x1b[93m$ ");        // yellow dollar
+    st_puts("\x1b[96m");          // bright cyan
+    st_puts(path);
+    st_puts(" \x1b[90m>\x1b[0m ");  // grey '>' then reset
 }
 
 // ---- history ring -------------------------------------------------------
