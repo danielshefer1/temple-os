@@ -185,6 +185,11 @@ clean-all:
 run: $(ISO_IMG) $(DATA_IMG) user-img
 	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
 
+# Hybrid workflow: build artifacts inside the container with ./docker-build.sh,
+# then boot qemu on the host without re-running any host-side build rules.
+run-host:
+	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -cdrom $(ISO_IMG)
+
 run-uefi: $(ISO_IMG) $(DATA_IMG)
 	qemu-system-x86_64 $(QEMU_COMMON_FLAGS) -bios /usr/share/edk2/x64/OVMF.4m.fd -cdrom $(ISO_IMG)
 

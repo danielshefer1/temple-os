@@ -16,7 +16,7 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     docker build -t "$IMAGE" "$REPO_DIR"
 fi
 
-DOCKER_FLAGS=(--rm -v "$REPO_DIR":/src -w /src)
+DOCKER_FLAGS=(--rm -v "$REPO_DIR":/src -w /src -u "$(id -u):$(id -g)")
 
 # Forward KVM + tty when the user wants to actually run the OS.
 if [[ "${1:-}" == "run" || "${1:-}" == "run-uefi" ]]; then
