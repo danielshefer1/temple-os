@@ -500,8 +500,8 @@ static void redraw_multiline(const char* line, int len, int cur,
                              int prev_cur_row) {
     emit("\r");
     cursor_up(prev_cur_row);
+    cursor_right(prompt_visible_width);
     emit("\x1b[J");
-    prompt();
     for (int i = 0; i < len; i++) {
         if (line[i] == '\n') emit("\r\n");
         else                 emit_n(&line[i], 1);

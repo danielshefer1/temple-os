@@ -388,6 +388,29 @@ static void overlays_full_repaint(void) {
 }
 
 static void scroll_one(void) {
+    // Repaint overlay-covered cells from cells[] so the framebuffer matches
+    // pure text before the pixel memcpy. Otherwise the cursor block (and any
+    // inverted selection/pointer cells) get dragged up one row, leaving a
+    // ghost rectangle on the line above.
+    if (cursor_visible &&
+        cursor_row < term_rows && cursor_col < term_cols) {
+        unsigned long idx = cursor_row * term_cols + cursor_col;
+        blit_cell(cursor_row, cursor_col, cells[idx]);
+    }
+    if (pp_visible && pp_row < term_rows && pp_col < term_cols &&
+        !(cursor_visible && pp_row == cursor_row && pp_col == cursor_col)) {
+        unsigned long idx = pp_row * term_cols + pp_col;
+        blit_cell(pp_row, pp_col, cells[idx]);
+    }
+    if (sp_visible) {
+        for (unsigned long idx = sp_lo; idx <= sp_hi; idx++) {
+            unsigned long r = idx / term_cols;
+            unsigned long c = idx % term_cols;
+            if (cursor_visible && r == cursor_row && c == cursor_col) continue;
+            if (pp_visible    && r == pp_row     && c == pp_col)     continue;
+            blit_cell(r, c, cells[idx]);
+        }
+    }
     // Shift cells up by one row in the backing array.
     my_memcpy(cells, cells + term_cols,
               (term_rows - 1) * term_cols * sizeof(vt_cell_t));
@@ -468,6 +491,20 @@ static void clear_line_to_eol(void) {
     }
 }
 
+static void clear_to_end_of_display(void) {
+    vt_cell_t blank = { ' ', cur_fg, cur_bg };
+    for (unsigned long c = cur_col; c < term_cols; c++) {
+        cells[cur_row * term_cols + c] = blank;
+        blit_cell(cur_row, c, blank);
+    }
+    for (unsigned long r = cur_row + 1; r < term_rows; r++) {
+        for (unsigned long c = 0; c < term_cols; c++) {
+            cells[r * term_cols + c] = blank;
+            blit_cell(r, c, blank);
+        }
+    }
+}
+
 static void dispatch_csi(char final) {
     switch (final) {
         case 'A': {
@@ -510,7 +547,9 @@ static void dispatch_csi(char final) {
         }
         case 'J': {
             unsigned int mode = param_or(0, 0);
-            if (mode == 2) {
+            if (mode == 0) {
+                clear_to_end_of_display();
+            } else if (mode == 2) {
                 clear_screen();
                 cur_row = 0;
                 cur_col = 0;
